@@ -1,0 +1,79 @@
+# Rust
+target/
+Cargo.lock
+
+# Dioxus builds
+dist/
+platforms/android/
+platforms/ios/
+mobile/android/
+mobile/ios/
+mobile/dist/
+mobile/target/
+
+# Environment files (sensibles)
+.env
+.env*
+!.env.example
+*.env
+secrets.*
+config.local.*
+
+# Configuration files with sensitive data
+Config.toml
+config.toml
+!Config.example.toml
+
+# Mapbox and API tokens
+mapbox_access_token.*
+api_keys.*
+
+# Keystore and certificates
+*.keystore
+*.jks
+*.p12
+*.cer
+*.mobileprovision
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+*.bak
+*.backup
+*.old
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+*.build/
+build/
+DerivedData/
+
+# WASM specific
+*.wasm
+pkg/
+
+# Node modules (if using any JS tooling)
+node_modules/
+package-lock.json
+yarn.lock

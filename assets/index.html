@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <title>Route Optimizer - Delivery Management</title>
+    
+    <!-- Mapbox GL JS CSS -->
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.css" rel="stylesheet">
+    
+    <!-- Custom styles -->
+    <style>
+        * {
+            margin: 0 !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+        }
+        
+        html {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            overflow: hidden !important;
+        }
+        
+            body {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                overflow: hidden !important;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                /* Safe area insets para dispositivos con notch */
+                padding-top: env(safe-area-inset-top) !important;
+                padding-right: env(safe-area-inset-right) !important;
+                padding-bottom: env(safe-area-inset-bottom) !important;
+                padding-left: env(safe-area-inset-left) !important;
+            }
+        
+        #dioxus-app {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            overflow: hidden !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+        }
+        
+        #map {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* Eliminar scrollbars en todos los navegadores */
+        ::-webkit-scrollbar {
+            display: none !important;
+        }
+        
+        html {
+            -ms-overflow-style: none !important;
+            scrollbar-width: none !important;
+        }
+        
+        .mapboxgl-popup-content {
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+            .package-marker {
+                background: #6B46C1;
+                border: 3px solid white;
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                cursor: pointer;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                transition: all 0.3s ease;
+            }
+
+            .package-marker:hover {
+                background: #553C9A;
+                transform: scale(1.1);
+            }
+
+            .package-marker.selected {
+                background: #6B46C1;
+                border: 3px solid #FF6B35;
+                animation: pulse 1s infinite;
+            }
+
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.2); }
+                100% { transform: scale(1); }
+            }
+
+            /* Estilos para drag & drop */
+            .package-card {
+                transition: all 0.2s ease;
+            }
+
+            .package-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            }
+
+            .package-card[draggable="true"]:active {
+                cursor: grabbing;
+                transform: rotate(2deg) scale(1.05);
+                opacity: 0.8;
+            }
+
+            .package-card.drag-over {
+                border: 2px dashed #6B46C1;
+                background: rgba(107, 70, 193, 0.1);
+            }
+
+            /* Container Queries - Componentes modulares */
+            /* Fallback: si no hay soporte, usar tamaños base */
+            .sidebar-content {
+                container-type: inline-size;
+                container-name: sidebar;
+            }
+
+            .packages-container {
+                container-type: inline-size;
+                container-name: packages-list;
+            }
+
+            /* Feature detection para Container Queries */
+            @supports not (container-type: inline-size) {
+                /* Fallback a media queries para navegadores sin soporte */
+                @media (min-width: 48em) {
+                    .package-card {
+                        padding: 0.625rem;
+                    }
+
+                    .package-card h3 {
+                        font-size: 0.9375rem;
+                    }
+
+                    .package-card p {
+                        font-size: 0.875rem;
+                    }
+                }
+            }
+
+            /* Container Queries para package cards - se adaptan al tamaño del contenedor */
+            @container packages-list (min-width: 15rem) {
+                .package-card {
+                    padding: 0.5rem;
+                }
+
+                .package-card h3 {
+                    font-size: 0.875rem;
+                }
+
+                .package-card p {
+                    font-size: 0.8125rem;
+                }
+
+                .package-card .order-number {
+                    width: 2.5rem;
+                    font-size: 0.875rem;
+                }
+            }
+
+            @container packages-list (min-width: 20rem) {
+                .package-card {
+                    padding: 0.625rem;
+                    margin-bottom: 0.5rem;
+                }
+
+                .package-card h3 {
+                    font-size: 0.9375rem;
+                }
+
+                .package-card p {
+                    font-size: 0.875rem;
+                }
+
+                .package-card .order-number {
+                    width: 3rem;
+                    font-size: 1rem;
+                }
+
+                .package-card .status-badge {
+                    font-size: 0.75rem;
+                    padding: 0.125rem 0.5rem;
+                }
+            }
+
+            @container packages-list (min-width: 25rem) {
+                .package-card {
+                    padding: 0.75rem;
+                }
+
+                .package-card h3 {
+                    font-size: 1rem;
+                }
+
+                .package-card p {
+                    font-size: 0.9375rem;
+                }
+
+                .package-card .status-indicator {
+                    width: 0.75rem;
+                    height: 0.75rem;
+                }
+            }
+
+            /* Container Queries para sidebar tabs */
+            @container sidebar (min-width: 20rem) {
+                .sidebar-tab {
+                    padding: 0.5rem 0.75rem;
+                    font-size: 0.875rem;
+                }
+
+                .sidebar-title {
+                    font-size: 1rem;
+                }
+
+                .search-input {
+                    padding: 0.625rem 0.75rem;
+                    font-size: 0.9375rem;
+                }
+            }
+
+            @container sidebar (min-width: 25rem) {
+                .sidebar-tab {
+                    padding: 0.625rem 1rem;
+                    font-size: 0.9375rem;
+                }
+
+                .sidebar-title {
+                    font-size: 1.125rem;
+                }
+
+                .sidebar-button {
+                    padding: 0.625rem 1rem;
+                    font-size: 0.875rem;
+                }
+            }
+
+            /* Responsive Design - Mobile First con em units */
+            
+            /* Base: Mobile (<30em / 480px) */
+            /* Estilos base ya definidos arriba */
+            
+            /* Small tablets y móviles grandes (≥30em / 480px) */
+            @media (min-width: 30em) {
+                .package-card h3 {
+                    font-size: clamp(0.8125rem, 2.5vw, 0.875rem) !important;
+                }
+
+                .package-card p {
+                    font-size: clamp(0.6875rem, 2vw, 0.75rem) !important;
+                }
+
+                .sidebar-button {
+                    padding: 0.375rem 0.625rem !important;
+                    font-size: clamp(0.6875rem, 2vw, 0.8125rem) !important;
+                }
+            }
+            
+            /* Tablets (≥48em / 768px) */
+            @media (min-width: 48em) {
+                .sidebar {
+                    position: relative !important;
+                    transform: translateX(0) !important;
+                    width: clamp(20rem, 30vw, 25rem) !important;
+                    max-width: 25rem !important;
+                    min-width: 20rem !important;
+                    height: 100vh !important;
+                    border-radius: 0 !important;
+                    transition: width 0.3s ease !important;
+                }
+
+                .sidebar.open {
+                    width: clamp(20rem, 30vw, 25rem) !important;
+                }
+
+                .sidebar-content {
+                    padding: 1rem !important;
+                    border-right: 1px solid !important;
+                }
+
+                .package-card {
+                    margin-bottom: 0.5rem !important;
+                    padding: 0.5rem !important;
+                }
+
+                .package-card h3 {
+                    font-size: clamp(0.875rem, 1.5vw, 1rem) !important;
+                }
+
+                .package-card p {
+                    font-size: clamp(0.8125rem, 1.2vw, 0.875rem) !important;
+                }
+
+                .sidebar-button {
+                    padding: 0.5rem 0.75rem !important;
+                    font-size: clamp(0.75rem, 1vw, 0.875rem) !important;
+                }
+
+                .search-input {
+                    padding: 0.5rem 0.75rem !important;
+                    font-size: clamp(0.875rem, 1.2vw, 1rem) !important;
+                }
+
+                /* En tablets y desktop: botón toggle centrado abajo */
+                .sidebar-toggle {
+                    display: block !important;
+                    position: fixed !important;
+                    bottom: calc(1.25rem + env(safe-area-inset-bottom)) !important;
+                    left: 50% !important;
+                    top: auto !important;
+                    right: auto !important;
+                    transform: translateX(-50%) !important;
+                    width: 3.75rem !important;
+                    height: 3.75rem !important;
+                }
+            }
+
+            /* Desktop pequeño (≥64em / 1024px) */
+            @media (min-width: 64em) {
+                .sidebar {
+                    width: clamp(25rem, 35vw, 28rem) !important;
+                    max-width: 28rem !important;
+                }
+                
+                .sidebar-content {
+                    padding: 1.25rem !important;
+                }
+                
+                .package-card {
+                    margin-bottom: 0.625rem !important;
+                    padding: 0.75rem !important;
+                }
+            }
+
+            /* Para móviles (<48em / 768px) - Overlay completo */
+            @media (max-width: 47.99em) {
+                .sidebar {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    bottom: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    max-width: 100vw !important;
+                    max-height: 100vh !important;
+                    border-radius: 0 !important;
+                    box-shadow: none !important;
+                    transform: translateX(-100%) !important;
+                    transition: transform 0.3s ease !important;
+                    z-index: 1000 !important;
+                    touch-action: pan-y !important;
+                    overflow: hidden !important;
+                }
+
+                .sidebar.open {
+                    transform: translateX(0) !important;
+                }
+
+                /* Swipe indicator - barra visual para indicar que se puede hacer swipe */
+                .sidebar::before {
+                    content: '';
+                    position: absolute;
+                    top: 50%;
+                    right: calc(0.625rem + env(safe-area-inset-right));
+                    width: 0.25rem;
+                    height: 2.5rem;
+                    background: rgba(255,255,255,0.3);
+                    border-radius: 0.125rem;
+                    transform: translateY(-50%);
+                    opacity: 0;
+                    transition: opacity 0.3s ease;
+                    pointer-events: none;
+                }
+
+                .sidebar.open::before {
+                    opacity: 1;
+                }
+
+                .sidebar-content {
+                    position: absolute !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    bottom: 0 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    border-radius: 0 !important;
+                    border-right: none !important;
+                    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left) !important;
+                    padding-top: calc(env(safe-area-inset-top) + 0.5rem) !important;
+                    padding-left: calc(env(safe-area-inset-left) + 0.5rem) !important;
+                    padding-right: calc(env(safe-area-inset-right) + 0.5rem) !important;
+                    padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem) !important;
+                    overflow-y: auto !important;
+                    overflow-x: hidden !important;
+                    -webkit-overflow-scrolling: touch !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                }
+
+                .map-container {
+                    width: 100% !important;
+                    height: 100vh !important;
+                }
+
+                .sidebar-toggle {
+                    /* En móvil: lado derecho, centrado verticalmente */
+                    position: fixed !important;
+                    top: 50% !important;
+                    right: calc(1.25rem + env(safe-area-inset-right)) !important;
+                    left: auto !important;
+                    bottom: auto !important;
+                    transform: translateY(-50%) !important;
+                    width: 3.75rem !important;
+                    height: 3.75rem !important;
+                    border-radius: 50% !important;
+                    font-size: 1.5rem !important;
+                    z-index: 1001 !important;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+                }
+
+                /* Header compacto como ChatGPT - mismo layout, fuentes más pequeñas */
+                .sidebar-header {
+                    padding: 0.5rem !important;
+                    min-height: auto !important;
+                    flex-shrink: 0 !important;
+                }
+
+                .sidebar-tabs {
+                    flex-direction: row !important;
+                    gap: 0.25rem !important;
+                    padding: 0.125rem !important;
+                }
+
+                .sidebar-tab {
+                    padding: 0.5rem 0.75rem !important;
+                    font-size: 0.75rem !important;
+                    border-radius: 0.375rem !important;
+                    flex: 1 !important;
+                    min-height: 2rem !important;
+                }
+
+                /* Cards compactas como ChatGPT - mismo layout, fuentes pequeñas */
+                .package-card {
+                    padding: 0.5rem !important;
+                    margin-bottom: 0.25rem !important;
+                    min-height: 2.5rem !important;
+                }
+
+                .package-card h3 {
+                    font-size: 0.75rem !important;
+                    margin: 0 0 0.125rem 0 !important;
+                    line-height: 1.2 !important;
+                }
+
+                .package-card p {
+                    font-size: 0.6875rem !important;
+                    margin: 0 0 0.0625rem 0 !important;
+                    line-height: 1.3 !important;
+                }
+
+                /* Botones compactos como ChatGPT */
+                .sidebar-button {
+                    padding: 0.5rem 0.75rem !important;
+                    font-size: 0.75rem !important;
+                    border-radius: 0.375rem !important;
+                    min-height: 2rem !important;
+                }
+
+                /* Search bar compacto */
+                .search-input {
+                    padding: 0.5rem 0.75rem !important;
+                    font-size: 0.75rem !important;
+                    border-radius: 0.375rem !important;
+                    min-height: 2rem !important;
+                }
+
+                /* Título compacto */
+                .sidebar-title {
+                    font-size: 0.875rem !important;
+                    margin: 0 0 0.5rem 0 !important;
+                    font-weight: 600 !important;
+                }
+
+                /* Contenedor de paquetes compacto */
+                .packages-container {
+                    padding: 0.5rem !important;
+                    flex: 1 !important;
+                    overflow-y: auto !important;
+                }
+
+                /* Header de búsqueda compacto */
+                .search-header {
+                    padding: 0.5rem !important;
+                    gap: 0.5rem !important;
+                    flex-shrink: 0 !important;
+                }
+
+                /* Elementos de card compactos como ChatGPT */
+                .package-card .order-number {
+                    width: 1.5rem !important;
+                    font-size: 0.625rem !important;
+                    min-width: 1.5rem !important;
+                }
+
+                .package-card .status-indicator {
+                    width: 0.5rem !important;
+                    height: 0.5rem !important;
+                }
+
+                .package-card .status-badge {
+                    font-size: 0.625rem !important;
+                    padding: 0.125rem 0.25rem !important;
+                    white-space: nowrap !important;
+                }
+            }
+
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <div id="map" style="display: none;"></div>
+    
+    <!-- Mapbox GL JS -->
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.15.0/mapbox-gl.js"></script>
+    
+    <!-- Mapbox configuration -->
+    <script>
+        // Configurar token de Mapbox
+        // El token se configurará desde Rust mediante CONFIG.mapbox_token()
+        // No hardcodear el token aquí - se inyectará dinámicamente desde la configuración
+        // mapboxgl.accessToken = ''; // Se configurará desde Rust
+        
+        // Variables globales para el mapa
+        let map = null;
+        let markers = new Map();
+        let selectedPackage = null;
+        
+        // Función para inicializar el mapa
+        function initMap(containerId = 'map', isDarkMode = true) {
+            if (map) return map;
+            
+            console.log("JS: Initializing Mapbox map in container:", containerId, "Dark mode:", isDarkMode);
+            
+            const style = isDarkMode ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+            
+            map = new mapboxgl.Map({
+                container: containerId,
+                style: style,
+                center: [2.3522, 48.8566], // París
+                zoom: 12
+            });
+            
+            map.on('load', () => {
+                console.log("JS: Mapbox map loaded successfully");
+            });
+            
+            // Agregar controles de navegación
+            map.addControl(new mapboxgl.NavigationControl());
+            
+            // Agregar control de geolocalización
+            map.addControl(new mapboxgl.GeolocateControl({
+                positionOptions: {
+                    enableHighAccuracy: true
+                },
+                trackUserLocation: true,
+                showUserHeading: true
+            }));
+            
+            return map;
+        }
+        
+        // Función para agregar marcador de paquete
+        function addPackageMarker(packageData) {
+            if (!map) return;
+            
+            const { id, tracking_number, latitude, longitude, status, recipient_name, address } = packageData;
+            
+            // Crear elemento personalizado para el marcador
+            const el = document.createElement('div');
+            el.className = 'package-marker';
+            el.id = `marker-${id}`;
+            
+            // Crear popup
+            const popup = new mapboxgl.Popup({
+                offset: 25,
+                closeButton: true,
+                closeOnClick: false
+            }).setHTML(`
+                <div style="padding: 8px; min-width: 200px;">
+                    <h3 style="margin: 0 0 8px 0; color: #333; font-size: 16px;">
+                        📦 ${recipient_name}
+                    </h3>
+                    <p style="margin: 0 0 4px 0; color: #666; font-size: 14px;">
+                        ${address}
+                    </p>
+                    <p style="margin: 0 0 8px 0; color: #999; font-size: 12px;">
+                        Tracking: ${tracking_number}
+                    </p>
+                    <span style="
+                        background: #E3F2FD;
+                        color: #1976D2;
+                        padding: 4px 8px;
+                        border-radius: 12px;
+                        font-size: 12px;
+                        font-weight: 500;
+                    ">
+                        ${status}
+                    </span>
+                </div>
+            `);
+            
+            // Crear marcador
+            const marker = new mapboxgl.Marker(el)
+                .setLngLat([longitude, latitude])
+                .setPopup(popup)
+                .addTo(map);
+            
+            // Agregar evento de click
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                console.log("JS: Marcador clickeado:", packageData.id);
+                
+                // Seleccionar paquete (esto resaltará el marcador)
+                selectPackage(packageData);
+            });
+            
+            // Guardar referencia
+            markers.set(id, { marker, element: el, data: packageData });
+            
+            return marker;
+        }
+        
+        // Función para seleccionar paquete
+        function selectPackage(packageData) {
+            console.log("JS: selectPackage llamado con:", packageData.id);
+            
+            // Deseleccionar anterior
+            if (selectedPackage) {
+                const prevMarker = markers.get(selectedPackage.id);
+                if (prevMarker) {
+                    prevMarker.element.classList.remove('selected');
+                    console.log("JS: Marcador anterior deseleccionado:", selectedPackage.id);
+                }
+            }
+            
+            // Seleccionar nuevo
+            selectedPackage = packageData;
+            const marker = markers.get(packageData.id);
+            if (marker) {
+                marker.element.classList.add('selected');
+                marker.marker.togglePopup();
+                console.log("JS: Marcador seleccionado:", packageData.id);
+            } else {
+                console.warn("JS: No se encontró marcador para:", packageData.id);
+            }
+            
+            // Notificar a Dioxus
+            if (window.dioxus) {
+                window.dioxus.send({
+                    type: 'package_selected',
+                    data: packageData
+                });
+            }
+            
+            // También notificar a través de callback si existe
+            if (window.packageSelectedCallback) {
+                window.packageSelectedCallback(packageData);
+            }
+            
+            // Notificar a Dioxus a través del evento personalizado
+            console.log("JS: Enviando evento personalizado");
+            window.dispatchEvent(new CustomEvent('packageSelectedFromMap', {
+                detail: packageData
+            }));
+        }
+        
+        // Función para centrar en ubicación del usuario
+        function centerOnUserLocation() {
+            if (!map) return;
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    map.flyTo({
+                        center: [longitude, latitude],
+                        zoom: 15,
+                        essential: true
+                    });
+                },
+                (error) => {
+                    console.warn('Error obteniendo ubicación:', error);
+                    // Fallback a París
+                    map.flyTo({
+                        center: [2.3522, 48.8566],
+                        zoom: 12,
+                        essential: true
+                    });
+                }
+            );
+        }
+        
+        // Función para ajustar vista a todos los paquetes
+        function fitToPackages(packages) {
+            if (!map || !packages.length) return;
+            
+            const bounds = new mapboxgl.LngLatBounds();
+            
+            packages.forEach(pkg => {
+                if (pkg.latitude && pkg.longitude) {
+                    bounds.extend([pkg.longitude, pkg.latitude]);
+                }
+            });
+            
+            if (!bounds.isEmpty()) {
+                map.fitBounds(bounds, {
+                    padding: 50,
+                    maxZoom: 15
+                });
+            }
+        }
+        
+        // Función para limpiar marcadores
+        function clearMarkers() {
+            markers.forEach(({ marker }) => marker.remove());
+            markers.clear();
+            selectedPackage = null;
+        }
+        
+        // Función para aplicar tema al mapa según el modo del sistema
+        function applyMapTheme(isDarkMode) {
+            if (!map) return;
+            
+            console.log("JS: Applying map theme, dark mode:", isDarkMode);
+            
+            const style = isDarkMode ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+            map.setStyle(style);
+            console.log("JS: Map theme applied successfully");
+        }
+        
+        // Función para resaltar un paquete específico en el mapa
+        function highlightPackage(packageId) {
+            console.log("JS: Highlighting package:", packageId);
+            
+            // Remover highlight de todos los marcadores
+            document.querySelectorAll('.package-marker').forEach(marker => {
+                marker.classList.remove('selected');
+            });
+            
+            // Agregar highlight al marcador específico
+            const targetMarker = document.getElementById(`marker-${packageId}`);
+            if (targetMarker) {
+                targetMarker.classList.add('selected');
+                console.log("JS: Package highlighted successfully");
+            } else {
+                console.warn("JS: Marker not found for package:", packageId);
+            }
+        }
+        
+        // Función para quitar highlight de todos los paquetes
+        function clearHighlight() {
+            console.log("JS: Clearing all highlights");
+            document.querySelectorAll('.package-marker').forEach(marker => {
+                marker.classList.remove('selected');
+            });
+        }
+        
+        // Función para actualizar paquetes
+        function updatePackages(packages) {
+            clearMarkers();
+            packages.forEach(pkg => {
+                if (pkg.latitude && pkg.longitude) {
+                    addPackageMarker(pkg);
+                }
+            });
+        }
+        
+            // Swipe gesture para cerrar sidebar
+            let startX = 0;
+            let startY = 0;
+            let currentX = 0;
+            let isDragging = false;
+
+            function handleTouchStart(e) {
+                if (!document.querySelector('.sidebar.open')) return;
+                
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                isDragging = true;
+            }
+
+            function handleTouchMove(e) {
+                if (!isDragging) return;
+                
+                currentX = e.touches[0].clientX;
+                const diffX = startX - currentX;
+                const diffY = Math.abs(e.touches[0].clientY - startY);
+                
+                // Solo procesar swipe horizontal
+                if (diffY > 50) {
+                    isDragging = false;
+                    return;
+                }
+                
+                // Si el swipe es hacia la derecha (cerrar)
+                if (diffX < -50) {
+                    closeSidebar();
+                    isDragging = false;
+                }
+            }
+
+            function handleTouchEnd() {
+                isDragging = false;
+            }
+
+            function closeSidebar() {
+                const sidebar = document.querySelector('.sidebar');
+                if (sidebar) {
+                    sidebar.classList.remove('open');
+                    // Notificar a Dioxus que se cerró
+                    window.dispatchEvent(new CustomEvent('sidebarClosed'));
+                }
+            }
+
+            // Agregar event listeners para swipe
+            document.addEventListener('touchstart', handleTouchStart, { passive: true });
+            document.addEventListener('touchmove', handleTouchMove, { passive: true });
+            document.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+            // Exponer funciones globalmente
+            window.mapboxUtils = {
+                initMap,
+                addPackageMarker,
+                selectPackage,
+                centerOnUserLocation,
+                fitToPackages,
+                clearMarkers,
+                updatePackages,
+                applyMapTheme,
+                highlightPackage,
+                clearHighlight,
+                closeSidebar
+            };
+    </script>
+</body>
+</html>
