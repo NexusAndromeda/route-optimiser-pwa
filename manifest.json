@@ -1,6 +1,6 @@
 {
   "name": "Route Optimizer",
-  "short_name": "RouteOpt",
+  "short_name": "RouteOptimizer",
   "description": "Système d'optimisation de tournées de livraison",
   "start_url": "/",
   "display": "standalone",

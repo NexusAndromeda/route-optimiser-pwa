@@ -1,5 +1,6 @@
 use yew::prelude::*;
 use crate::models::Package;
+use web_sys::window;
 
 #[derive(Properties, PartialEq)]
 pub struct DetailsModalProps {
@@ -12,6 +13,50 @@ pub struct DetailsModalProps {
 pub fn details_modal(props: &DetailsModalProps) -> Html {
     let close = props.on_close.clone();
     let close_overlay = props.on_close.clone();
+    
+    // Handler para opciones de calle
+    let on_street_settings = Callback::from(move |e: MouseEvent| {
+        e.stop_propagation();
+        if let Some(win) = window() {
+            let _ = win.alert_with_message("Options de la rue:\n\n• Voir historique de livraisons\n• Notes partagées par autres chauffeurs\n• Informations du quartier\n\n(À implémenter)");
+        }
+    });
+    
+    // Handler para editar código de puerta
+    let on_edit_door_code = Callback::from(move |e: MouseEvent| {
+        e.stop_propagation();
+        if let Some(win) = window() {
+            if let Ok(Some(value)) = win.prompt_with_message("Modifier Code de porte:") {
+                if !value.trim().is_empty() {
+                    let _ = win.alert_with_message(&format!("✅ Code de porte enregistré:\n{}", value));
+                }
+            }
+        }
+    });
+    
+    // Handler para editar indicaciones cliente
+    let on_edit_client_notes = Callback::from(move |e: MouseEvent| {
+        e.stop_propagation();
+        if let Some(win) = window() {
+            if let Ok(Some(value)) = win.prompt_with_message("Modifier Indications du client:") {
+                if !value.trim().is_empty() {
+                    let _ = win.alert_with_message(&format!("✅ Indications du client enregistré:\n{}", value));
+                }
+            }
+        }
+    });
+    
+    // Handler para editar notas del chauffeur
+    let on_edit_driver_notes = Callback::from(move |e: MouseEvent| {
+        e.stop_propagation();
+        if let Some(win) = window() {
+            if let Ok(Some(value)) = win.prompt_with_message("Modifier Notes du chauffeur:") {
+                if !value.trim().is_empty() {
+                    let _ = win.alert_with_message(&format!("✅ Notes du chauffeur enregistré:\n{}", value));
+                }
+            }
+        }
+    });
     
     html! {
         <div class="modal active">
@@ -35,7 +80,11 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                         <div class="detail-label">{"Adresse"}</div>
                         <div class="detail-value-with-action">
                             <span>{&props.package.address}</span>
-                            <button class="btn-icon" title="Options de la rue">
+                            <button 
+                                class="btn-icon" 
+                                title="Options de la rue"
+                                onclick={on_street_settings}
+                            >
                                 {"⚙️"}
                             </button>
                         </div>
@@ -54,7 +103,11 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                         <div class="detail-label">{"Codes de porte"}</div>
                         <div class="detail-value-with-action">
                             <span class="empty-value">{"Non renseigné"}</span>
-                            <button class="btn-icon-edit" title="Modifier">
+                            <button 
+                                class="btn-icon-edit" 
+                                title="Modifier"
+                                onclick={on_edit_door_code}
+                            >
                                 {"✏️"}
                             </button>
                         </div>
@@ -86,7 +139,11 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                         <div class="detail-label">{"Indications du client"}</div>
                         <div class="detail-value-with-action">
                             <span>{"\"Laisser au gardien si absent\""}</span>
-                            <button class="btn-icon-edit" title="Modifier">
+                            <button 
+                                class="btn-icon-edit" 
+                                title="Modifier"
+                                onclick={on_edit_client_notes}
+                            >
                                 {"✏️"}
                             </button>
                         </div>
@@ -97,7 +154,11 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                         <div class="detail-label">{"Notes propres du chauffeur"}</div>
                         <div class="detail-value-with-action">
                             <span class="empty-value">{"Ajouter une note..."}</span>
-                            <button class="btn-icon-edit" title="Modifier">
+                            <button 
+                                class="btn-icon-edit" 
+                                title="Modifier"
+                                onclick={on_edit_driver_notes}
+                            >
                                 {"✏️"}
                             </button>
                         </div>

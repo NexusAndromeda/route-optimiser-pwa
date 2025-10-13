@@ -192,7 +192,7 @@ window.addPackagesToMap = function(packagesJson) {
             type: 'symbol',
             source: 'packages',
             layout: {
-                'text-field': ['get', 'index'],
+                'text-field': ['to-string', ['+', ['get', 'index'], 1]],
                 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
                 'text-size': 11,
                 'text-anchor': 'center'
