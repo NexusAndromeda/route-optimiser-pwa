@@ -1,7 +1,7 @@
 use yew::prelude::*;
 use web_sys::{window, Storage};
 use gloo_net::http::Request;
-use crate::models::{Package, Company, CompaniesResponse, LoginRequest, LoginResponse, LoginData, PackageRequest, PackagesCache};
+use crate::models::{Package, Company, CompaniesResponse, LoginRequest, LoginResponse, LoginData, PackageRequest, PackagesCache, OptimizationRequest, OptimizationResponse};
 use super::{PackageList, DetailsModal, BalModal, SettingsPopup, LoginScreen, CompanyModal};
 use gloo_timers::callback::Timeout;
 use std::collections::HashMap;
@@ -41,6 +41,7 @@ pub fn app() -> Html {
     // App state
     let packages = use_state(|| Vec::<Package>::new());
     let packages_loading = use_state(|| false);
+    let optimizing = use_state(|| false);
     let selected_index = use_state(|| None::<usize>);
     let sheet_state = use_state(|| SheetState::Collapsed);
     let show_details = use_state(|| false);
@@ -609,6 +610,77 @@ pub fn app() -> Html {
         })
     };
     
+    // Optimize route
+    let on_optimize = {
+        let login_data = login_data.clone();
+        let packages = packages.clone();
+        let optimizing = optimizing.clone();
+        
+        Callback::from(move |_: MouseEvent| {
+            if let Some(login) = (*login_data).clone() {
+                let login_clone = login.clone();
+                let packages = packages.clone();
+                let optimizing = optimizing.clone();
+                
+                wasm_bindgen_futures::spawn_local(async move {
+                    optimizing.set(true);
+                    log::info!("🎯 Iniciando optimización de ruta...");
+                    
+                    match optimize_route(&login_clone.username).await {
+                        Ok(response) => {
+                            if response.success {
+                                if let Some(data) = response.data {
+                                    log::info!("✅ Ruta optimizada: {} paquetes", data.lst_lieu_article.len());
+                                    
+                                    // Reordenar paquetes según la optimización
+                                    let mut current_packages = (*packages).clone();
+                                    let mut optimized_packages = Vec::new();
+                                    
+                                    // Mapear paquetes optimizados
+                                    for opt_pkg in data.lst_lieu_article {
+                                        // Buscar el paquete en la lista actual por referencia
+                                        if let Some(ref_colis) = opt_pkg.reference_colis {
+                                            if let Some(found) = current_packages.iter().find(|p| p.id == ref_colis) {
+                                                optimized_packages.push(found.clone());
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Si encontramos paquetes optimizados, actualizar
+                                    if !optimized_packages.is_empty() {
+                                        packages.set(optimized_packages);
+                                        log::info!("📦 Paquetes reordenados según optimización");
+                                        
+                                        // Mostrar mensaje de éxito
+                                        if let Some(window) = web_sys::window() {
+                                            let _ = window.alert_with_message("✅ Ruta optimizada exitosamente");
+                                        }
+                                    }
+                                } else {
+                                    log::error!("❌ No se recibieron datos de optimización");
+                                }
+                            } else {
+                                let msg = response.message.unwrap_or_else(|| "Error desconocido".to_string());
+                                log::error!("❌ Error en optimización: {}", msg);
+                                if let Some(window) = web_sys::window() {
+                                    let _ = window.alert_with_message(&format!("Error: {}", msg));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("❌ Error llamando API de optimización: {}", e);
+                            if let Some(window) = web_sys::window() {
+                                let _ = window.alert_with_message(&format!("Error: {}", e));
+                            }
+                        }
+                    }
+                    
+                    optimizing.set(false);
+                });
+            }
+        })
+    };
+    
     // Logout
     let on_logout = {
         let is_logged_in = is_logged_in.clone();
@@ -683,9 +755,18 @@ pub fn app() -> Html {
         <>
             <header class="app-header">
                 <h1>{"Route Optimizer"}</h1>
-                <button class="btn-settings" onclick={toggle_settings}>
-                    {"⚙️"}
-                </button>
+                <div class="header-actions">
+                    <button 
+                        class="btn-optimize" 
+                        onclick={on_optimize}
+                        disabled={*optimizing}
+                    >
+                        {if *optimizing { "⏳ Optimizando..." } else { "🎯 Optimizar" }}
+                    </button>
+                    <button class="btn-settings" onclick={toggle_settings}>
+                        {"⚙️"}
+                    </button>
+                </div>
             </header>
             
             <div id="map" class="map-container"></div>
@@ -826,6 +907,32 @@ async fn perform_login(username: &str, password: &str, societe: &str) -> Result<
     
     response
         .json::<LoginResponse>()
+        .await
+        .map_err(|e| format!("Parse error: {}", e))
+}
+
+async fn optimize_route(username: &str) -> Result<OptimizationResponse, String> {
+    // Use the full username as matricule (format: "COMPANY_CODE_USERNAME")
+    let url = format!("{}/colis-prive/optimize", BACKEND_URL);
+    let request_body = OptimizationRequest {
+        matricule: username.to_string(),
+    };
+    
+    log::info!("🎯 Optimizando ruta para: {}", username);
+    
+    let response = Request::post(&url)
+        .json(&request_body)
+        .map_err(|e| format!("Request build error: {}", e))?
+        .send()
+        .await
+        .map_err(|e| format!("Request error: {}", e))?;
+    
+    if !response.ok() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+    
+    response
+        .json::<OptimizationResponse>()
         .await
         .map_err(|e| format!("Parse error: {}", e))
 }

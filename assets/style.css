@@ -530,6 +530,42 @@ body {
     font-weight: 700;
 }
 
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.btn-optimize {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.btn-optimize:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.btn-optimize:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-optimize:active:not(:disabled) {
+    transform: translateY(0);
+}
+
 .btn-settings {
     width: 44px;
     height: 44px;

@@ -81,6 +81,36 @@ pub struct PackagesCache {
     pub timestamp: String,
 }
 
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct OptimizationRequest {
+    pub matricule: String,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct OptimizationResponse {
+    pub success: bool,
+    pub message: Option<String>,
+    pub data: Option<OptimizationData>,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct OptimizationData {
+    pub matricule_chauffeur: Option<String>,
+    pub date_tournee: Option<String>,
+    pub lst_lieu_article: Vec<OptimizedPackage>,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct OptimizedPackage {
+    pub numero_ordre: Option<i32>,
+    pub reference_colis: Option<String>,
+    pub destinataire_nom: Option<String>,
+    pub destinataire_adresse1: Option<String>,
+    pub coord_x_destinataire: Option<f64>,
+    pub coord_y_destinataire: Option<f64>,
+    pub statut: Option<String>,
+}
+
 impl Package {
     pub fn demo_packages() -> Vec<Self> {
         vec![
