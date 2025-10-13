@@ -7,6 +7,7 @@ pub struct LoginScreenProps {
     pub on_show_companies: Callback<()>,
     pub selected_company: Option<Company>,
     pub on_login: Callback<(String, String)>,
+    pub on_show_register: Callback<()>,
 }
 
 #[function_component(LoginScreen)]
@@ -109,6 +110,17 @@ pub fn login_screen(props: &LoginScreenProps) -> Html {
                     <button type="submit" class="btn-login">
                         <span class="btn-text">{"Iniciar Sesión"}</span>
                     </button>
+                    
+                    <div class="login-footer">
+                        <p class="register-text">{"Votre entreprise souhaite utiliser Route Optimizer ?"}</p>
+                        <button 
+                            type="button" 
+                            class="btn-register-link"
+                            onclick={props.on_show_register.reform(|_| ())}
+                        >
+                            {"Contactez-nous pour un essai gratuit"}
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>

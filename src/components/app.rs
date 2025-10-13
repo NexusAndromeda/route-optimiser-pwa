@@ -2,7 +2,7 @@ use yew::prelude::*;
 use web_sys::{window, Storage};
 use gloo_net::http::Request;
 use crate::models::{Package, Company, CompaniesResponse, LoginRequest, LoginResponse, LoginData, PackageRequest, PackagesCache, OptimizationRequest, OptimizationResponse};
-use super::{PackageList, DetailsModal, BalModal, SettingsPopup, LoginScreen, CompanyModal};
+use super::{PackageList, DetailsModal, BalModal, SettingsPopup, LoginScreen, CompanyModal, RegisterScreen, RegisterData};
 use gloo_timers::callback::Timeout;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
@@ -37,6 +37,7 @@ pub fn app() -> Html {
     let selected_company = use_state(|| None::<Company>);
     let show_company_modal = use_state(|| false);
     let companies_loading = use_state(|| false);
+    let show_register = use_state(|| false);
     
     // App state
     let packages = use_state(|| Vec::<Package>::new());
@@ -324,6 +325,66 @@ pub fn app() -> Html {
             log::info!("✅ Empresa seleccionada: {:?}", company);
             selected_company.set(Some(company));
             show_company_modal.set(false);
+        })
+    };
+    
+    // Show register screen
+    let on_show_register = {
+        let show_register = show_register.clone();
+        Callback::from(move |_| {
+            show_register.set(true);
+        })
+    };
+    
+    // Back to login from register
+    let on_back_to_login = {
+        let show_register = show_register.clone();
+        Callback::from(move |_| {
+            show_register.set(false);
+        })
+    };
+    
+    // Handle registration
+    let on_register = {
+        Callback::from(move |register_data: RegisterData| {
+            log::info!("📝 Registro de empresa: {}", register_data.company_name);
+            
+            // TODO: Send to backend
+            wasm_bindgen_futures::spawn_local(async move {
+                match Request::post(&format!("{}/register", BACKEND_URL))
+                    .json(&serde_json::json!({
+                        "company_name": register_data.company_name,
+                        "company_address": register_data.company_address,
+                        "company_siret": register_data.company_siret,
+                        "admin_full_name": register_data.admin_full_name,
+                        "admin_email": register_data.admin_email,
+                        "admin_password": register_data.admin_password,
+                    }))
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        if response.ok() {
+                            log::info!("✅ Registro exitoso");
+                            if let Some(win) = window() {
+                                let _ = win.alert_with_message("✅ Registro exitoso!\n\nRecibirá un email de confirmación en breve.\n\nNuestro equipo se pondrá en contacto con usted.");
+                            }
+                        } else {
+                            log::error!("❌ Error en registro: {}", response.status());
+                            if let Some(win) = window() {
+                                let _ = win.alert_with_message("❌ Error en el registro. Por favor, intente nuevamente.");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("❌ Error en registro: {}", e);
+                        if let Some(win) = window() {
+                            let _ = win.alert_with_message("❌ Error de conexión. Por favor, intente nuevamente.");
+                        }
+                    }
+                }
+            });
         })
     };
     
@@ -724,18 +785,28 @@ pub fn app() -> Html {
     if !*is_logged_in {
         return html! {
             <>
-                <LoginScreen
-                    on_show_companies={on_show_companies}
-                    selected_company={(*selected_company).clone()}
-                    on_login={on_login}
-                />
-                <CompanyModal
-                    show={*show_company_modal}
-                    companies={(*companies).clone()}
-                    on_close={on_close_companies}
-                    on_select={on_select_company}
-                    loading={*companies_loading}
-                />
+                if *show_register {
+                    <RegisterScreen
+                        on_back_to_login={on_back_to_login}
+                        on_register={on_register}
+                    />
+                } else {
+                    <>
+                        <LoginScreen
+                            on_show_companies={on_show_companies}
+                            selected_company={(*selected_company).clone()}
+                            on_login={on_login}
+                            on_show_register={on_show_register}
+                        />
+                        <CompanyModal
+                            show={*show_company_modal}
+                            companies={(*companies).clone()}
+                            on_close={on_close_companies}
+                            on_select={on_select_company}
+                            loading={*companies_loading}
+                        />
+                    </>
+                }
             </>
         };
     }

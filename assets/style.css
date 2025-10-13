@@ -177,6 +177,114 @@
     background: #e9ecef;
 }
 
+/* Login footer styles */
+.login-footer {
+    margin-top: 30px;
+    text-align: center;
+}
+
+.register-text {
+    font-size: 14px;
+    color: #6B7280;
+    margin-bottom: 12px;
+}
+
+.btn-register-link {
+    background: none;
+    border: none;
+    color: #667eea;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+.btn-register-link:hover {
+    color: #764ba2;
+}
+
+/* Register screen styles */
+.register-container {
+    max-width: 450px;
+}
+
+.register-form {
+    max-height: 65vh;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.register-form::-webkit-scrollbar {
+    width: 4px;
+}
+
+.register-form::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.register-form::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.3);
+    border-radius: 10px;
+}
+
+.register-form::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 126, 234, 0.5);
+}
+
+.form-section {
+    margin-bottom: 24px;
+}
+
+.section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #E5E7EB;
+}
+
+.required {
+    color: #EF4444;
+    margin-left: 2px;
+    font-size: 14px;
+}
+
+.register-info {
+    font-size: 11px;
+    color: #6B7280;
+    line-height: 1.4;
+}
+
+.register-info .link {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.register-info .link:hover {
+    text-decoration: underline;
+}
+
+.btn-back {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: none;
+    border: none;
+    color: #667eea;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.btn-back:hover {
+    background: rgba(102, 126, 234, 0.1);
+}
+
 /* Dark mode styles for login */
 @media (prefers-color-scheme: dark) {
     .login-container {
@@ -230,6 +338,55 @@
     
     .btn-debug:hover {
         background: #4B5563;
+    }
+    
+    .register-text {
+        color: #9CA3AF;
+    }
+    
+    .btn-register-link {
+        color: #818CF8;
+    }
+    
+    .btn-register-link:hover {
+        color: #A5B4FC;
+    }
+    
+    .section-title {
+        color: #F9FAFB;
+        border-bottom-color: #4B5563;
+    }
+    
+    .register-info {
+        color: #9CA3AF;
+    }
+    
+    .register-info .link {
+        color: #818CF8;
+    }
+    
+    .register-info .link:hover {
+        color: #A5B4FC;
+    }
+    
+    .btn-back {
+        color: #818CF8;
+    }
+    
+    .btn-back:hover {
+        background: rgba(129, 140, 248, 0.1);
+    }
+    
+    .register-form::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .register-form::-webkit-scrollbar-thumb {
+        background: rgba(129, 140, 248, 0.3);
+    }
+    
+    .register-form::-webkit-scrollbar-thumb:hover {
+        background: rgba(129, 140, 248, 0.5);
     }
 }
 
