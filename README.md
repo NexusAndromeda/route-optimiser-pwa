@@ -1,119 +1,95 @@
-# Route Optimizer App
+# 🚀 Route Optimizer - Frontend (Yew)
 
-Frontend multiplataforma construido con Dioxus (Rust).
+PWA construida con Yew (Rust → WebAssembly)
 
-## 🎯 Plataformas soportadas
+## 🏗️ Stack Tecnológico
 
-- 🌐 **Web (PWA)** - Progressive Web App
-- 🤖 **Android** - App nativa (API 29+)
-- 🍎 **iOS** - App nativa (iOS 14+)
+- **Framework:** Yew 0.21
+- **Lenguaje:** Rust (compilado a WASM)
+- **Estilos:** CSS puro (del prototipo)
+- **PWA:** Service Worker + Manifest
+- **Maps:** Mapbox GL JS (por integrar)
 
-## 🚀 Quick Start
+## 🚀 Desarrollo
 
-### Prerequisitos
-
+### Instalar Trunk (build tool para Yew)
 ```bash
-# Instalar Dioxus CLI
-cargo install dioxus-cli
-
-# Verificar instalación
-dx --version
+cargo install trunk wasm-bindgen-cli
 ```
 
-### Desarrollo
-
-#### Web (más rápido para desarrollo)
+### Ejecutar en desarrollo
 ```bash
-dx serve --web
-# Abre http://localhost:8080
+trunk serve
 ```
 
-#### Android
+Abre: http://localhost:8080
+
+### Build para producción
 ```bash
-# Con emulador corriendo
-dx serve --android
+trunk build --release
 ```
 
-#### iOS (solo macOS)
-```bash
-# Con simulador corriendo
-dx serve --ios
-```
-
-## 📦 Build para producción
-
-```bash
-# Web
-dx build --web --release
-# Output: dist/
-
-# Android (APK)
-dx build --android --release
-
-# iOS
-dx build --ios --release
-
-# Build específico
-dx build --release
-```
-
-## 🏗️ Estructura del proyecto
+## 📁 Estructura
 
 ```
 app/
 ├── src/
 │   ├── main.rs              # Entry point
-│   ├── components/          # Componentes UI (próximamente)
-│   ├── models/              # Modelos de datos (próximamente)
-│   └── services/            # HTTP client, etc (próximamente)
-├── assets/                  # Imágenes, iconos (próximamente)
-├── platforms/
-│   ├── android/            # Generado por Dioxus
-│   └── ios/                # Generado por Dioxus
-├── Cargo.toml
-├── Dioxus.toml
-└── README.md
+│   ├── models.rs            # Data models
+│   └── components/          # UI Components
+│       ├── app.rs           # Main app
+│       ├── header.rs        # Header
+│       ├── map.rs           # Map container
+│       ├── package_list.rs  # Lista de paquetes
+│       ├── package_card.rs  # Card de paquete
+│       ├── details_modal.rs # Modal de detalles
+│       ├── bal_modal.rs     # Modal BAL (Sí/No)
+│       └── settings_popup.rs # Popup de configuración
+├── assets/
+│   └── style.css            # CSS del prototipo
+├── index.html               # HTML template
+├── manifest.json            # PWA manifest
+└── Cargo.toml
 ```
+
+## ✨ Funcionalidades
+
+### ✅ Implementado (Réplica del prototipo):
+- Header con botón de configuración
+- Mapa placeholder
+- Bottom Sheet responsive (3 estados)
+- Sidebar desktop (fija 320px)
+- Cards de paquetes con número
+- Selección de paquetes
+- Botones de reorden (solo en seleccionado)
+- Modal de detalles
+- Modal BAL (Sí/No)
+- Popup de configuración
+- Dark/Light mode automático
+
+### ⏳ Por implementar:
+- Integración Mapbox
+- API calls al backend
+- Service Worker (offline)
+- Lógica de reordenamiento real
+- Persistencia de datos
+
+## 🎨 Diseño
+
+El diseño es una réplica EXACTA del prototipo HTML/CSS/JS ubicado en `prototype/`
 
 ## 🔧 Configuración
 
-### Backend URL
-
-El backend está en: `http://localhost:8000` (desarrollo)
-
-Para producción, actualizar en `src/config.rs` (próximamente)
-
-## 📱 Renderer
-
-Usando **Skia renderer** para tener UI idéntica en todas las plataformas.
-
-## 🐛 Debugging
-
-### Web
-```bash
-# Chrome DevTools funciona perfectamente
-dx serve
-# F12 en navegador
+Crea `.env` con:
+```
+MAPBOX_TOKEN=tu_token_aqui
+API_BASE_URL=http://localhost:3000
 ```
 
-### Android
-```bash
-# Terminal 1
-dx serve --platform android
+## 📱 PWA
 
-# Terminal 2
-adb logcat | grep RouteOptimizer
-```
+La app se instala como nativa en iOS y Android gracias al `manifest.json`
 
-### iOS
-```bash
-# Ver logs en Xcode Console
-# Window → Devices and Simulators → Open Console
-```
+---
 
-## 📝 Notas
-
-- Este es un proyecto de prueba para evaluar Dioxus
-- Comparar con implementaciones actuales en Swift (iOS) y Kotlin (Android)
-- Evaluar viabilidad de migración completa
-
+*Migrado de Dioxus a Yew para mejor productividad y estabilidad*
