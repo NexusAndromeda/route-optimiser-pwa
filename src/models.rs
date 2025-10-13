@@ -84,6 +84,7 @@ pub struct PackagesCache {
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct OptimizationRequest {
     pub matricule: String,
+    pub societe: String,
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]

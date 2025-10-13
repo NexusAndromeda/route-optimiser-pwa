@@ -613,12 +613,14 @@ pub fn app() -> Html {
     // Optimize route
     let on_optimize = {
         let login_data = login_data.clone();
+        let selected_company = selected_company.clone();
         let packages = packages.clone();
         let optimizing = optimizing.clone();
         
         Callback::from(move |_: MouseEvent| {
-            if let Some(login) = (*login_data).clone() {
+            if let (Some(login), Some(company)) = ((*login_data).clone(), (*selected_company).clone()) {
                 let login_clone = login.clone();
+                let company_clone = company.clone();
                 let packages = packages.clone();
                 let optimizing = optimizing.clone();
                 
@@ -626,7 +628,7 @@ pub fn app() -> Html {
                     optimizing.set(true);
                     log::info!("🎯 Iniciando optimización de ruta...");
                     
-                    match optimize_route(&login_clone.username).await {
+                    match optimize_route(&login_clone.username, &company_clone.code).await {
                         Ok(response) => {
                             if response.success {
                                 if let Some(data) = response.data {
@@ -911,14 +913,22 @@ async fn perform_login(username: &str, password: &str, societe: &str) -> Result<
         .map_err(|e| format!("Parse error: {}", e))
 }
 
-async fn optimize_route(username: &str) -> Result<OptimizationResponse, String> {
-    // Use the full username as matricule (format: "COMPANY_CODE_USERNAME")
-    let url = format!("{}/colis-prive/optimize", BACKEND_URL);
-    let request_body = OptimizationRequest {
-        matricule: username.to_string(),
+async fn optimize_route(username: &str, societe: &str) -> Result<OptimizationResponse, String> {
+    // Extract just the username part (without SOCIETE prefix)
+    // username viene como "PCP0010699_C187518", extraemos "C187518"
+    let matricule_only = if let Some(underscore_pos) = username.rfind('_') {
+        &username[underscore_pos + 1..]
+    } else {
+        username
     };
     
-    log::info!("🎯 Optimizando ruta para: {}", username);
+    let url = format!("{}/colis-prive/optimize", BACKEND_URL);
+    let request_body = OptimizationRequest {
+        matricule: matricule_only.to_string(),
+        societe: societe.to_string(),
+    };
+    
+    log::info!("🎯 Optimizando ruta para: {} en societe: {}", matricule_only, societe);
     
     let response = Request::post(&url)
         .json(&request_body)
