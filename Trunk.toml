@@ -4,6 +4,11 @@ release = true
 dist = "dist"
 public_url = "/"
 
+[[hooks]]
+stage = "post_build"
+command = "sh"
+command_arguments = ["-c", "cp assets/sw.js dist/sw.js"]
+
 [watch]
 ignore = ["dist"]
 

@@ -17,10 +17,17 @@
     <link data-trunk rel="css" href="assets/style.css">
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest.json">
+    <link data-trunk rel="copy-file" href="assets/manifest.json">
+    <link rel="manifest" href="manifest.json">
     
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="/assets/icon-192.png">
+    <!-- Meta tags para PWA -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Route Optimizer">
+    
+    <!-- Service Worker Registration -->
+    <script data-trunk src="assets/sw-register.js"></script>
 </head>
 <body>
     <!-- Yew monta la app aquí automáticamente -->
