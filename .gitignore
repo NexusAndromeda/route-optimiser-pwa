@@ -29,7 +29,7 @@ mapbox_access_token.*
 api_keys.*
 
 # Prototype directory (contains hardcoded tokens)
-prototype/
+#prototype/
 
 # Keystore and certificates
 *.keystore
