@@ -163,9 +163,9 @@ window.addPackagesToMap = function(packagesJson) {
             paint: {
                 'circle-radius': [
                     'case',
-                    ['get', 'isSelected'], 10, // Selected: larger
-                    ['==', ['get', 'status'], 'delivered'], 6, // Delivered: smaller
-                    6 // Pending: smaller
+                    ['get', 'isSelected'], 12, // Selected: larger
+                    ['==', ['get', 'status'], 'delivered'], 8, // Delivered: smaller
+                    8 // Pending: smaller
                 ],
                 'circle-color': [
                     'case',
@@ -176,7 +176,7 @@ window.addPackagesToMap = function(packagesJson) {
                 'circle-stroke-width': [
                     'case',
                     ['get', 'isSelected'], 2, // Selected: thick border
-                    1 // Normal: thin border
+                    1.5 // Normal: thin border
                 ],
                 'circle-stroke-color': [
                     'case',
@@ -194,7 +194,7 @@ window.addPackagesToMap = function(packagesJson) {
             layout: {
                 'text-field': ['get', 'index'],
                 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-                'text-size': 10,
+                'text-size': 11,
                 'text-anchor': 'center'
             },
             paint: {

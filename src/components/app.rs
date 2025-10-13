@@ -202,13 +202,22 @@ pub fn app() -> Html {
                     
                     // Center map on package
                     Timeout::new(100, move || {
-                        if let Some(window) = web_sys::window() {
+                        if let Some(win) = web_sys::window() {
                             use wasm_bindgen::JsCast;
                             let function = js_sys::Function::new_no_args(&format!(
                                 "if (window.centerMapOnPackage) window.centerMapOnPackage({});",
                                 index
                             ));
-                            let _ = function.call0(&window.into());
+                            let _ = function.call0(&win.clone().into());
+                            
+                            // Scroll to package with flash animation
+                            let function2 = js_sys::Function::new_no_args(&format!(
+                                "if (window.scrollToSelectedPackage) window.scrollToSelectedPackage({});",
+                                index
+                            ));
+                            Timeout::new(300, move || {
+                                let _ = function2.call0(&win.into());
+                            }).forget();
                         }
                     }).forget();
                 }
