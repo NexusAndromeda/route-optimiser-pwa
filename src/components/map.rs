@@ -2,6 +2,7 @@ use yew::prelude::*;
 use wasm_bindgen::prelude::*;
 use web_sys::window;
 use gloo_timers::callback::Timeout;
+use crate::models::Package;
 
 #[wasm_bindgen]
 extern "C" {
@@ -11,46 +12,62 @@ extern "C" {
     #[wasm_bindgen(js_name = initMapbox)]
     fn init_mapbox(container_id: &str, is_dark: bool);
     
-    #[wasm_bindgen(js_name = addMapMarker)]
-    fn add_map_marker(index: i32, lat: f64, lng: f64, is_delivered: bool);
+    #[wasm_bindgen(js_name = addPackagesToMap)]
+    fn add_packages_to_map(packages_json: &str);
+    
+    #[wasm_bindgen(js_name = updateSelectedPackage)]
+    fn update_selected_package(selected_index: i32);
+}
+
+#[derive(Properties, PartialEq)]
+pub struct MapContainerProps {
+    pub packages: Vec<Package>,
+    pub selected_index: Option<usize>,
 }
 
 #[function_component(MapContainer)]
-pub fn map_container() -> Html {
-    use_effect(|| {
-        // Detect dark mode
-        let is_dark = window()
-            .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok())
-            .flatten()
-            .map(|mq| mq.matches())
-            .unwrap_or(false);
+pub fn map_container(props: &MapContainerProps) -> Html {
+    // Initialize map on mount
+    {
+        let packages = props.packages.clone();
         
-        // Initialize map after a short delay to ensure DOM is ready
-        Timeout::new(100, move || {
-            log("🗺️ Initializing Mapbox from Rust/WASM");
-            log("🔑 Token loaded from APP_CONFIG");
+        use_effect_with((), move |_| {
+            // Detect dark mode
+            let is_dark = window()
+                .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok())
+                .flatten()
+                .map(|mq| mq.matches())
+                .unwrap_or(false);
             
-            init_mapbox("map", is_dark);
+            // Initialize map after a short delay to ensure DOM is ready
+            Timeout::new(100, move || {
+                log("🗺️ Initializing Mapbox from Rust/WASM");
+                
+                init_mapbox("map", is_dark);
+                
+                // Add packages to map after initialization
+                let packages_json = serde_json::to_string(&packages).unwrap_or_default();
+                add_packages_to_map(&packages_json);
+            }).forget();
             
-            // Add demo markers
-            let markers = vec![
-                (2.3316, 48.8698, false), // Rue de la Paix - pending
-                (2.3069, 48.8698, true),  // Champs-Élysées - delivered
-                (2.3522, 48.8566, false), // Rivoli - pending
-                (2.3488, 48.8534, true),  // Saint-Germain - delivered
-                (2.3691, 48.8530, false), // Bastille - pending
-            ];
-            
-            for (i, (lng, lat, delivered)) in markers.iter().enumerate() {
-                add_map_marker(i as i32 + 1, *lat, *lng, *delivered);
+            || ()
+        });
+    }
+    
+    // Update selected package when selection changes
+    {
+        let selected_index = props.selected_index;
+        
+        use_effect_with(selected_index, move |sel_idx| {
+            if let Some(idx) = sel_idx {
+                update_selected_package(*idx as i32);
             }
-        }).forget();
-        
-        || ()
-    });
+            || ()
+        });
+    }
     
     html! {
-        <div id="map" class="map-container"></div>
+        <></>
     }
 }
 

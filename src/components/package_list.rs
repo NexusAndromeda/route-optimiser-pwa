@@ -18,6 +18,8 @@ pub struct PackageListProps {
     pub on_reorder: Callback<(usize, String)>,
     #[prop_or_default]
     pub animations: HashMap<usize, String>,
+    #[prop_or_default]
+    pub loading: bool,
 }
 
 #[function_component(PackageList)]
@@ -53,25 +55,47 @@ pub fn package_list(props: &PackageListProps) -> Html {
             // Package List
             <div class="package-list">
                 {
-                    props.packages.iter().enumerate().map(|(index, package)| {
-                        let is_selected = props.selected_index == Some(index);
-                        let animation_class = props.animations.get(&index).cloned();
-                        
+                    if props.loading {
                         html! {
-                            <PackageCard
-                                key={package.id.clone()}
-                                index={index}
-                                package={package.clone()}
-                                is_selected={is_selected}
-                                on_select={props.on_select.clone()}
-                                on_show_details={props.on_show_details.clone()}
-                                on_navigate={props.on_navigate.clone()}
-                                on_reorder={props.on_reorder.clone()}
-                                total_packages={props.packages.len()}
-                                animation_class={animation_class}
-                            />
+                            <div class="no-packages">
+                                <div class="no-packages-icon">{"⏳"}</div>
+                                <div class="no-packages-text">{"Cargando paquetes..."}</div>
+                                <div class="no-packages-subtitle">{"Por favor espera"}</div>
+                            </div>
                         }
-                    }).collect::<Html>()
+                    } else if props.packages.is_empty() {
+                        html! {
+                            <div class="no-packages">
+                                <div class="no-packages-icon">{"📦"}</div>
+                                <div class="no-packages-text">{"No hay paquetes disponibles"}</div>
+                                <div class="no-packages-subtitle">{"Los paquetes aparecerán aquí después del login"}</div>
+                            </div>
+                        }
+                    } else {
+                        html! {
+                            <>
+                                { for props.packages.iter().enumerate().map(|(index, package)| {
+                                    let is_selected = props.selected_index == Some(index);
+                                    let animation_class = props.animations.get(&index).cloned();
+                                    
+                                    html! {
+                                        <PackageCard
+                                            key={package.id.clone()}
+                                            index={index}
+                                            package={package.clone()}
+                                            is_selected={is_selected}
+                                            on_select={props.on_select.clone()}
+                                            on_show_details={props.on_show_details.clone()}
+                                            on_navigate={props.on_navigate.clone()}
+                                            on_reorder={props.on_reorder.clone()}
+                                            total_packages={props.packages.len()}
+                                            animation_class={animation_class}
+                                        />
+                                    }
+                                }) }
+                            </>
+                        }
+                    }
                 }
             </div>
         </>

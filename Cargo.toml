@@ -40,6 +40,7 @@ wasm-logger = "0.2"
 # Utils
 gloo-timers = "0.3"
 gloo-utils = "0.2"
+chrono = { version = "0.4", features = ["wasmbind"] }
 
 [profile.release]
 opt-level = "z"
