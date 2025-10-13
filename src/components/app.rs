@@ -943,7 +943,7 @@ fn get_local_storage() -> Option<Storage> {
 }
 
 async fn load_companies() -> Result<Vec<Company>, String> {
-    let url = format!("{}/colis-prive/companies", BACKEND_URL);
+    let url = format!("{}/api/colis-prive/companies", BACKEND_URL);
     let response = Request::get(&url)
         .send()
         .await
@@ -962,7 +962,7 @@ async fn load_companies() -> Result<Vec<Company>, String> {
 }
 
 async fn perform_login(username: &str, password: &str, societe: &str) -> Result<LoginResponse, String> {
-    let url = format!("{}/colis-prive/auth", BACKEND_URL);
+    let url = format!("{}/api/colis-prive/auth", BACKEND_URL);
     let request_body = LoginRequest {
         username: username.to_string(),
         password: password.to_string(),
@@ -995,7 +995,7 @@ async fn optimize_route(username: &str, societe: &str) -> Result<OptimizationRes
         username
     };
     
-    let url = format!("{}/colis-prive/optimize", BACKEND_URL);
+    let url = format!("{}/api/colis-prive/optimize", BACKEND_URL);
     let request_body = OptimizationRequest {
         matricule: matricule_only.to_string(),
         societe: societe.to_string(),
@@ -1057,7 +1057,7 @@ async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) -> R
     }
     
     // 🎯 Fetch from API
-    let url = format!("{}/colis-prive/packages", BACKEND_URL);
+    let url = format!("{}/api/colis-prive/packages", BACKEND_URL);
     let request_body = PackageRequest {
         matricule: matricule.to_string(),
         societe: societe.to_string(),
