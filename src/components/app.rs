@@ -349,13 +349,13 @@ pub fn app() -> Html {
         Callback::from(move |register_data: RegisterData| {
             log::info!("📝 Registro de empresa: {}", register_data.company_name);
             
-            // TODO: Send to backend
+            // Enviar al nuevo endpoint MVC
             wasm_bindgen_futures::spawn_local(async move {
-                match Request::post(&format!("{}/register", BACKEND_URL))
+                match Request::post(&format!("{}/api/company/register", BACKEND_URL))
                     .json(&serde_json::json!({
                         "company_name": register_data.company_name,
                         "company_address": register_data.company_address,
-                        "company_siret": register_data.company_siret,
+                        "company_siret": if register_data.company_siret.is_empty() { None::<String> } else { Some(register_data.company_siret) },
                         "admin_full_name": register_data.admin_full_name,
                         "admin_email": register_data.admin_email,
                         "admin_password": register_data.admin_password,
@@ -371,9 +371,11 @@ pub fn app() -> Html {
                                 let _ = win.alert_with_message("✅ Registro exitoso!\n\nRecibirá un email de confirmación en breve.\n\nNuestro equipo se pondrá en contacto con usted.");
                             }
                         } else {
-                            log::error!("❌ Error en registro: {}", response.status());
+                            let status = response.status();
+                            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                            log::error!("❌ Error en registro: {} - {}", status, error_text);
                             if let Some(win) = window() {
-                                let _ = win.alert_with_message("❌ Error en el registro. Por favor, intente nuevamente.");
+                                let _ = win.alert_with_message(&format!("❌ Error en el registro:\n{}", error_text));
                             }
                         }
                     }
