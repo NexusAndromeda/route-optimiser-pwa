@@ -46,33 +46,23 @@ pub fn package_card(props: &PackageCardProps) -> Html {
     
     html! {
         <div class={card_class} {onclick}>
-            // Package Number
-            <div class="package-number">
-                {index + 1}
-            </div>
-            
-            // Package Main
             <div class="package-main">
-                // Header
                 <div class="package-header">
-                    <div class="package-info">
-                        <div class="package-tracking">
-                            {format!("📦 {}", props.package.id)}
-                        </div>
-                        <div class={classes!("package-status", status_class)}>
-                            {status_text}
-                        </div>
+                    <div class="package-number">{index + 1}</div>
+                    <div class={classes!("package-status", status_class)}>
+                        <span class="status-icon">
+                            {if props.package.status == "delivered" { "✓" } else { "⏳" }}
+                        </span>
+                        <span class="status-text">{status_text}</span>
                     </div>
                 </div>
-                
-                // Recipient
-                <div class="package-recipient">
-                    {&props.package.recipient}
-                </div>
-                
-                // Address
-                <div class="package-address">
-                    {&props.package.address}
+                <div class="package-info">
+                    <div class="package-recipient">
+                        {&props.package.recipient}
+                    </div>
+                    <div class="package-address">
+                        {&props.package.address}
+                    </div>
                 </div>
                 
                 // Reorder Actions (solo cuando está seleccionado)
