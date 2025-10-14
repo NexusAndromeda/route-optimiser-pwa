@@ -56,13 +56,17 @@ pub fn app() -> Html {
     {
         let companies = companies.clone();
         let companies_loading = companies_loading.clone();
-        let is_logged_in = is_logged_in.clone();
         
         use_effect_with((), move |_| {
-            // Solo cargar empresas si no está logueado
-            let should_load = !*is_logged_in;
+            // Solo cargar empresas si NO hay datos de login guardados
+            let has_saved_login = if let Some(storage) = get_local_storage() {
+                storage.get_item("routeOptimizer_loginData").ok().flatten().is_some()
+            } else {
+                false
+            };
             
-            if should_load {
+            if !has_saved_login {
+                log::info!("📋 Cargando lista de empresas...");
                 wasm_bindgen_futures::spawn_local(async move {
                     companies_loading.set(true);
                     match load_companies().await {
@@ -76,6 +80,8 @@ pub fn app() -> Html {
                     }
                     companies_loading.set(false);
                 });
+            } else {
+                log::info!("ℹ️ Usuario ya logueado, no se cargan empresas");
             }
             || ()
         });
@@ -719,13 +725,22 @@ pub fn app() -> Html {
                                     
                                     // Si encontramos paquetes optimizados, actualizar
                                     if !optimized_packages.is_empty() {
-                                        packages.set(optimized_packages);
-                                        log::info!("📦 Paquetes reordenados según optimización");
+                                        log::info!("📦 Paquetes reordenados según optimización: {} paquetes", optimized_packages.len());
+                                        packages.set(optimized_packages.clone());
+                                        
+                                        // Forzar actualización del mapa después de un breve delay
+                                        Timeout::new(200, move || {
+                                            let packages_json = serde_json::to_string(&optimized_packages).unwrap_or_default();
+                                            log::info!("🗺️ Actualizando mapa con paquetes optimizados...");
+                                            add_packages_to_map(&packages_json);
+                                        }).forget();
                                         
                                         // Mostrar mensaje de éxito
                                         if let Some(window) = web_sys::window() {
                                             let _ = window.alert_with_message("✅ Ruta optimizada exitosamente");
                                         }
+                                    } else {
+                                        log::warn!("⚠️ No se pudieron mapear los paquetes optimizados");
                                     }
                                 } else {
                                     log::error!("❌ No se recibieron datos de optimización");
@@ -796,6 +811,8 @@ pub fn app() -> Html {
         let show_settings = show_settings.clone();
         let packages = packages.clone();
         let packages_loading = packages_loading.clone();
+        let companies = companies.clone();
+        let companies_loading_state = companies_loading.clone();
         
         Callback::from(move |_| {
             // Clear packages cache
@@ -822,6 +839,24 @@ pub fn app() -> Html {
             show_settings.set(false);
             packages.set(Vec::new());
             packages_loading.set(false);
+            
+            // Recargar empresas para el próximo login
+            let companies = companies.clone();
+            let companies_loading_state = companies_loading_state.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                log::info!("📋 Recargando lista de empresas...");
+                companies_loading_state.set(true);
+                match load_companies().await {
+                    Ok(loaded_companies) => {
+                        log::info!("✅ Empresas recargadas: {}", loaded_companies.len());
+                        companies.set(loaded_companies);
+                    }
+                    Err(e) => {
+                        log::error!("❌ Error recargando empresas: {}", e);
+                    }
+                }
+                companies_loading_state.set(false);
+            });
         })
     };
     
