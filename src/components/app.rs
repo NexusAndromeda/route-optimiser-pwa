@@ -726,14 +726,7 @@ pub fn app() -> Html {
                                     // Si encontramos paquetes optimizados, actualizar
                                     if !optimized_packages.is_empty() {
                                         log::info!("📦 Paquetes reordenados según optimización: {} paquetes", optimized_packages.len());
-                                        packages.set(optimized_packages.clone());
-                                        
-                                        // Forzar actualización del mapa después de un breve delay
-                                        Timeout::new(200, move || {
-                                            let packages_json = serde_json::to_string(&optimized_packages).unwrap_or_default();
-                                            log::info!("🗺️ Actualizando mapa con paquetes optimizados...");
-                                            add_packages_to_map(&packages_json);
-                                        }).forget();
+                                        packages.set(optimized_packages);
                                         
                                         // Mostrar mensaje de éxito
                                         if let Some(window) = web_sys::window() {
