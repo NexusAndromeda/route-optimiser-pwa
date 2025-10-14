@@ -22,21 +22,6 @@ pub fn settings_popup(props: &SettingsPopupProps) -> Html {
                 </div>
                 <div class="settings-body">
                     <button
-                        class="btn-retry-map"
-                        onclick={Callback::from(|_| {
-                            web_sys::js_sys::Reflect::get(&web_sys::window().unwrap(), &"reinitializeMap".into())
-                                .unwrap()
-                                .dyn_into::<web_sys::js_sys::Function>()
-                                .unwrap()
-                                .call0(&web_sys::js_sys::Object::new())
-                                .unwrap();
-                        })}
-                        title="Reinicializar mapa si no carga"
-                    >
-                        {"🗺️ Réinitialiser la carte"}
-                    </button>
-                    
-                    <button
                         class="btn-logout"
                         onclick={{
                             let on_logout = props.on_logout.clone();
