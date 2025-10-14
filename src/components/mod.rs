@@ -12,7 +12,7 @@ mod register_screen;
 
 pub use app::App;
 pub use header::Header;
-pub use map::MapContainer;
+// pub use map::MapContainer; // No se usa actualmente
 pub use package_list::PackageList;
 pub use package_card::PackageCard;
 pub use details_modal::DetailsModal;

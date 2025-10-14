@@ -1,6 +1,8 @@
 use yew::prelude::*;
 use crate::models::Package;
 use web_sys::window;
+use wasm_bindgen_futures::spawn_local;
+use gloo_net::http::{Request, Method};
 
 #[derive(Properties, PartialEq)]
 pub struct DetailsModalProps {
@@ -14,11 +16,42 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     let close = props.on_close.clone();
     let close_overlay = props.on_close.clone();
     
-    // Handler para opciones de calle
+    // Handler para geocodificación de dirección
+    let package_id = props.package.id.clone();
     let on_street_settings = Callback::from(move |e: MouseEvent| {
         e.stop_propagation();
         if let Some(win) = window() {
-            let _ = win.alert_with_message("Options de la rue:\n\n• Voir historique de livraisons\n• Notes partagées par autres chauffeurs\n• Informations du quartier\n\n(À implémenter)");
+            if let Ok(Some(new_address)) = win.prompt_with_message("Modifier l'adresse pour géocodage:\n\nEntrez la nouvelle adresse complète:") {
+                if !new_address.trim().is_empty() {
+                    log::info!("🌍 Géocodage demandé pour paquete {}: {}", package_id, new_address);
+                    
+                    // Llamar al endpoint de geocodificación
+                    wasm_bindgen_futures::spawn_local(async move {
+                        match geocode_address(new_address.clone()).await {
+                            Ok(response) => {
+                                if response.success {
+                                    log::info!("✅ Géocodage réussi: {} -> ({}, {})", 
+                                        new_address, 
+                                        response.latitude.unwrap_or(0.0), 
+                                        response.longitude.unwrap_or(0.0)
+                                    );
+                                    
+                                    // Actualizar el paquete en el mapa (TODO: implementar callback)
+                                    log::info!("📍 Coordonnées mises à jour: lat={}, lng={}", 
+                                        response.latitude.unwrap_or(0.0), 
+                                        response.longitude.unwrap_or(0.0)
+                                    );
+                                } else {
+                                    log::error!("❌ Géocodage échoué: {}", response.message.unwrap_or_default());
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("❌ Erreur lors du géocodage: {}", e);
+                            }
+                        }
+                    });
+                }
+            }
         }
     });
     
@@ -82,7 +115,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                             <span>{&props.package.address}</span>
                             <button 
                                 class="btn-icon" 
-                                title="Options de la rue"
+                                title="Modifier l'adresse (géocodage)"
                                 onclick={on_street_settings}
                             >
                                 {"⚙️"}
@@ -166,6 +199,44 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                 </div>
             </div>
         </div>
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct GeocodeResponse {
+    success: bool,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    formatted_address: Option<String>,
+    message: Option<String>,
+}
+
+async fn geocode_address(address: String) -> Result<GeocodeResponse, String> {
+    let url = "http://localhost:3000/api/address/geocode";
+    let body = serde_json::json!({ "address": address });
+    
+    let response = Request::post(url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .map_err(|e| format!("Failed to create request: {:?}", e))?
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {:?}", e))?;
+    
+    if !response.ok() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+    
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse JSON: {:?}", e))?;
+    
+    // Extraer data del response
+    if let Some(data) = json.get("data") {
+        serde_json::from_value(data.clone()).map_err(|e| format!("Failed to parse response data: {}", e))
+    } else {
+        Err("No data in response".to_string())
     }
 }
 
