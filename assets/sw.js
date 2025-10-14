@@ -37,6 +37,14 @@ self.addEventListener('activate', event => {
 
 // Fetch event - Network first, fallback to cache
 self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  
+  // Skip caching for API requests
+  if (url.pathname.startsWith('/api/')) {
+    // Let API requests pass through without caching
+    return;
+  }
+  
   event.respondWith(
     fetch(event.request)
       .then(response => {

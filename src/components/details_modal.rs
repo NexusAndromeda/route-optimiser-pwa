@@ -3,6 +3,13 @@ use crate::models::Package;
 use web_sys::window;
 use wasm_bindgen_futures::spawn_local;
 use gloo_net::http::{Request, Method};
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_name = updatePackageCoordinates)]
+    fn update_package_coordinates(package_id: &str, latitude: f64, longitude: f64) -> bool;
+}
 
 #[derive(Properties, PartialEq)]
 pub struct DetailsModalProps {
@@ -18,42 +25,50 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     
     // Handler para geocodificación de dirección
     let package_id = props.package.id.clone();
-    let on_street_settings = Callback::from(move |e: MouseEvent| {
-        e.stop_propagation();
-        if let Some(win) = window() {
-            if let Ok(Some(new_address)) = win.prompt_with_message("Modifier l'adresse pour géocodage:\n\nEntrez la nouvelle adresse complète:") {
-                if !new_address.trim().is_empty() {
-                    log::info!("🌍 Géocodage demandé pour paquete {}: {}", package_id, new_address);
-                    
-                    // Llamar al endpoint de geocodificación
-                    wasm_bindgen_futures::spawn_local(async move {
-                        match geocode_address(new_address.clone()).await {
-                            Ok(response) => {
-                                if response.success {
-                                    log::info!("✅ Géocodage réussi: {} -> ({}, {})", 
-                                        new_address, 
-                                        response.latitude.unwrap_or(0.0), 
-                                        response.longitude.unwrap_or(0.0)
-                                    );
-                                    
-                                    // Actualizar el paquete en el mapa (TODO: implementar callback)
-                                    log::info!("📍 Coordonnées mises à jour: lat={}, lng={}", 
-                                        response.latitude.unwrap_or(0.0), 
-                                        response.longitude.unwrap_or(0.0)
-                                    );
-                                } else {
-                                    log::error!("❌ Géocodage échoué: {}", response.message.unwrap_or_default());
+    let on_street_settings = {
+        let package_id = package_id.clone();
+        Callback::from(move |e: MouseEvent| {
+            e.stop_propagation();
+            if let Some(win) = window() {
+                if let Ok(Some(new_address)) = win.prompt_with_message("Modifier l'adresse pour géocodage:\n\nEntrez la nouvelle adresse complète:") {
+                    if !new_address.trim().is_empty() {
+                        let package_id = package_id.clone();
+                        log::info!("🌍 Géocodage demandé pour paquete {}: {}", package_id, new_address);
+                        
+                        // Llamar al endpoint de geocodificación
+                        wasm_bindgen_futures::spawn_local(async move {
+                            match geocode_address(new_address.clone()).await {
+                                Ok(response) => {
+                                    if response.success {
+                                        let lat = response.latitude.unwrap_or(0.0);
+                                        let lng = response.longitude.unwrap_or(0.0);
+                                        
+                                        log::info!("✅ Géocodage réussi: {} -> ({}, {})", 
+                                            new_address, lat, lng
+                                        );
+                                        
+                                        // Actualizar el paquete en el mapa
+                                        if update_package_coordinates(&package_id, lat, lng) {
+                                            log::info!("📍 Coordonnées mises à jour sur la carte: {}", package_id);
+                                            
+                                            // TODO: Actualizar estado en Yew y guardar en base de datos
+                                        } else {
+                                            log::error!("❌ Échec de la mise à jour des coordonnées sur la carte");
+                                        }
+                                    } else {
+                                        log::error!("❌ Géocodage échoué: {}", response.message.clone().unwrap_or_default());
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("❌ Erreur lors du géocodage: {}", e);
                                 }
                             }
-                            Err(e) => {
-                                log::error!("❌ Erreur lors du géocodage: {}", e);
-                            }
-                        }
-                    });
+                        });
+                    }
                 }
             }
-        }
-    });
+        })
+    };
     
     // Handler para editar código de puerta
     let on_edit_door_code = Callback::from(move |e: MouseEvent| {

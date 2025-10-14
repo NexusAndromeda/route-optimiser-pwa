@@ -406,5 +406,49 @@ window.getMapInstance = function() {
     return map;
 };
 
+// Update package coordinates on the map
+window.updatePackageCoordinates = function(packageId, latitude, longitude) {
+    if (!map) {
+        console.error('❌ Map not initialized');
+        return false;
+    }
+    
+    const source = map.getSource('packages');
+    if (!source) {
+        console.error('❌ Packages source not found');
+        return false;
+    }
+    
+    // Get current data
+    const data = source._data;
+    if (!data || !data.features) {
+        console.error('❌ No package data found');
+        return false;
+    }
+    
+    // Find and update the package
+    const feature = data.features.find(f => f.properties.id === packageId);
+    if (!feature) {
+        console.error('❌ Package not found:', packageId);
+        return false;
+    }
+    
+    // Update coordinates [lng, lat] format for GeoJSON
+    feature.geometry.coordinates = [longitude, latitude];
+    
+    // Update the source
+    source.setData(data);
+    
+    // Fly to the new location
+    map.flyTo({
+        center: [longitude, latitude],
+        zoom: 15,
+        duration: 1500
+    });
+    
+    console.log('✅ Package coordinates updated:', packageId, 'to', [latitude, longitude]);
+    return true;
+};
+
 console.log('📍 Mapbox helper functions loaded');
 
