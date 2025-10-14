@@ -701,14 +701,14 @@ pub fn app() -> Html {
                         Ok(response) => {
                             if response.success {
                                 if let Some(data) = response.data {
-                                    log::info!("✅ Ruta optimizada: {} paquetes", data.lst_lieu_article.len());
+                                    log::info!("✅ Ruta optimizada: {} paquetes", data.optimized_packages.len());
                                     
                                     // Reordenar paquetes según la optimización
                                     let mut current_packages = (*packages).clone();
                                     let mut optimized_packages = Vec::new();
                                     
                                     // Mapear paquetes optimizados
-                                    for opt_pkg in data.lst_lieu_article {
+                                    for opt_pkg in data.optimized_packages {
                                         // Buscar el paquete en la lista actual por referencia
                                         if let Some(ref_colis) = opt_pkg.reference_colis {
                                             if let Some(found) = current_packages.iter().find(|p| p.id == ref_colis) {

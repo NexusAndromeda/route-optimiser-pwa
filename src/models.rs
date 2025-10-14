@@ -98,7 +98,7 @@ pub struct OptimizationResponse {
 pub struct OptimizationData {
     pub matricule_chauffeur: Option<String>,
     pub date_tournee: Option<String>,
-    pub lst_lieu_article: Vec<OptimizedPackage>,
+    pub optimized_packages: Vec<OptimizedPackage>,
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
