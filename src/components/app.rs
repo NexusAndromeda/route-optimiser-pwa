@@ -986,6 +986,18 @@ pub fn app() -> Html {
                                             show_bal_modal.set(true);
                                         }
                                     })}
+                                    on_update_package={Callback::from({
+                                        let packages = packages.clone();
+                                        move |(id, lat, lng, new_address): (String, f64, f64, String)| {
+                                            let mut pkgs = (*packages).clone();
+                                            if let Some(pkg) = pkgs.iter_mut().find(|p| p.id == id) {
+                                                pkg.address = new_address;
+                                                pkg.coords = Some([lng, lat]);
+                                                log::info!("✅ Paquete {} actualizado en estado", id);
+                                            }
+                                            packages.set(pkgs);
+                                        }
+                                    })}
                                 />
                             }
                         } else {

@@ -16,6 +16,7 @@ pub struct DetailsModalProps {
     pub package: Package,
     pub on_close: Callback<()>,
     pub on_edit_bal: Callback<()>,
+    pub on_update_package: Callback<(String, f64, f64, String)>, // (id, lat, lng, new_address)
 }
 
 #[function_component(DetailsModal)]
@@ -27,12 +28,14 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     let package_id = props.package.id.clone();
     let on_street_settings = {
         let package_id = package_id.clone();
+        let on_update = props.on_update_package.clone();
         Callback::from(move |e: MouseEvent| {
             e.stop_propagation();
             if let Some(win) = window() {
                 if let Ok(Some(new_address)) = win.prompt_with_message("Modifier l'adresse pour géocodage:\n\nEntrez la nouvelle adresse complète:") {
                     if !new_address.trim().is_empty() {
                         let package_id = package_id.clone();
+                        let on_update = on_update.clone();
                         log::info!("🌍 Géocodage demandé pour paquete {}: {}", package_id, new_address);
                         
                         // Llamar al endpoint de geocodificación
@@ -42,16 +45,18 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                     if response.success {
                                         let lat = response.latitude.unwrap_or(0.0);
                                         let lng = response.longitude.unwrap_or(0.0);
+                                        let formatted = response.formatted_address.unwrap_or(new_address.clone());
                                         
                                         log::info!("✅ Géocodage réussi: {} -> ({}, {})", 
-                                            new_address, lat, lng
+                                            formatted, lat, lng
                                         );
                                         
                                         // Actualizar el paquete en el mapa
                                         if update_package_coordinates(&package_id, lat, lng) {
                                             log::info!("📍 Coordonnées mises à jour sur la carte: {}", package_id);
                                             
-                                            // TODO: Actualizar estado en Yew y guardar en base de datos
+                                            // Actualizar el paquete en el estado de Yew
+                                            on_update.emit((package_id.clone(), lat, lng, formatted));
                                         } else {
                                             log::error!("❌ Échec de la mise à jour des coordonnées sur la carte");
                                         }
