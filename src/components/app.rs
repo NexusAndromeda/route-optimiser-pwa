@@ -3,6 +3,7 @@ use web_sys::{window, Storage};
 use gloo_net::http::Request;
 use crate::models::{Package, Company, CompaniesResponse, LoginRequest, LoginResponse, LoginData, PackageRequest, PackagesCache, OptimizationRequest, OptimizationResponse};
 use super::{PackageList, DetailsModal, BalModal, SettingsPopup, LoginScreen, CompanyModal, RegisterScreen, RegisterData};
+use crate::context::get_text;
 use gloo_timers::callback::Timeout;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
@@ -927,13 +928,13 @@ pub fn app() -> Html {
                         onclick={on_optimize}
                         disabled={*optimizing}
                     >
-                        {if *optimizing { "⏳ Optimizando..." } else { "🎯 Optimizar" }}
+                        {if *optimizing { format!("⏳ {}...", get_text("loading")) } else { format!("🎯 {}", get_text("optimize")) }}
                     </button>
                     <button 
                         class="btn-refresh" 
                         onclick={on_refresh}
                         disabled={*packages_loading}
-                        title="Recargar paquetes desde Colis Privé"
+                        title={get_text("refresh")}
                     >
                         {if *packages_loading { "⏳" } else { "🔄" }}
                     </button>

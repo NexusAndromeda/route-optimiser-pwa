@@ -1,5 +1,6 @@
 use yew::prelude::*;
 use crate::models::Package;
+use crate::context::get_text;
 use super::PackageCard;
 use std::collections::HashMap;
 
@@ -36,7 +37,7 @@ pub fn package_list(props: &PackageListProps) -> Html {
                 <div class="progress-info">
                     <div class="progress-text">
                         <span class="progress-count">
-                            {format!("✓ {}/{} livrés", props.delivered, props.total)}
+                            {format!("✓ {}/{} {}", props.delivered, props.total, get_text("delivered"))}
                         </span>
                     </div>
                     <div class="progress-percentage">
@@ -59,16 +60,16 @@ pub fn package_list(props: &PackageListProps) -> Html {
                         html! {
                             <div class="no-packages">
                                 <div class="no-packages-icon">{"⏳"}</div>
-                                <div class="no-packages-text">{"Cargando paquetes..."}</div>
-                                <div class="no-packages-subtitle">{"Por favor espera"}</div>
+                                <div class="no-packages-text">{format!("{}...", get_text("loading"))}</div>
+                                <div class="no-packages-subtitle">{get_text("please_wait")}</div>
                             </div>
                         }
                     } else if props.packages.is_empty() {
                         html! {
                             <div class="no-packages">
                                 <div class="no-packages-icon">{"📦"}</div>
-                                <div class="no-packages-text">{"No hay paquetes disponibles"}</div>
-                                <div class="no-packages-subtitle">{"Los paquetes aparecerán aquí después del login"}</div>
+                                <div class="no-packages-text">{get_text("no_packages")}</div>
+                                <div class="no-packages-subtitle">{get_text("packages_after_login")}</div>
                             </div>
                         }
                     } else {

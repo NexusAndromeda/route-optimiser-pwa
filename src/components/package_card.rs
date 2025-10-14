@@ -1,5 +1,6 @@
 use yew::prelude::*;
 use crate::models::Package;
+use crate::context::get_text;
 
 #[derive(Properties, PartialEq)]
 pub struct PackageCardProps {
@@ -33,9 +34,9 @@ pub fn package_card(props: &PackageCardProps) -> Html {
     };
     
     let status_text = match props.package.status.as_str() {
-        "delivered" => "Entregado",
-        "pending" => "Pendiente",
-        _ => "Pendiente",
+        "delivered" => get_text("delivered"),
+        "pending" => get_text("pending"),
+        _ => get_text("pending"),
     };
     
     let card_class = classes!(
@@ -113,7 +114,7 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                 })
                             }}
                         >
-                            {"Aller"}
+                            {get_text("go")}
                         </button>
                         
                         // Details button
@@ -127,7 +128,7 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                 })
                             }}
                         >
-                            {"Détails"}
+                            {get_text("details")}
                         </button>
                     </div>
                 }

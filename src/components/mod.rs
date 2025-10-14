@@ -1,5 +1,5 @@
 mod app;
-mod header;
+// mod header; // No se usa actualmente
 mod map;
 mod package_list;
 mod package_card;
@@ -11,7 +11,7 @@ mod company_modal;
 mod register_screen;
 
 pub use app::App;
-pub use header::Header;
+// pub use header::Header; // No se usa actualmente
 // pub use map::MapContainer; // No se usa actualmente
 pub use package_list::PackageList;
 pub use package_card::PackageCard;

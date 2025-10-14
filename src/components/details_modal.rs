@@ -1,5 +1,6 @@
 use yew::prelude::*;
 use crate::models::Package;
+use crate::context::get_text;
 use web_sys::window;
 use wasm_bindgen_futures::spawn_local;
 use gloo_net::http::{Request, Method};
@@ -32,7 +33,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
         Callback::from(move |e: MouseEvent| {
             e.stop_propagation();
             if let Some(win) = window() {
-                if let Ok(Some(new_address)) = win.prompt_with_message("Modifier l'adresse pour géocodage:\n\nEntrez la nouvelle adresse complète:") {
+                if let Ok(Some(new_address)) = win.prompt_with_message(&get_text("geocoding_prompt")) {
                     if !new_address.trim().is_empty() {
                         let package_id = package_id.clone();
                         let on_update = on_update.clone();
@@ -79,7 +80,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     let on_edit_door_code = Callback::from(move |e: MouseEvent| {
         e.stop_propagation();
         if let Some(win) = window() {
-            if let Ok(Some(value)) = win.prompt_with_message("Modifier Code de porte:") {
+            if let Ok(Some(value)) = win.prompt_with_message(&get_text("edit_door_code")) {
                 if !value.trim().is_empty() {
                     let _ = win.alert_with_message(&format!("✅ Code de porte enregistré:\n{}", value));
                 }
@@ -91,7 +92,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     let on_edit_client_notes = Callback::from(move |e: MouseEvent| {
         e.stop_propagation();
         if let Some(win) = window() {
-            if let Ok(Some(value)) = win.prompt_with_message("Modifier Indications du client:") {
+            if let Ok(Some(value)) = win.prompt_with_message(&get_text("edit_client_instructions")) {
                 if !value.trim().is_empty() {
                     let _ = win.alert_with_message(&format!("✅ Indications du client enregistré:\n{}", value));
                 }
@@ -103,7 +104,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     let on_edit_driver_notes = Callback::from(move |e: MouseEvent| {
         e.stop_propagation();
         if let Some(win) = window() {
-            if let Ok(Some(value)) = win.prompt_with_message("Modifier Notes du chauffeur:") {
+            if let Ok(Some(value)) = win.prompt_with_message(&get_text("edit_driver_notes")) {
                 if !value.trim().is_empty() {
                     let _ = win.alert_with_message(&format!("✅ Notes du chauffeur enregistré:\n{}", value));
                 }
@@ -124,18 +125,18 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                 <div class="modal-body">
                     // Destinataire
                     <div class="detail-section">
-                        <div class="detail-label">{"Destinataire"}</div>
+                        <div class="detail-label">{get_text("recipient")}</div>
                         <div class="detail-value">{&props.package.recipient}</div>
                     </div>
 
                     // Adresse
                     <div class="detail-section">
-                        <div class="detail-label">{"Adresse"}</div>
+                        <div class="detail-label">{get_text("address")}</div>
                         <div class="detail-value-with-action">
                             <span>{&props.package.address}</span>
                             <button 
                                 class="btn-icon" 
-                                title="Modifier l'adresse (géocodage)"
+                                title={get_text("edit_address")}
                                 onclick={on_street_settings}
                             >
                                 {"⚙️"}
@@ -145,7 +146,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
 
                     // Téléphone
                     <div class="detail-section">
-                        <div class="detail-label">{"Téléphone"}</div>
+                        <div class="detail-label">{get_text("phone")}</div>
                         <div class="detail-value">
                             {if let Some(phone) = &props.package.phone {
                                 html! {
@@ -160,19 +161,19 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                     </a>
                                 }
                             } else {
-                                html! { <span class="empty-value">{"Non renseigné"}</span> }
+                                html! { <span class="empty-value">{get_text("not_provided")}</span> }
                             }}
                         </div>
                     </div>
 
                     // Codes de porte
                     <div class="detail-section editable">
-                        <div class="detail-label">{"Codes de porte"}</div>
+                        <div class="detail-label">{get_text("door_codes")}</div>
                         <div class="detail-value-with-action">
-                            <span class="empty-value">{"Non renseigné"}</span>
+                            <span class="empty-value">{get_text("not_provided")}</span>
                             <button 
                                 class="btn-icon-edit" 
-                                title="Modifier"
+                                title={get_text("modify")}
                                 onclick={on_edit_door_code}
                             >
                                 {"✏️"}
@@ -182,12 +183,12 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
 
                     // BAL
                     <div class="detail-section editable">
-                        <div class="detail-label">{"Accès boîte aux lettres (BAL)"}</div>
+                        <div class="detail-label">{get_text("mailbox_access")}</div>
                         <div class="detail-value-with-action">
-                            <span class="empty-value">{"Non renseigné"}</span>
+                            <span class="empty-value">{get_text("not_provided")}</span>
                             <button 
                                 class="btn-icon-edit" 
-                                title="Modifier"
+                                title={get_text("modify")}
                                 onclick={{
                                     let on_edit = props.on_edit_bal.clone();
                                     Callback::from(move |e: MouseEvent| {
@@ -203,16 +204,16 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
 
                     // Indications client
                     <div class="detail-section editable">
-                        <div class="detail-label">{"Indications du client"}</div>
+                        <div class="detail-label">{get_text("client_instructions")}</div>
                         <div class="detail-value-with-action">
                             {if let Some(instructions) = &props.package.instructions {
                                 html! { <span>{format!("\"{}\"", instructions)}</span> }
                             } else {
-                                html! { <span class="empty-value">{"Non renseigné"}</span> }
+                                html! { <span class="empty-value">{get_text("not_provided")}</span> }
                             }}
                             <button 
                                 class="btn-icon-edit" 
-                                title="Modifier"
+                                title={get_text("modify")}
                                 onclick={on_edit_client_notes}
                             >
                                 {"✏️"}
@@ -222,12 +223,12 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
 
                     // Notes chauffeur
                     <div class="detail-section editable">
-                        <div class="detail-label">{"Notes propres du chauffeur"}</div>
+                        <div class="detail-label">{get_text("driver_notes")}</div>
                         <div class="detail-value-with-action">
-                            <span class="empty-value">{"Ajouter une note..."}</span>
+                            <span class="empty-value">{get_text("add_note")}</span>
                             <button 
                                 class="btn-icon-edit" 
-                                title="Modifier"
+                                title={get_text("modify")}
                                 onclick={on_edit_driver_notes}
                             >
                                 {"✏️"}
