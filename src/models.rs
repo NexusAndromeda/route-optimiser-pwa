@@ -112,6 +112,27 @@ pub struct OptimizedPackage {
     pub statut: Option<String>,
 }
 
+// Modelos para Mapbox Optimization API
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct OptimizationPackage {
+    pub id: String,
+    pub reference_colis: String,
+    pub destinataire_nom: String,
+    pub destinataire_adresse1: Option<String>,
+    pub destinataire_cp: Option<String>,
+    pub destinataire_ville: Option<String>,
+    pub coord_x_destinataire: Option<f64>,
+    pub coord_y_destinataire: Option<f64>,
+    pub statut: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct MapboxOptimizationRequest {
+    pub matricule: String,
+    pub societe: String,
+    pub packages: Vec<OptimizationPackage>,
+}
+
 impl Package {
     pub fn demo_packages() -> Vec<Self> {
         vec![
