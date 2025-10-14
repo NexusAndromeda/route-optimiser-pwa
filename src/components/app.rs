@@ -935,20 +935,6 @@ pub fn app() -> Html {
                     >
                         {if *packages_loading { "⏳" } else { "🔄" }}
                     </button>
-                    <button 
-                        class="btn-retry-map" 
-                        onclick={Callback::from(|_| {
-                            web_sys::js_sys::Reflect::get(&web_sys::window().unwrap(), &"reinitializeMap".into())
-                                .unwrap()
-                                .dyn_into::<web_sys::js_sys::Function>()
-                                .unwrap()
-                                .call0(&web_sys::js_sys::Object::new())
-                                .unwrap();
-                        })}
-                        title="Reinicializar mapa si no carga"
-                    >
-                        {"🗺️"}
-                    </button>
                     <button class="btn-settings" onclick={toggle_settings}>
                         {"⚙️"}
                     </button>
