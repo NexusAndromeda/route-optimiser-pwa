@@ -52,25 +52,31 @@ pub fn app() -> Html {
     let animations = use_state(|| HashMap::<usize, String>::new());
     let map_initialized = use_state(|| false);
     
-    // Load companies on mount
+    // Load companies on mount ONLY if not logged in
     {
         let companies = companies.clone();
         let companies_loading = companies_loading.clone();
+        let is_logged_in = is_logged_in.clone();
         
         use_effect_with((), move |_| {
-            wasm_bindgen_futures::spawn_local(async move {
-                companies_loading.set(true);
-                match load_companies().await {
-                    Ok(loaded_companies) => {
-                        log::info!("✅ Empresas cargadas: {}", loaded_companies.len());
-                        companies.set(loaded_companies);
+            // Solo cargar empresas si no está logueado
+            let should_load = !*is_logged_in;
+            
+            if should_load {
+                wasm_bindgen_futures::spawn_local(async move {
+                    companies_loading.set(true);
+                    match load_companies().await {
+                        Ok(loaded_companies) => {
+                            log::info!("✅ Empresas cargadas: {}", loaded_companies.len());
+                            companies.set(loaded_companies);
+                        }
+                        Err(e) => {
+                            log::error!("❌ Error cargando empresas: {}", e);
+                        }
                     }
-                    Err(e) => {
-                        log::error!("❌ Error cargando empresas: {}", e);
-                    }
-                }
-                companies_loading.set(false);
-            });
+                    companies_loading.set(false);
+                });
+            }
             || ()
         });
     }
@@ -746,6 +752,42 @@ pub fn app() -> Html {
         })
     };
     
+    // Refresh packages
+    let on_refresh = {
+        let packages = packages.clone();
+        let packages_loading = packages_loading.clone();
+        let login_data = login_data.clone();
+        let selected_company = selected_company.clone();
+        
+        Callback::from(move |_| {
+            let packages = packages.clone();
+            let packages_loading = packages_loading.clone();
+            let login_data = login_data.clone();
+            let selected_company = selected_company.clone();
+            
+            if let (Some(login), Some(company)) = ((*login_data).as_ref(), (*selected_company).as_ref()) {
+                let full_username = login.username.clone();
+                let company_code = company.code.clone();
+                
+                wasm_bindgen_futures::spawn_local(async move {
+                    log::info!("🔄 Refrescando paquetes...");
+                    packages_loading.set(true);
+                    
+                    match fetch_packages(&full_username, &company_code, true).await { // force_refresh = true
+                        Ok(fetched_packages) => {
+                            log::info!("✅ Paquetes refrescados: {}", fetched_packages.len());
+                            packages.set(fetched_packages);
+                        }
+                        Err(e) => {
+                            log::error!("❌ Error refrescando paquetes: {}", e);
+                        }
+                    }
+                    packages_loading.set(false);
+                });
+            }
+        })
+    };
+    
     // Logout
     let on_logout = {
         let is_logged_in = is_logged_in.clone();
@@ -837,6 +879,14 @@ pub fn app() -> Html {
                         disabled={*optimizing}
                     >
                         {if *optimizing { "⏳ Optimizando..." } else { "🎯 Optimizar" }}
+                    </button>
+                    <button 
+                        class="btn-refresh" 
+                        onclick={on_refresh}
+                        disabled={*packages_loading}
+                        title="Recargar paquetes desde Colis Privé"
+                    >
+                        {if *packages_loading { "⏳" } else { "🔄" }}
                     </button>
                     <button class="btn-settings" onclick={toggle_settings}>
                         {"⚙️"}

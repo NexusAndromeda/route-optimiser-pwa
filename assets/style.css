@@ -693,6 +693,35 @@ body {
     align-items: center;
 }
 
+.btn-refresh {
+    width: 44px;
+    height: 44px;
+    background: var(--bg-surface-variant);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 1.25rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-refresh:hover:not(:disabled) {
+    background: var(--bg-surface-container);
+    border-color: var(--color-primary);
+    transform: rotate(180deg);
+}
+
+.btn-refresh:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-refresh:active:not(:disabled) {
+    transform: rotate(360deg);
+}
+
 .btn-optimize {
     padding: 10px 20px;
     background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
