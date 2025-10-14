@@ -821,6 +821,7 @@ pub fn app() -> Html {
         let selected_company = selected_company.clone();
         let show_settings = show_settings.clone();
         let packages = packages.clone();
+        let map_initialized = map_initialized.clone();
         let packages_loading = packages_loading.clone();
         let companies = companies.clone();
         let companies_loading_state = companies_loading.clone();
@@ -851,6 +852,7 @@ pub fn app() -> Html {
             show_settings.set(false);
             packages.set(Vec::new());
             packages_loading.set(false);
+            map_initialized.set(false); // Reset map to allow reinitialization on next login
             
             // Recargar empresas para el próximo login
             let companies = companies.clone();

@@ -8,6 +8,19 @@ window.initMapbox = function(containerId, isDark) {
     console.log('Container:', containerId);
     console.log('Dark mode:', isDark);
     
+    // Clean up existing map instance if any
+    if (map) {
+        console.log('🧹 Cleaning up existing map instance...');
+        try {
+            map.remove();
+            map = null;
+            selectedPackageIndex = null;
+        } catch (e) {
+            console.log('⚠️ Error removing existing map:', e);
+            map = null;
+        }
+    }
+    
     // Check if mapboxgl is available
     if (typeof mapboxgl === 'undefined') {
         console.error('❌ Mapbox GL JS not loaded');
