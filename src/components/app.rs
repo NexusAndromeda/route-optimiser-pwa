@@ -710,8 +710,16 @@ pub fn app() -> Html {
                                     log::info!("✅ Ruta optimizada: {} paquetes", data.optimized_packages.len());
                                     
                                     // Reordenar paquetes según la optimización
-                                    let mut current_packages = (*packages).clone();
+                                    let current_packages = (*packages).clone();
                                     let mut optimized_packages = Vec::new();
+                                    
+                                    // Debug: ver algunos IDs
+                                    if let Some(first_current) = current_packages.first() {
+                                        log::info!("🔍 Ejemplo ID paquete actual: {}", first_current.id);
+                                    }
+                                    if let Some(first_opt) = data.optimized_packages.first() {
+                                        log::info!("🔍 Ejemplo reference_colis optimizado: {:?}", first_opt.reference_colis);
+                                    }
                                     
                                     // Mapear paquetes optimizados
                                     for opt_pkg in data.optimized_packages {
@@ -719,6 +727,8 @@ pub fn app() -> Html {
                                         if let Some(ref_colis) = opt_pkg.reference_colis {
                                             if let Some(found) = current_packages.iter().find(|p| p.id == ref_colis) {
                                                 optimized_packages.push(found.clone());
+                                            } else {
+                                                log::warn!("⚠️ No se encontró paquete con ID: {}", ref_colis);
                                             }
                                         }
                                     }
