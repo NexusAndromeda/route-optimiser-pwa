@@ -1100,26 +1100,48 @@ async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) -> R
                             .enumerate()
                             .map(|(index, pkg)| {
                                 Ok(Package {
-                                    id: pkg.get("tracking_number")
-                                        .and_then(|t| t.as_str())
+                                    // Priorizar campos principales de Colis Privé
+                                    id: pkg.get("reference_colis")
+                                        .and_then(|r| r.as_str())
+                                        .or_else(|| pkg.get("tracking_number").and_then(|t| t.as_str()))
                                         .unwrap_or(&format!("PKG-{}", index + 1))
                                         .to_string(),
-                                    recipient: pkg.get("recipient_name")
-                                        .and_then(|r| r.as_str())
+                                    recipient: pkg.get("destinataire_nom")
+                                        .and_then(|d| d.as_str())
+                                        .or_else(|| pkg.get("recipient_name").and_then(|r| r.as_str()))
                                         .unwrap_or("Destinatario desconocido")
                                         .to_string(),
-                                    address: pkg.get("formatted_address")
-                                        .and_then(|a| a.as_str())
-                                        .or_else(|| pkg.get("address").and_then(|a| a.as_str()))
-                                        .unwrap_or("Dirección no disponible")
-                                        .to_string(),
-                                    status: if pkg.get("status")
-                                        .and_then(|s| s.as_str())
-                                        .unwrap_or("pending") == "delivered" {
-                                        "delivered".to_string()
-                                    } else {
-                                        "pending".to_string()
+                                    address: {
+                                        // Priorizar formatted_address del geocoding
+                                        if let Some(addr) = pkg.get("formatted_address").and_then(|a| a.as_str()) {
+                                            addr.to_string()
+                                        } else if let Some(addr) = pkg.get("address").and_then(|a| a.as_str()) {
+                                            addr.to_string()
+                                        } else {
+                                            // Construir dirección de campos Colis Privé
+                                            let mut parts = Vec::new();
+                                            if let Some(addr1) = pkg.get("destinataire_adresse1").and_then(|a| a.as_str()) {
+                                                parts.push(addr1);
+                                            }
+                                            if let Some(cp) = pkg.get("destinataire_cp").and_then(|c| c.as_str()) {
+                                                parts.push(cp);
+                                            }
+                                            if let Some(ville) = pkg.get("destinataire_ville").and_then(|v| v.as_str()) {
+                                                parts.push(ville);
+                                            }
+                                            if !parts.is_empty() {
+                                                parts.join(", ")
+                                            } else {
+                                                "Dirección no disponible".to_string()
+                                            }
+                                        }
                                     },
+                                    status: pkg.get("statut")
+                                        .and_then(|s| s.as_str())
+                                        .or_else(|| pkg.get("status").and_then(|s| s.as_str()))
+                                        .map(|s| if s.to_lowercase().contains("livr") { "delivered" } else { "pending" })
+                                        .unwrap_or("pending")
+                                        .to_string(),
                                     coords: if let (Some(lat), Some(lng)) = (
                                         pkg.get("latitude").and_then(|l| l.as_f64()),
                                         pkg.get("longitude").and_then(|l| l.as_f64())
