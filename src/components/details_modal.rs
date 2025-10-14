@@ -127,7 +127,21 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     <div class="detail-section">
                         <div class="detail-label">{"Téléphone"}</div>
                         <div class="detail-value">
-                            <a href="tel:0612345678" class="phone-link">{"06 12 34 56 78"}</a>
+                            {if let Some(phone) = &props.package.phone {
+                                html! {
+                                    <a href={format!("tel:{}", phone)} class="phone-link">
+                                        {phone.clone()}
+                                    </a>
+                                }
+                            } else if let Some(phone_fixed) = &props.package.phone_fixed {
+                                html! {
+                                    <a href={format!("tel:{}", phone_fixed)} class="phone-link">
+                                        {phone_fixed.clone()}
+                                    </a>
+                                }
+                            } else {
+                                html! { <span class="empty-value">{"Non renseigné"}</span> }
+                            }}
                         </div>
                     </div>
 
@@ -171,7 +185,11 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     <div class="detail-section editable">
                         <div class="detail-label">{"Indications du client"}</div>
                         <div class="detail-value-with-action">
-                            <span>{"\"Laisser au gardien si absent\""}</span>
+                            {if let Some(instructions) = &props.package.instructions {
+                                html! { <span>{format!("\"{}\"", instructions)}</span> }
+                            } else {
+                                html! { <span class="empty-value">{"Non renseigné"}</span> }
+                            }}
                             <button 
                                 class="btn-icon-edit" 
                                 title="Modifier"

@@ -1478,6 +1478,16 @@ body {
     text-decoration: underline;
 }
 
+.email-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.email-link:hover {
+    text-decoration: underline;
+}
+
 /* Icon Buttons */
 .btn-icon,
 .btn-icon-edit {

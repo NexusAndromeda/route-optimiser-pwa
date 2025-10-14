@@ -1281,6 +1281,9 @@ async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) -> R
                                     } else {
                                         None
                                     },
+                                    phone: pkg.get("phone").and_then(|p| p.as_str()).map(|s| s.to_string()),
+                                    phone_fixed: pkg.get("phone_fixed").and_then(|p| p.as_str()).map(|s| s.to_string()),
+                                    instructions: pkg.get("instructions").and_then(|i| i.as_str()).map(|s| s.to_string()),
                                 })
                             })
                             .collect();
