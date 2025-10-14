@@ -120,8 +120,8 @@ pub fn app() -> Html {
                                     .flatten()
                                     .map(|mq| mq.matches())
                                     .unwrap_or(false);
-                                // Delay para asegurar que el contenedor esté listo
-                                let timeout = gloo_timers::callback::Timeout::new(100, move || {
+                                // Delay más largo para asegurar que el contenedor esté listo
+                                let timeout = gloo_timers::callback::Timeout::new(500, move || {
                                     init_mapbox("map", is_dark);
                                     map_initialized.set(true);
                                 });
@@ -167,8 +167,8 @@ pub fn app() -> Html {
                             .flatten()
                             .map(|mq| mq.matches())
                             .unwrap_or(false);
-                        // Delay para asegurar que el contenedor esté listo
-                        let timeout = gloo_timers::callback::Timeout::new(100, move || {
+                        // Delay más largo para asegurar que el contenedor esté listo
+                        let timeout = gloo_timers::callback::Timeout::new(500, move || {
                             init_mapbox("map", is_dark);
                             map_initialized.set(true);
                         });
@@ -934,6 +934,20 @@ pub fn app() -> Html {
                         title="Recargar paquetes desde Colis Privé"
                     >
                         {if *packages_loading { "⏳" } else { "🔄" }}
+                    </button>
+                    <button 
+                        class="btn-retry-map" 
+                        onclick={Callback::from(|_| {
+                            web_sys::js_sys::Reflect::get(&web_sys::window().unwrap(), &"reinitializeMap".into())
+                                .unwrap()
+                                .dyn_into::<web_sys::js_sys::Function>()
+                                .unwrap()
+                                .call0(&web_sys::js_sys::Object::new())
+                                .unwrap();
+                        })}
+                        title="Reinicializar mapa si no carga"
+                    >
+                        {"🗺️"}
                     </button>
                     <button class="btn-settings" onclick={toggle_settings}>
                         {"⚙️"}

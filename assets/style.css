@@ -776,6 +776,30 @@ body {
     transform: scale(0.95);
 }
 
+.btn-retry-map {
+    width: 44px;
+    height: 44px;
+    background: var(--bg-surface-variant);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 1.25rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-retry-map:hover {
+    background: var(--bg-surface-container);
+    border-color: var(--color-primary);
+    transform: scale(1.05);
+}
+
+.btn-retry-map:active {
+    transform: scale(0.95);
+}
+
 /* Settings Popup */
 .settings-popup {
     position: fixed;

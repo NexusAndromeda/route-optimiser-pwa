@@ -21,14 +21,26 @@ window.initMapbox = function(containerId, isDark) {
         return;
     }
     
-    // Wait for container to be properly sized
+    // Wait for container to be properly sized and visible
     const initMap = () => {
         const rect = container.getBoundingClientRect();
+        const styles = window.getComputedStyle(container);
         console.log('📏 Container size:', rect.width, 'x', rect.height);
+        console.log('👁️ Container visibility:', styles.display, styles.visibility, styles.opacity);
         
-        if (rect.width === 0 || rect.height === 0) {
-            console.log('⏳ Container not sized yet, retrying...');
-            setTimeout(initMap, 100);
+        if (rect.width === 0 || rect.height === 0 || 
+            styles.display === 'none' || 
+            styles.visibility === 'hidden' || 
+            styles.opacity === '0') {
+            console.log('⏳ Container not ready yet, retrying...');
+            setTimeout(initMap, 200);
+            return;
+        }
+        
+        // Additional check: ensure container is actually visible in viewport
+        if (rect.top < 0 || rect.left < 0) {
+            console.log('⏳ Container not in viewport, retrying...');
+            setTimeout(initMap, 200);
             return;
         }
     
@@ -113,6 +125,26 @@ window.initMapbox = function(containerId, isDark) {
                 console.log('🔄 Map initial resize');
             }
         }, 500);
+        
+        // Additional resize after DOM is fully loaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(() => {
+                    if (map) {
+                        map.resize();
+                        console.log('🔄 Map DOM loaded resize');
+                    }
+                }, 200);
+            });
+        } else {
+            // DOM already loaded
+            setTimeout(() => {
+                if (map) {
+                    map.resize();
+                    console.log('🔄 Map DOM ready resize');
+                }
+            }, 200);
+        }
     } catch (error) {
         console.error('❌ Error initializing map:', error);
     }
@@ -120,6 +152,28 @@ window.initMapbox = function(containerId, isDark) {
     
     // Start initialization
     initMap();
+};
+
+// Function to reinitialize map if it fails to load
+window.reinitializeMap = function() {
+    console.log('🔄 Reinitializing map...');
+    if (map) {
+        try {
+            map.remove();
+            map = null;
+        } catch (e) {
+            console.log('Map already removed or not initialized');
+        }
+    }
+    
+    // Wait a bit then reinitialize
+    setTimeout(() => {
+        const container = document.getElementById('map');
+        if (container) {
+            const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            window.initMapbox('map', isDark);
+        }
+    }, 1000);
 };
 
 // Add packages to map as Style Layers
