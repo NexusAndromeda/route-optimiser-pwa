@@ -120,8 +120,12 @@ pub fn app() -> Html {
                                     .flatten()
                                     .map(|mq| mq.matches())
                                     .unwrap_or(false);
-                                init_mapbox("map", is_dark);
-                                map_initialized.set(true);
+                                // Delay para asegurar que el contenedor esté listo
+                                let timeout = gloo_timers::callback::Timeout::new(100, move || {
+                                    init_mapbox("map", is_dark);
+                                    map_initialized.set(true);
+                                });
+                                timeout.forget();
                             }
                         }).forget();
                         
@@ -163,8 +167,12 @@ pub fn app() -> Html {
                             .flatten()
                             .map(|mq| mq.matches())
                             .unwrap_or(false);
-                        init_mapbox("map", is_dark);
-                        map_initialized.set(true);
+                        // Delay para asegurar que el contenedor esté listo
+                        let timeout = gloo_timers::callback::Timeout::new(100, move || {
+                            init_mapbox("map", is_dark);
+                            map_initialized.set(true);
+                        });
+                        timeout.forget();
                     }
                 }).forget();
             }

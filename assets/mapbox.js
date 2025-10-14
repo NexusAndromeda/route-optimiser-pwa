@@ -21,6 +21,17 @@ window.initMapbox = function(containerId, isDark) {
         return;
     }
     
+    // Wait for container to be properly sized
+    const initMap = () => {
+        const rect = container.getBoundingClientRect();
+        console.log('📏 Container size:', rect.width, 'x', rect.height);
+        
+        if (rect.width === 0 || rect.height === 0) {
+            console.log('⏳ Container not sized yet, retrying...');
+            setTimeout(initMap, 100);
+            return;
+        }
+    
     // Set token directly (public token for frontend - needs URL restrictions configured in Mapbox dashboard)
     // For development: add localhost:8080 to allowed URLs in Mapbox dashboard
     // Or create a new public token without URL restrictions for development
@@ -84,9 +95,31 @@ window.initMapbox = function(containerId, isDark) {
                 }
             });
         }
+        
+        // Listen for window resize to ensure map is properly sized
+        window.addEventListener('resize', () => {
+            if (map) {
+                setTimeout(() => {
+                    map.resize();
+                    console.log('🔄 Map resized');
+                }, 100);
+            }
+        });
+        
+        // Force resize after a short delay to handle initial render issues
+        setTimeout(() => {
+            if (map) {
+                map.resize();
+                console.log('🔄 Map initial resize');
+            }
+        }, 500);
     } catch (error) {
         console.error('❌ Error initializing map:', error);
     }
+    };
+    
+    // Start initialization
+    initMap();
 };
 
 // Add packages to map as Style Layers
