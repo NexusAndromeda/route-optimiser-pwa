@@ -1,24 +1,15 @@
 use yew::prelude::*;
 use web_sys::HtmlInputElement;
+use crate::hooks::RegisterData;
 
 #[derive(Properties, PartialEq)]
-pub struct RegisterScreenProps {
+pub struct RegisterViewProps {
     pub on_back_to_login: Callback<()>,
     pub on_register: Callback<RegisterData>,
 }
 
-#[derive(Clone, PartialEq)]
-pub struct RegisterData {
-    pub company_name: String,
-    pub company_address: String,
-    pub company_siret: String,
-    pub admin_full_name: String,
-    pub admin_email: String,
-    pub admin_password: String,
-}
-
-#[function_component(RegisterScreen)]
-pub fn register_screen(props: &RegisterScreenProps) -> Html {
+#[function_component(RegisterView)]
+pub fn register_view(props: &RegisterViewProps) -> Html {
     let company_name_ref = use_node_ref();
     let company_address_ref = use_node_ref();
     let company_siret_ref = use_node_ref();

@@ -3,15 +3,15 @@ use web_sys::HtmlInputElement;
 use crate::models::Company;
 
 #[derive(Properties, PartialEq)]
-pub struct LoginScreenProps {
+pub struct LoginViewProps {
     pub on_show_companies: Callback<()>,
     pub selected_company: Option<Company>,
     pub on_login: Callback<(String, String)>,
     pub on_show_register: Callback<()>,
 }
 
-#[function_component(LoginScreen)]
-pub fn login_screen(props: &LoginScreenProps) -> Html {
+#[function_component(LoginView)]
+pub fn login_view(props: &LoginViewProps) -> Html {
     let username_ref = use_node_ref();
     let password_ref = use_node_ref();
     

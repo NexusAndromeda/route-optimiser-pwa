@@ -1,0 +1,306 @@
+use yew::prelude::*;
+use crate::hooks::{use_auth, use_packages, use_map, use_sheet, use_map_selection_listener, clear_packages_cache};
+use crate::views::auth::{LoginView, RegisterView, CompanySelector};
+use crate::views::packages::{PackageList, PackageDetails};
+use crate::views::shared::{SettingsPopup, BalModal};
+use crate::context::get_text;
+use gloo_timers::callback::Timeout;
+
+#[function_component(App)]
+pub fn app() -> Html {
+    // Use custom hooks
+    let auth = use_auth();
+    let packages_hook = use_packages(auth.state.login_data.clone());
+    let map = use_map();
+    let sheet = use_sheet();
+    
+    // UI state
+    let show_details = use_state(|| false);
+    let details_package_index = use_state(|| None::<usize>);
+    let show_bal_modal = use_state(|| false);
+    let show_settings = use_state(|| false);
+    
+    // Initialize map when logged in
+    {
+        let map_init = map.initialize_map.clone();
+        let map_initialized = map.state.initialized;
+        let is_logged_in = auth.state.is_logged_in;
+        
+        use_effect_with((is_logged_in, map_initialized), move |(logged_in, initialized)| {
+            if *logged_in && !*initialized {
+                log::info!("🗺️ Preparando mapa...");
+                Timeout::new(100, move || {
+                    map_init.emit(());
+                }).forget();
+            }
+            || ()
+        });
+    }
+    
+    // Update map when packages change - EXACTLY like original
+    {
+        let packages = (*packages_hook.packages).clone();
+        let map_initialized = map.state.initialized;
+        let map_update = map.update_packages.clone();
+        
+        use_effect_with(packages.clone(), move |pkgs| {
+            let pkgs_clone = pkgs.clone();
+            
+            // Save packages to window immediately (for map load event and other JS functions)
+            use wasm_bindgen::JsValue;
+            if let Some(window) = web_sys::window() {
+                if let Ok(js_packages) = serde_wasm_bindgen::to_value(&pkgs_clone) {
+                    let _ = js_sys::Reflect::set(
+                        &window,
+                        &JsValue::from_str("currentPackages"),
+                        &js_packages
+                    );
+                }
+            }
+            
+            // If map is initialized, update packages immediately
+            if map_initialized {
+                Timeout::new(100, move || {
+                    map_update.emit(pkgs_clone);
+                }).forget();
+            }
+            
+            || ()
+        });
+    }
+    
+    // Update selected package on map
+    {
+        let selected_index = *packages_hook.selected_index;
+        let map_initialized = map.state.initialized;
+        let map_select = map.select_package.clone();
+        
+        use_effect_with(selected_index, move |idx| {
+            if map_initialized {
+                if let Some(index) = *idx {
+                    map_select.emit(index);
+                }
+            }
+            || ()
+        });
+    }
+    
+    // Listen for package selection from map
+    {
+        let select_package = packages_hook.select_package.clone();
+        let sheet_state = sheet.state.clone();
+        let set_half = sheet.set_half.clone();
+        
+        let on_map_select = Callback::from(move |index: usize| {
+            log::info!("🖱️ Paquete seleccionado desde mapa: {}", index);
+            select_package.emit(index);
+            
+            // Open bottom sheet to half if collapsed
+            if matches!(*sheet_state, crate::hooks::SheetState::Collapsed) {
+                set_half.emit(());
+            }
+        });
+        
+        use_map_selection_listener(on_map_select);
+    }
+    
+    // Show details handler
+    let on_show_details = {
+        let show_details = show_details.clone();
+        let details_package_index = details_package_index.clone();
+        Callback::from(move |index: usize| {
+            details_package_index.set(Some(index));
+            show_details.set(true);
+        })
+    };
+    
+    // Navigate handler
+    let on_navigate = Callback::from(move |index: usize| {
+        log::info!("🧭 Navigate to package {}", index);
+    });
+    
+    // Toggle settings
+    let toggle_settings = {
+        let show_settings = show_settings.clone();
+        Callback::from(move |_: MouseEvent| {
+            show_settings.set(!*show_settings);
+        })
+    };
+    
+    // Enhanced logout that clears package cache
+    let on_logout = {
+        let logout = auth.logout.clone();
+        let login_data = auth.state.login_data.clone();
+        let selected_company = auth.state.selected_company.clone();
+        let show_settings = show_settings.clone();
+        
+        Callback::from(move |_| {
+            // Clear packages cache
+            if let (Some(login), Some(company)) = (login_data.as_ref(), selected_company.as_ref()) {
+                clear_packages_cache(&company.code, &login.username);
+            }
+            
+            show_settings.set(false);
+            logout.emit(());
+        })
+    };
+    
+    // Calculate stats
+    let total = packages_hook.packages.len();
+    let delivered = packages_hook.packages.iter().filter(|p| p.status == "delivered").count();
+    let percentage = if total > 0 { (delivered * 100) / total } else { 0 };
+    
+    // Render login screen if not logged in
+    if !auth.state.is_logged_in {
+        return html! {
+            <>
+                if auth.state.show_register {
+                    <RegisterView
+                        on_back_to_login={auth.back_to_login.clone()}
+                        on_register={auth.register.clone()}
+                    />
+                } else {
+                    <>
+                        <LoginView
+                            on_show_companies={auth.show_companies.clone()}
+                            selected_company={auth.state.selected_company.clone()}
+                            on_login={auth.login.clone()}
+                            on_show_register={auth.show_register.clone()}
+                        />
+                        <CompanySelector
+                            show={auth.state.show_company_modal}
+                            companies={auth.state.companies.clone()}
+                            on_close={auth.close_companies.clone()}
+                            on_select={auth.select_company.clone()}
+                            loading={auth.state.companies_loading}
+                        />
+                    </>
+                }
+            </>
+        };
+    }
+    
+    // Main app
+    html! {
+        <>
+            <header class="app-header">
+                <h1>{"Route Optimizer"}</h1>
+                <div class="header-actions">
+                    <button 
+                        class="btn-optimize" 
+                        onclick={packages_hook.optimize.clone()}
+                        disabled={*packages_hook.optimizing}
+                    >
+                        {if *packages_hook.optimizing { 
+                            format!("⏳ {}...", get_text("loading")) 
+                        } else { 
+                            format!("🎯 {}", get_text("optimize")) 
+                        }}
+                    </button>
+                    <button 
+                        class="btn-refresh" 
+                        onclick={packages_hook.refresh.clone()}
+                        disabled={*packages_hook.loading}
+                        title={get_text("refresh")}
+                    >
+                        {if *packages_hook.loading { "⏳" } else { "🔄" }}
+                    </button>
+                    <button class="btn-settings" onclick={toggle_settings}>
+                        {"⚙️"}
+                    </button>
+                </div>
+            </header>
+            
+            <div id="map" class="map-container"></div>
+            
+            <div id="package-container" class="package-container">
+                <div id="backdrop" class="backdrop" onclick={sheet.close.clone()}></div>
+                
+                <div id="bottom-sheet" class={(*sheet.state).to_class()}>
+                    <PackageList
+                        packages={(*packages_hook.packages).clone()}
+                        selected_index={*packages_hook.selected_index}
+                        total={total}
+                        delivered={delivered}
+                        percentage={percentage}
+                        sheet_state={(*sheet.state).to_str()}
+                        on_toggle={sheet.toggle.clone()}
+                        on_select={packages_hook.select_package.clone()}
+                        on_show_details={on_show_details}
+                        on_navigate={on_navigate}
+                        on_reorder={packages_hook.reorder.clone()}
+                        animations={(*packages_hook.animations).clone()}
+                        loading={*packages_hook.loading}
+                    />
+                </div>
+            </div>
+            
+            {
+                if *show_details {
+                    if let Some(idx) = *details_package_index {
+                        if let Some(pkg) = packages_hook.packages.get(idx) {
+                            html! {
+                                <PackageDetails
+                                    package={pkg.clone()}
+                                    on_close={Callback::from({
+                                        let show_details = show_details.clone();
+                                        move |_| show_details.set(false)
+                                    })}
+                                    on_edit_bal={Callback::from({
+                                        let show_bal_modal = show_bal_modal.clone();
+                                        let show_details = show_details.clone();
+                                        move |_| {
+                                            show_details.set(false);
+                                            show_bal_modal.set(true);
+                                        }
+                                    })}
+                                    on_update_package={packages_hook.update_package.clone()}
+                                />
+                            }
+                        } else {
+                            html! {}
+                        }
+                    } else {
+                        html! {}
+                    }
+                } else {
+                    html! {}
+                }
+            }
+            
+            {
+                if *show_bal_modal {
+                    html! {
+                        <BalModal
+                            on_close={Callback::from({
+                                let show_bal_modal = show_bal_modal.clone();
+                                move |_| show_bal_modal.set(false)
+                            })}
+                            on_select={Callback::from(move |has_access: bool| {
+                                log::info!("📬 BAL access: {}", has_access);
+                            })}
+                        />
+                    }
+                } else {
+                    html! {}
+                }
+            }
+            
+            {
+                if *show_settings {
+                    html! {
+                        <SettingsPopup
+                            on_close={Callback::from({
+                                let show_settings = show_settings.clone();
+                                move |_| show_settings.set(false)
+                            })}
+                            on_logout={on_logout.clone()}
+                        />
+                    }
+                } else {
+                    html! {}
+                }
+            }
+        </>
+    }
+}

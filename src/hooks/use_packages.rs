@@ -1,0 +1,293 @@
+use yew::prelude::*;
+use web_sys::{window, MouseEvent};
+use std::collections::HashMap;
+use gloo_timers::callback::Timeout;
+use crate::models::{Package, LoginData};
+use crate::services::{fetch_packages, optimize_route, reorder_packages as service_reorder_packages};
+use crate::utils::{get_local_storage, STORAGE_KEY_PACKAGES_PREFIX};
+
+pub struct UsePackagesHandle {
+    // Separate states - exactly like original version
+    pub packages: UseStateHandle<Vec<Package>>,
+    pub loading: UseStateHandle<bool>,
+    pub optimizing: UseStateHandle<bool>,
+    pub selected_index: UseStateHandle<Option<usize>>,
+    pub animations: UseStateHandle<HashMap<usize, String>>,
+    
+    // Callbacks
+    pub refresh: Callback<MouseEvent>,
+    pub optimize: Callback<MouseEvent>,
+    pub select_package: Callback<usize>,
+    pub reorder: Callback<(usize, String)>,
+    pub update_package: Callback<(String, f64, f64, String)>,
+}
+
+#[hook]
+pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
+    // Separate states - exactly like original version
+    let packages = use_state(|| Vec::<Package>::new());
+    let loading = use_state(|| false);
+    let optimizing = use_state(|| false);
+    let selected_index = use_state(|| None::<usize>);
+    let animations = use_state(|| HashMap::<usize, String>::new());
+    
+    // Load packages on login
+    {
+        let packages = packages.clone();
+        let loading = loading.clone();
+        let login_data_clone = login_data.clone();
+        
+        use_effect_with(login_data_clone, move |login_opt| {
+            if let Some(login) = login_opt {
+                let packages = packages.clone();
+                let loading = loading.clone();
+                let username = login.username.clone();
+                let company_code = login.company.code.clone();
+                
+                wasm_bindgen_futures::spawn_local(async move {
+                    loading.set(true);
+                    
+                    match fetch_packages(&username, &company_code, false).await {
+                        Ok(fetched_packages) => {
+                            log::info!("📦 Paquetes obtenidos: {}", fetched_packages.len());
+                            let with_coords = fetched_packages.iter().filter(|p| p.coords.is_some()).count();
+                            log::info!("📍 Paquetes con coordenadas: {}/{}", with_coords, fetched_packages.len());
+                            packages.set(fetched_packages);
+                            loading.set(false);
+                        }
+                        Err(e) => {
+                            log::error!("❌ Error obteniendo paquetes: {}", e);
+                            loading.set(false);
+                        }
+                    }
+                });
+            }
+            || ()
+        });
+    }
+    
+    // Refresh packages
+    let refresh = {
+        let packages = packages.clone();
+        let loading = loading.clone();
+        let login_data_ref = login_data.clone();
+        
+        Callback::from(move |_: MouseEvent| {
+            if let Some(login) = login_data_ref.as_ref() {
+                let packages = packages.clone();
+                let loading = loading.clone();
+                let username = login.username.clone();
+                let company_code = login.company.code.clone();
+                
+                wasm_bindgen_futures::spawn_local(async move {
+                    log::info!("🔄 Refrescando paquetes...");
+                    loading.set(true);
+                    
+                    match fetch_packages(&username, &company_code, true).await {
+                        Ok(fetched_packages) => {
+                            log::info!("✅ Paquetes refrescados: {}", fetched_packages.len());
+                            packages.set(fetched_packages);
+                            loading.set(false);
+                        }
+                        Err(e) => {
+                            log::error!("❌ Error refrescando paquetes: {}", e);
+                            loading.set(false);
+                        }
+                    }
+                });
+            }
+        })
+    };
+    
+    // Optimize route
+    let optimize = {
+        let packages = packages.clone();
+        let optimizing = optimizing.clone();
+        let login_data_ref = login_data.clone();
+        
+        Callback::from(move |_: MouseEvent| {
+            if let Some(login) = login_data_ref.as_ref() {
+                let packages = packages.clone();
+                let optimizing = optimizing.clone();
+                let username = login.username.clone();
+                let company_code = login.company.code.clone();
+                
+                wasm_bindgen_futures::spawn_local(async move {
+                    optimizing.set(true);
+                    
+                    log::info!("🎯 Iniciando optimización de ruta...");
+                    
+                    match optimize_route(&username, &company_code).await {
+                        Ok(response) => {
+                            if response.success {
+                                log::info!("✅ Ruta optimizada");
+                                let current_packages = (*packages).clone();
+                                let optimized = service_reorder_packages(current_packages, response);
+                                
+                                packages.set(optimized);
+                                optimizing.set(false);
+                                
+                                if let Some(win) = window() {
+                                    let _ = win.alert_with_message("✅ Ruta optimizada exitosamente");
+                                }
+                            } else {
+                                let msg = response.message.unwrap_or_else(|| "Error desconocido".to_string());
+                                log::error!("❌ Error en optimización: {}", msg);
+                                if let Some(win) = window() {
+                                    let _ = win.alert_with_message(&format!("Error: {}", msg));
+                                }
+                                optimizing.set(false);
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("❌ Error llamando API de optimización: {}", e);
+                            if let Some(win) = window() {
+                                let _ = win.alert_with_message(&format!("Error: {}", e));
+                            }
+                            optimizing.set(false);
+                        }
+                    }
+                });
+            }
+        })
+    };
+    
+    // Select package
+    let select_package = {
+        let selected_index = selected_index.clone();
+        Callback::from(move |index: usize| {
+            log::info!("📍 use_packages: Seleccionando paquete index {}", index);
+            selected_index.set(Some(index));
+            log::info!("✅ Paquete {} seleccionado", index);
+        })
+    };
+    
+    // Reorder packages - EXACTLY like original
+    let reorder = {
+        let packages = packages.clone();
+        let animations = animations.clone();
+        let selected_index = selected_index.clone();
+        
+        Callback::from(move |(index, direction): (usize, String)| {
+            log::info!("🔄 Reordenando paquete {} hacia {}", index, direction);
+            let pkgs = (*packages).clone();
+            let mut anims = (*animations).clone();
+            
+            if direction == "up" && index > 0 {
+                log::info!("⬆️ Moviendo paquete {} hacia arriba", index);
+                anims.insert(index, "moving-up".to_string());
+                anims.insert(index - 1, "moving-down".to_string());
+                animations.set(anims.clone());
+                
+                let timeout = Timeout::new(200, {
+                    let packages = packages.clone();
+                    let animations = animations.clone();
+                    let selected_index = selected_index.clone();
+                    let mut pkgs = pkgs.clone();
+                    
+                    move || {
+                        pkgs.swap(index, index - 1);
+                        packages.set(pkgs.clone());
+                        
+                        let mut final_anims = HashMap::new();
+                        final_anims.insert(index - 1, "moved".to_string());
+                        animations.set(final_anims.clone());
+                        
+                        if let Some(sel) = *selected_index {
+                            if sel == index {
+                                selected_index.set(Some(index - 1));
+                            } else if sel == index - 1 {
+                                selected_index.set(Some(index));
+                            }
+                        }
+                        
+                        let timeout2 = Timeout::new(300, {
+                            let animations = animations.clone();
+                            move || {
+                                animations.set(HashMap::new());
+                            }
+                        });
+                        timeout2.forget();
+                    }
+                });
+                timeout.forget();
+            } else if direction == "down" && index < pkgs.len() - 1 {
+                log::info!("⬇️ Moviendo paquete {} hacia abajo", index);
+                anims.insert(index, "moving-down".to_string());
+                anims.insert(index + 1, "moving-up".to_string());
+                animations.set(anims.clone());
+                
+                let timeout = Timeout::new(200, {
+                    let packages = packages.clone();
+                    let animations = animations.clone();
+                    let selected_index = selected_index.clone();
+                    let mut pkgs = pkgs.clone();
+                    
+                    move || {
+                        pkgs.swap(index, index + 1);
+                        packages.set(pkgs.clone());
+                        
+                        let mut final_anims = HashMap::new();
+                        final_anims.insert(index + 1, "moved".to_string());
+                        animations.set(final_anims.clone());
+                        
+                        if let Some(sel) = *selected_index {
+                            if sel == index {
+                                selected_index.set(Some(index + 1));
+                            } else if sel == index + 1 {
+                                selected_index.set(Some(index));
+                            }
+                        }
+                        
+                        let timeout2 = Timeout::new(300, {
+                            let animations = animations.clone();
+                            move || {
+                                animations.set(HashMap::new());
+                            }
+                        });
+                        timeout2.forget();
+                    }
+                });
+                timeout.forget();
+            } else {
+                log::warn!("⚠️ No se puede mover paquete {} hacia {} (límites: 0-{})", index, direction, pkgs.len() - 1);
+            }
+        })
+    };
+    
+    // Update package
+    let update_package = {
+        let packages = packages.clone();
+        Callback::from(move |(id, lat, lng, new_address): (String, f64, f64, String)| {
+            let mut pkgs = (*packages).clone();
+            if let Some(pkg) = pkgs.iter_mut().find(|p| p.id == id) {
+                pkg.address = new_address;
+                pkg.coords = Some([lng, lat]);
+                log::info!("✅ Paquete {} actualizado en estado", id);
+            }
+            packages.set(pkgs);
+        })
+    };
+    
+    UsePackagesHandle {
+        packages,
+        loading,
+        optimizing,
+        selected_index,
+        animations,
+        refresh,
+        optimize,
+        select_package,
+        reorder,
+        update_package,
+    }
+}
+
+/// Clear packages cache
+pub fn clear_packages_cache(company_code: &str, username: &str) {
+    if let Some(storage) = get_local_storage() {
+        let cache_key = format!("{}_{}", STORAGE_KEY_PACKAGES_PREFIX, format!("{}_{}", company_code, username));
+        let _ = storage.remove_item(&cache_key);
+        log::info!("🗑️ Cache de paquetes eliminado");
+    }
+}

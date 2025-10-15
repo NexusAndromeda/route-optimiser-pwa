@@ -2,8 +2,7 @@ use yew::prelude::*;
 use crate::models::Package;
 use crate::context::get_text;
 use web_sys::window;
-use wasm_bindgen_futures::spawn_local;
-use gloo_net::http::{Request, Method};
+use gloo_net::http::Request;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -13,15 +12,15 @@ extern "C" {
 }
 
 #[derive(Properties, PartialEq)]
-pub struct DetailsModalProps {
+pub struct PackageDetailsProps {
     pub package: Package,
     pub on_close: Callback<()>,
     pub on_edit_bal: Callback<()>,
     pub on_update_package: Callback<(String, f64, f64, String)>, // (id, lat, lng, new_address)
 }
 
-#[function_component(DetailsModal)]
-pub fn details_modal(props: &DetailsModalProps) -> Html {
+#[function_component(PackageDetails)]
+pub fn package_details(props: &PackageDetailsProps) -> Html {
     let close = props.on_close.clone();
     let close_overlay = props.on_close.clone();
     

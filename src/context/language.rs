@@ -191,7 +191,7 @@ pub fn LanguageProvider(props: &LanguageProviderProps) -> Html {
 
     html! {
         <ContextProvider<LanguageContext> context={(*language_context).clone()}>
-            <crate::components::App />
+            <crate::views::App />
         </ContextProvider<LanguageContext>>
     }
 }

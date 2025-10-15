@@ -78,8 +78,11 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                     let on_reorder = props.on_reorder.clone();
                                     Callback::from(move |e: MouseEvent| {
                                         e.stop_propagation();
+                                        log::info!("🔼 Click en botón UP para paquete {}, is_first: {}", index, is_first);
                                         if !is_first {
                                             on_reorder.emit((index, "up".to_string()));
+                                        } else {
+                                            log::warn!("⚠️ No se puede mover hacia arriba, es el primer paquete");
                                         }
                                     })
                                 }}
@@ -93,8 +96,11 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                     let on_reorder = props.on_reorder.clone();
                                     Callback::from(move |e: MouseEvent| {
                                         e.stop_propagation();
+                                        log::info!("🔽 Click en botón DOWN para paquete {}, is_last: {}", index, is_last);
                                         if !is_last {
                                             on_reorder.emit((index, "down".to_string()));
+                                        } else {
+                                            log::warn!("⚠️ No se puede mover hacia abajo, es el último paquete");
                                         }
                                     })
                                 }}

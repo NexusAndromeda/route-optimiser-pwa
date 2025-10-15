@@ -3,7 +3,7 @@ use web_sys::HtmlInputElement;
 use crate::models::Company;
 
 #[derive(Properties, PartialEq)]
-pub struct CompanyModalProps {
+pub struct CompanySelectorProps {
     pub show: bool,
     pub companies: Vec<Company>,
     pub on_close: Callback<()>,
@@ -11,8 +11,8 @@ pub struct CompanyModalProps {
     pub loading: bool,
 }
 
-#[function_component(CompanyModal)]
-pub fn company_modal(props: &CompanyModalProps) -> Html {
+#[function_component(CompanySelector)]
+pub fn company_selector(props: &CompanySelectorProps) -> Html {
     let search_ref = use_node_ref();
     let search_term = use_state(|| String::new());
     
