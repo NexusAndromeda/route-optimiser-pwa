@@ -1,9 +1,36 @@
 use gloo_net::http::Request;
 use crate::models::{Company, CompaniesResponse, LoginRequest, LoginResponse};
-use crate::utils::BACKEND_URL;
+use crate::utils::{BACKEND_URL, save_to_storage, load_from_storage};
 
-/// Load available companies from the backend
+const COMPANIES_CACHE_KEY: &str = "routeOptimizer_companies";
+const COMPANIES_CACHE_DURATION_HOURS: i64 = 24; // Cache por 24 horas
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CompaniesCache {
+    companies: Vec<Company>,
+    timestamp: String,
+}
+
+/// Load available companies from the backend (with cache)
 pub async fn load_companies() -> Result<Vec<Company>, String> {
+    // Check cache first
+    if let Some(cache) = load_from_storage::<CompaniesCache>(COMPANIES_CACHE_KEY) {
+        if let Ok(cache_time) = chrono::DateTime::parse_from_rfc3339(&cache.timestamp) {
+            let now = chrono::Utc::now();
+            let cache_age = now.signed_duration_since(cache_time.with_timezone(&chrono::Utc));
+            let cache_age_hours = cache_age.num_hours();
+            
+            if cache_age_hours < COMPANIES_CACHE_DURATION_HOURS {
+                log::info!("📋 Usando empresas del cache ({} horas de antigüedad)", cache_age_hours);
+                return Ok(cache.companies);
+            } else {
+                log::info!("📋 Cache de empresas expirado, obteniendo datos frescos...");
+            }
+        }
+    }
+    
+    // Fetch from API
+    log::info!("📋 Obteniendo lista de empresas del servidor...");
     let url = format!("{}/colis-prive/companies", BACKEND_URL);
     let response = Request::get(&url)
         .send()
@@ -19,7 +46,17 @@ pub async fn load_companies() -> Result<Vec<Company>, String> {
         .await
         .map_err(|e| format!("Parse error: {}", e))?;
     
-    Ok(companies_response.companies)
+    let companies = companies_response.companies;
+    
+    // Save to cache
+    let cache = CompaniesCache {
+        companies: companies.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+    save_to_storage(COMPANIES_CACHE_KEY, &cache);
+    log::info!("💾 {} empresas guardadas en cache", companies.len());
+    
+    Ok(companies)
 }
 
 /// Perform login with username, password and company code
