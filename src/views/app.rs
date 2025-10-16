@@ -134,12 +134,16 @@ pub fn app() -> Html {
         let login_data = auth.state.login_data.clone();
         let selected_company = auth.state.selected_company.clone();
         let show_settings = show_settings.clone();
+        let reset_map = map.reset_map.clone();
         
         Callback::from(move |_| {
             // Clear packages cache
             if let (Some(login), Some(company)) = (login_data.as_ref(), selected_company.as_ref()) {
                 clear_packages_cache(&company.code, &login.username);
             }
+            
+            // Reset map state
+            reset_map.emit(());
             
             show_settings.set(false);
             logout.emit(());

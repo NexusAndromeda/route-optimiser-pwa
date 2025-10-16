@@ -15,6 +15,7 @@ pub struct UseMapHandle {
     pub initialize_map: Callback<()>,
     pub update_packages: Callback<Vec<Package>>,
     pub select_package: Callback<usize>,
+    pub reset_map: Callback<()>,
 }
 
 /// Detect dark mode preference
@@ -106,11 +107,26 @@ pub fn use_map() -> UseMapHandle {
         })
     };
     
+    // Setup event listener for map package selection
+    use_map_selection_listener(Callback::from(|_| {}));
+    
+    // Reset map state
+    let reset_map = {
+        let state = state.clone();
+        Callback::from(move |_| {
+            log::info!("🔄 Reseteando estado del mapa");
+            let mut current_state = (*state).clone();
+            current_state.initialized = false;
+            state.set(current_state);
+        })
+    };
+    
     UseMapHandle {
         state,
         initialize_map,
         update_packages,
         select_package,
+        reset_map,
     }
 }
 
