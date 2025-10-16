@@ -26,12 +26,21 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                         let cache_age = now.signed_duration_since(cache_time.with_timezone(&chrono::Utc));
                         let cache_age_minutes = cache_age.num_minutes();
                         
-                        // Cache valid for configured duration
-                        if cache_age_minutes < CACHE_DURATION_MINUTES {
+                        // Verificar si el cache tiene el campo code_statut_article
+                        let has_code_statut = cache.packages.first()
+                            .map(|p| p.code_statut_article.is_some())
+                            .unwrap_or(false);
+                        
+                        // Cache valid for configured duration AND has code_statut_article
+                        if cache_age_minutes < CACHE_DURATION_MINUTES && has_code_statut {
                             log::info!("📦 Usando paquetes del cache ({} min de antigüedad)", cache_age_minutes);
                             return Ok(cache.packages);
                         } else {
-                            log::info!("📦 Cache expirado, obteniendo datos frescos...");
+                            if !has_code_statut {
+                                log::info!("📦 Cache sin code_statut_article, obteniendo datos frescos...");
+                            } else {
+                                log::info!("📦 Cache expirado, obteniendo datos frescos...");
+                            }
                         }
                     }
                 }
