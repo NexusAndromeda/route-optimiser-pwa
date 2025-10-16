@@ -155,7 +155,11 @@ pub fn app() -> Html {
     
     // Calculate stats
     let total = packages_hook.packages.len();
-    let delivered = packages_hook.packages.iter().filter(|p| p.status == "delivered").count();
+    let delivered = packages_hook.packages.iter().filter(|p| {
+        p.code_statut_article.as_ref()
+            .map(|code| code.starts_with("STATUT_LIVRER_"))
+            .unwrap_or(false)
+    }).count();
     let percentage = if total > 0 { (delivered * 100) / total } else { 0 };
     
     // Render login screen if not logged in
