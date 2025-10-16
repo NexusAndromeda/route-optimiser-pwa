@@ -40,7 +40,7 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
     }
     
     // Fetch from API
-    let url = format!("{}/api/colis-prive/packages", BACKEND_URL);
+    let url = format!("{}/colis-prive/packages", BACKEND_URL);
     let request_body = PackageRequest {
         matricule: matricule.to_string(),
         societe: societe.to_string(),

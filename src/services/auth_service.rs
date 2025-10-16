@@ -4,7 +4,7 @@ use crate::utils::BACKEND_URL;
 
 /// Load available companies from the backend
 pub async fn load_companies() -> Result<Vec<Company>, String> {
-    let url = format!("{}/api/colis-prive/companies", BACKEND_URL);
+    let url = format!("{}/colis-prive/companies", BACKEND_URL);
     let response = Request::get(&url)
         .send()
         .await
@@ -24,7 +24,7 @@ pub async fn load_companies() -> Result<Vec<Company>, String> {
 
 /// Perform login with username, password and company code
 pub async fn perform_login(username: &str, password: &str, societe: &str) -> Result<LoginResponse, String> {
-    let url = format!("{}/api/colis-prive/auth", BACKEND_URL);
+    let url = format!("{}/colis-prive/auth", BACKEND_URL);
     let request_body = LoginRequest {
         username: username.to_string(),
         password: password.to_string(),
@@ -57,7 +57,7 @@ pub async fn register_company(
     admin_email: String,
     admin_password: String,
 ) -> Result<(), String> {
-    let url = format!("{}/api/company/register", BACKEND_URL);
+    let url = format!("{}/company/register", BACKEND_URL);
     
     let response = Request::post(&url)
         .json(&serde_json::json!({

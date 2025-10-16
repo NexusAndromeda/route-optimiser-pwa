@@ -42,7 +42,7 @@ pub async fn optimize_route(username: &str, societe: &str) -> Result<Optimizatio
     }).collect();
     
     // Usar el nuevo endpoint de Mapbox Optimization
-    let url = format!("{}/api/mapbox-optimization/optimize", BACKEND_URL);
+    let url = format!("{}/mapbox-optimization/optimize", BACKEND_URL);
     let request_body = MapboxOptimizationRequest {
         matricule: matricule_only.to_string(),
         societe: societe.to_string(),

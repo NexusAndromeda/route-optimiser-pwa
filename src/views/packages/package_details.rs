@@ -250,7 +250,7 @@ struct GeocodeResponse {
 }
 
 async fn geocode_address(address: String) -> Result<GeocodeResponse, String> {
-    let url = "https://api.delivery.nexuslabs.one/api/address/geocode";
+    let url = "https://api.delivery.nexuslabs.one/address/geocode";
     let body = serde_json::json!({ "address": address });
     
     let response = Request::post(url)
