@@ -253,9 +253,17 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
             .unwrap_or("Dirección no disponible")
             .to_string(),
         status: "pending".to_string(),
-        code_statut_article: single.get("code_statut_article")
-            .and_then(|s| s.as_str())
-            .map(|s| s.to_string()),
+        code_statut_article: {
+            let code = single.get("code_statut_article")
+                .and_then(|s| s.as_str())
+                .map(|s| s.to_string());
+            if let Some(ref c) = code {
+                log::info!("📋 Paquete {}: code_statut_article = {}", index, c);
+            } else {
+                log::warn!("⚠️ Paquete {} sin code_statut_article", index);
+            }
+            code
+        },
         coords: if let (Some(lat), Some(lng)) = (
             single.get("latitude").and_then(|l| l.as_f64()),
             single.get("longitude").and_then(|l| l.as_f64())

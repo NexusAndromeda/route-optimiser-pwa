@@ -4,13 +4,21 @@ use crate::context::get_text;
 
 /// Mapea el code_statut_article a un color para el número de paquete
 fn get_package_status_color(code_statut_article: &Option<String>) -> &'static str {
-    match code_statut_article.as_deref() {
+    let color = match code_statut_article.as_deref() {
         Some("STATUT_RECEPTIONNER") => "yellow",
         Some("STATUT_CHARGER") => "normal",
         Some(s) if s.starts_with("STATUT_LIVRER_") => "green",
         Some(s) if s.starts_with("STATUT_NONLIV_") => "red",
         _ => "normal",
+    };
+    
+    if let Some(code) = code_statut_article {
+        log::info!("🎨 Code '{}' → color '{}'", code, color);
+    } else {
+        log::warn!("⚠️ Sin code_statut_article, usando color normal");
     }
+    
+    color
 }
 
 #[derive(Properties, PartialEq)]
