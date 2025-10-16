@@ -3,8 +3,15 @@ use web_sys::{window, MouseEvent};
 use std::collections::HashMap;
 use gloo_timers::callback::Timeout;
 use crate::models::{Package, LoginData};
-use crate::services::{fetch_packages, optimize_route, reorder_packages as service_reorder_packages};
+use crate::services::{fetch_packages, optimize_route, reorder_packages as service_reorder_packages, CacheService};
 use crate::utils::{get_local_storage, STORAGE_KEY_PACKAGES_PREFIX};
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_name = removePackageFromMap)]
+    fn remove_package_from_map(package_id: &str) -> bool;
+}
 
 pub struct UsePackagesHandle {
     // Separate states - exactly like original version
@@ -25,6 +32,7 @@ pub struct UsePackagesHandle {
     pub select_package: Callback<usize>,
     pub reorder: Callback<(usize, String)>,
     pub update_package: Callback<(String, f64, f64, String)>,
+    pub mark_problematic: Callback<String>, // Marcar paquete como problemático
     pub toggle_group: Callback<String>, // Toggle expand/collapse de grupo
     pub toggle_reorder_mode: Callback<()>, // Toggle modo reordenar
 }
@@ -59,17 +67,54 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                 wasm_bindgen_futures::spawn_local(async move {
                     loading.set(true);
                     
-                    match fetch_packages(&username, &company_code, false).await {
-                        Ok(fetched_packages) => {
-                            log::info!("📦 Paquetes obtenidos: {}", fetched_packages.len());
-                            let with_coords = fetched_packages.iter().filter(|p| p.coords.is_some()).count();
-                            log::info!("📍 Paquetes con coordenadas: {}/{}", with_coords, fetched_packages.len());
-                            packages.set(fetched_packages);
+                    // Intentar cargar desde caché primero
+                    match CacheService::load_cache() {
+                        Ok(Some(cache)) => {
+                            log::info!("💾 Cargando {} paquetes desde caché", cache.packages.len());
+                            packages.set(cache.packages);
                             loading.set(false);
+                            
+                            // Actualizar en segundo plano
+                            let packages_bg = packages.clone();
+                            let username_bg = username.clone();
+                            let company_code_bg = company_code.clone();
+                            
+                            wasm_bindgen_futures::spawn_local(async move {
+                                match fetch_packages(&username_bg, &company_code_bg, false).await {
+                                    Ok(fetched_packages) => {
+                                        log::info!("🔄 Paquetes actualizados en segundo plano: {}", fetched_packages.len());
+                                        if let Err(e) = CacheService::update_packages(fetched_packages.clone()) {
+                                            log::error!("❌ Error actualizando caché: {}", e);
+                                        }
+                                        packages_bg.set(fetched_packages);
+                                    }
+                                    Err(e) => {
+                                        log::error!("⚠️ Error actualizando en segundo plano: {}", e);
+                                    }
+                                }
+                            });
                         }
-                        Err(e) => {
-                            log::error!("❌ Error obteniendo paquetes: {}", e);
-                            loading.set(false);
+                        _ => {
+                            // No hay caché válido, cargar desde servidor
+                            match fetch_packages(&username, &company_code, false).await {
+                                Ok(fetched_packages) => {
+                                    log::info!("📦 Paquetes obtenidos: {}", fetched_packages.len());
+                                    let with_coords = fetched_packages.iter().filter(|p| p.coords.is_some()).count();
+                                    log::info!("📍 Paquetes con coordenadas: {}/{}", with_coords, fetched_packages.len());
+                                    
+                                    // Guardar en caché
+                                    if let Err(e) = CacheService::update_packages(fetched_packages.clone()) {
+                                        log::error!("❌ Error guardando caché: {}", e);
+                                    }
+                                    
+                                    packages.set(fetched_packages);
+                                    loading.set(false);
+                                }
+                                Err(e) => {
+                                    log::error!("❌ Error obteniendo paquetes: {}", e);
+                                    loading.set(false);
+                                }
+                            }
                         }
                     }
                 });
@@ -98,6 +143,12 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                     match fetch_packages(&username, &company_code, true).await {
                         Ok(fetched_packages) => {
                             log::info!("✅ Paquetes refrescados: {}", fetched_packages.len());
+                            
+                            // Actualizar caché
+                            if let Err(e) = CacheService::update_packages(fetched_packages.clone()) {
+                                log::error!("❌ Error actualizando caché: {}", e);
+                            }
+                            
                             packages.set(fetched_packages);
                             loading.set(false);
                         }
@@ -347,10 +398,51 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         Callback::from(move |(id, lat, lng, new_address): (String, f64, f64, String)| {
             let mut pkgs = (*packages).clone();
             if let Some(pkg) = pkgs.iter_mut().find(|p| p.id == id) {
-                pkg.address = new_address;
+                pkg.address = new_address.clone();
                 pkg.coords = Some([lng, lat]);
                 log::info!("✅ Paquete {} actualizado en estado", id);
+                
+                // Actualizar caché
+                if let Err(e) = CacheService::update_package_coords(&id, lat, lng, new_address) {
+                    log::error!("❌ Error actualizando caché: {}", e);
+                }
             }
+            packages.set(pkgs);
+        })
+    };
+    
+    // Mark package as problematic
+    let mark_problematic = {
+        let packages = packages.clone();
+        Callback::from(move |package_id: String| {
+            let mut pkgs = (*packages).clone();
+            if let Some(pkg) = pkgs.iter_mut().find(|p| p.id == package_id) {
+                pkg.is_problematic = true;
+                pkg.coords = None; // Quitar coordenadas para que no aparezca en el mapa
+                log::info!("⚠️ Paquete {} marcado como problemático", package_id);
+                
+                // Actualizar caché
+                if let Err(e) = CacheService::mark_package_problematic(&package_id) {
+                    log::error!("❌ Error actualizando caché: {}", e);
+                }
+                
+                // Remover del mapa usando JavaScript
+                if remove_package_from_map(&package_id) {
+                    log::info!("🗑️ Paquete {} removido del mapa via JavaScript", package_id);
+                } else {
+                    log::error!("❌ No se pudo remover paquete {} del mapa", package_id);
+                }
+            }
+            
+            // Reordenar: paquetes problemáticos al final
+            pkgs.sort_by(|a, b| {
+                match (a.is_problematic, b.is_problematic) {
+                    (true, false) => std::cmp::Ordering::Greater,  // a va después de b
+                    (false, true) => std::cmp::Ordering::Less,     // a va antes de b
+                    _ => std::cmp::Ordering::Equal,                // mantener orden original
+                }
+            });
+            
             packages.set(pkgs);
         })
     };
@@ -407,6 +499,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         select_package,
         reorder,
         update_package,
+        mark_problematic,
         toggle_group,
         toggle_reorder_mode,
     }

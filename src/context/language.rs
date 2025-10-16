@@ -95,9 +95,10 @@ impl LanguageContext {
                 texts.insert("not_delivered".to_string(), "Non livré".to_string());
                 
                 // Geocoding
-                texts.insert("geocoding_prompt".to_string(), "Modifier l'adresse pour géocodage:\n\nEntrez la nouvelle adresse complète:".to_string());
+                texts.insert("geocoding_prompt".to_string(), "Modifier l'adresse pour géocodage:\n\nEntrez la nouvelle adresse complète:\n\n⚠️ Laisser vide pour marquer comme problématique".to_string());
                 texts.insert("geocoding_success".to_string(), "Géocodage réussi".to_string());
                 texts.insert("geocoding_error".to_string(), "Erreur de géocodage".to_string());
+                texts.insert("package_marked_problematic".to_string(), "⚠️ Paquet marqué comme problématique\n\nIl a été retiré de la carte et placé en bas de la liste.".to_string());
                 
                 // Status
                 texts.insert("pending".to_string(), "En attente".to_string());
@@ -154,9 +155,10 @@ impl LanguageContext {
                 texts.insert("not_delivered".to_string(), "No entregado".to_string());
                 
                 // Geocoding
-                texts.insert("geocoding_prompt".to_string(), "Modificar dirección para geocodificación:\n\nIngrese la nueva dirección completa:".to_string());
+                texts.insert("geocoding_prompt".to_string(), "Modificar dirección para geocodificación:\n\nIngrese la nueva dirección completa:\n\n⚠️ Dejar vacío para marcar como problemático".to_string());
                 texts.insert("geocoding_success".to_string(), "Geocodificación exitosa".to_string());
                 texts.insert("geocoding_error".to_string(), "Error de geocodificación".to_string());
+                texts.insert("package_marked_problematic".to_string(), "⚠️ Paquete marcado como problemático\n\nHa sido removido del mapa y colocado al final de la lista.".to_string());
                 
                 // Status
                 texts.insert("pending".to_string(), "Pendiente".to_string());

@@ -15,7 +15,7 @@ extern "C" {
 }
 
 #[derive(Properties, PartialEq)]
-pub struct PackageDetailsProps {
+pub struct DetailsModalProps {
     pub package: Package,
     pub on_close: Callback<()>,
     pub on_edit_bal: Callback<()>,
@@ -23,8 +23,8 @@ pub struct PackageDetailsProps {
     pub on_mark_problematic: Callback<String>, // (package_id)
 }
 
-#[function_component(PackageDetails)]
-pub fn package_details(props: &PackageDetailsProps) -> Html {
+#[function_component(DetailsModal)]
+pub fn details_modal(props: &DetailsModalProps) -> Html {
     let close = props.on_close.clone();
     let close_overlay = props.on_close.clone();
     
@@ -277,7 +277,7 @@ struct GeocodeResponse {
 }
 
 async fn geocode_address(address: String) -> Result<GeocodeResponse, String> {
-    let url = "https://api.delivery.nexuslabs.one/address/geocode";
+    let url = "https://api.delivery.nexuslabs.one/api/address/geocode";
     let body = serde_json::json!({ "address": address });
     
     let response = Request::post(url)
@@ -304,4 +304,3 @@ async fn geocode_address(address: String) -> Result<GeocodeResponse, String> {
         Err("No data in response".to_string())
     }
 }
-

@@ -19,6 +19,10 @@ pub struct Package {
     pub total_packages: Option<usize>,
     #[serde(default)]
     pub group_packages: Option<Vec<GroupPackageInfo>>,
+    
+    // Campo para paquetes problemáticos (sin dirección válida)
+    #[serde(default)]
+    pub is_problematic: bool,
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]

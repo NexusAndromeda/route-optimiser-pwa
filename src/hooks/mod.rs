@@ -1,10 +1,12 @@
 pub mod use_auth;
+pub mod use_auth_dual;
 pub mod use_packages;
 pub mod use_map;
 pub mod use_sheet;
 pub mod use_grouped_packages;
 
 pub use use_auth::*;
+pub use use_auth_dual::use_auth_dual;
 pub use use_packages::*;
 pub use use_map::*;
 pub use use_sheet::*;

@@ -50,10 +50,16 @@ pub fn app() -> Html {
         use_effect_with(packages.clone(), move |pkgs| {
             let pkgs_clone = pkgs.clone();
             
+            // Filter out problematic packages for the map
+            let map_packages: Vec<_> = pkgs_clone.iter()
+                .filter(|p| !p.is_problematic)
+                .cloned()
+                .collect();
+            
             // Save packages to window immediately (for map load event and other JS functions)
             use wasm_bindgen::JsValue;
             if let Some(window) = web_sys::window() {
-                if let Ok(js_packages) = serde_wasm_bindgen::to_value(&pkgs_clone) {
+                if let Ok(js_packages) = serde_wasm_bindgen::to_value(&map_packages) {
                     let _ = js_sys::Reflect::set(
                         &window,
                         &JsValue::from_str("currentPackages"),
@@ -65,7 +71,7 @@ pub fn app() -> Html {
             // If map is initialized, update packages immediately
             if map_initialized {
                 Timeout::new(100, move || {
-                    map_update.emit(pkgs_clone);
+                    map_update.emit(map_packages);
                 }).forget();
             }
             
@@ -271,6 +277,7 @@ pub fn app() -> Html {
                                         }
                                     })}
                                     on_update_package={packages_hook.update_package.clone()}
+                                    on_mark_problematic={packages_hook.mark_problematic.clone()}
                                 />
                             }
                         } else {

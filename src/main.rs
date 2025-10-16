@@ -4,6 +4,7 @@ mod services;
 mod hooks;
 mod views;
 mod context;
+mod components;
 
 use views::App;
 

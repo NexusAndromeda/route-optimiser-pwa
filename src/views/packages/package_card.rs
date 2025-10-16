@@ -62,7 +62,8 @@ pub fn package_card(props: &PackageCardProps) -> Html {
         props.is_selected.then_some("selected"),
         props.animation_class.as_ref(),
         props.reorder_mode.then_some("reorder-mode-active"),
-        props.is_reorder_origin.then_some("reorder-origin")
+        props.is_reorder_origin.then_some("reorder-origin"),
+        props.package.is_problematic.then_some("problematic")
     );
     
     html! {

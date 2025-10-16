@@ -457,5 +457,42 @@ window.updatePackageCoordinates = function(packageId, latitude, longitude) {
     return true;
 };
 
+// Remove package from map
+window.removePackageFromMap = function(packageId) {
+    if (!map) {
+        console.error('❌ Map not initialized');
+        return false;
+    }
+    
+    const source = map.getSource('packages');
+    if (!source) {
+        console.error('❌ Packages source not found');
+        return false;
+    }
+    
+    // Get current data
+    const data = source._data;
+    if (!data || !data.features) {
+        console.error('❌ No package data found');
+        return false;
+    }
+    
+    // Find and remove the package
+    const featureIndex = data.features.findIndex(f => f.properties.id === packageId);
+    if (featureIndex === -1) {
+        console.error('❌ Package not found:', packageId);
+        return false;
+    }
+    
+    // Remove the feature
+    data.features.splice(featureIndex, 1);
+    
+    // Update the source
+    source.setData(data);
+    
+    console.log('🗑️ Package removed from map:', packageId);
+    return true;
+};
+
 console.log('📍 Mapbox helper functions loaded');
 

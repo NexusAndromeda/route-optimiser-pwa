@@ -178,6 +178,7 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                                     is_group: false,
                                     total_packages: None,
                                     group_packages: None,
+                                    is_problematic: false,
                                 })
                             })
                             .collect();
@@ -288,6 +289,7 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
         is_group: false,
         total_packages: None,
         group_packages: None,
+        is_problematic: false,
     })
 }
 
@@ -358,6 +360,7 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
         is_group: true,
         total_packages: Some(total_packages),
         group_packages: Some(group_packages_list),
+        is_problematic: false,
     })
 }
 
