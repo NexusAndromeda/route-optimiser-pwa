@@ -2168,8 +2168,3 @@ body {
     100% { transform: translateY(0); }
 }
 
-@keyframes flash {
-    0%, 100% { background: var(--bg-surface-variant); }
-    50% { background: rgba(16, 185, 129, 0.3); }
-}
-
