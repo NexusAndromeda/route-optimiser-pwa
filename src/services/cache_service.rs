@@ -135,6 +135,56 @@ impl PackagesCache {
 pub struct CacheService;
 
 impl CacheService {
+    /// Sincroniza el estado de la tournée con el backend
+    pub async fn sync_with_backend(tournee_id: &str) -> Result<(), String> {
+        let cache = Self::load_cache()?
+            .ok_or("No hay caché para sincronizar")?;
+        
+        // Preparar datos para sincronizar
+        let problematic_packages: Vec<String> = cache.problematic.iter()
+            .map(|p| p.id.clone())
+            .collect();
+        
+        let updated_coords: Vec<serde_json::Value> = cache.packages.iter()
+            .filter(|p| p.coords.is_some() && !p.is_problematic)
+            .map(|p| {
+                let coords = p.coords.unwrap();
+                serde_json::json!({
+                    "package_id": p.id,
+                    "lat": coords[1],
+                    "lng": coords[0],
+                    "address": p.address
+                })
+            })
+            .collect();
+        
+        let request_body = serde_json::json!({
+            "tournee_id": tournee_id,
+            "version": cache.version,
+            "problematic_packages": problematic_packages,
+            "updated_coords": updated_coords,
+            "checksum": cache.checksum
+        });
+        
+        // Enviar al backend
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("http://localhost:8080/sync/state/{}", tournee_id))
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| format!("Error enviando sincronización: {}", e))?;
+        
+        if response.status().is_success() {
+            log::info!("✅ Estado sincronizado con el servidor");
+            Ok(())
+        } else {
+            let error_msg = format!("Error HTTP: {}", response.status());
+            log::error!("❌ {}", error_msg);
+            Err(error_msg)
+        }
+    }
+
     /// Guarda el caché de paquetes
     pub fn save_cache(cache: &PackagesCache) -> Result<(), String> {
         let storage = window()

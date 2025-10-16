@@ -52,6 +52,11 @@ pub fn use_auto_sync(
                     sync_error.set(None);
                     log::info!("🔄 Iniciando sincronización automática...");
 
+                    // Primero sincronizar estado local con el backend
+                    if let Err(e) = CacheService::sync_with_backend(&username).await {
+                        log::warn!("⚠️ Error sincronizando estado: {}", e);
+                    }
+
                     match fetch_packages(&username, &company_code, false).await {
                         Ok(fetched_packages) => {
                             let current_packages = (*packages).clone();

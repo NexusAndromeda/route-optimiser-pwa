@@ -140,6 +140,12 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                     log::info!("🔄 Refrescando paquetes...");
                     loading.set(true);
                     
+                    // Primero sincronizar estado local con el backend
+                    log::info!("🔄 Sincronizando estado con servidor...");
+                    if let Err(e) = CacheService::sync_with_backend(&username).await {
+                        log::warn!("⚠️ Error sincronizando estado: {}", e);
+                    }
+                    
                     match fetch_packages(&username, &company_code, true).await {
                         Ok(fetched_packages) => {
                             log::info!("✅ Paquetes refrescados: {}", fetched_packages.len());
