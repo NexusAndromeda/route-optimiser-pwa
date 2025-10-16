@@ -21,6 +21,10 @@ pub struct PackageListProps {
     pub animations: HashMap<usize, String>,
     #[prop_or_default]
     pub loading: bool,
+    #[prop_or_default]
+    pub expanded_groups: Vec<String>,
+    #[prop_or_default]
+    pub on_toggle_group: Option<Callback<String>>,
 }
 
 #[function_component(PackageList)]
@@ -78,6 +82,7 @@ pub fn package_list(props: &PackageListProps) -> Html {
                                 { for props.packages.iter().enumerate().map(|(index, package)| {
                                     let is_selected = props.selected_index == Some(index);
                                     let animation_class = props.animations.get(&index).cloned();
+                                    let is_expanded = props.expanded_groups.contains(&package.id);
                                     
                                     html! {
                                         <PackageCard
@@ -85,10 +90,12 @@ pub fn package_list(props: &PackageListProps) -> Html {
                                             index={index}
                                             package={package.clone()}
                                             is_selected={is_selected}
+                                            is_expanded={is_expanded}
                                             on_select={props.on_select.clone()}
                                             on_show_details={props.on_show_details.clone()}
                                             on_navigate={props.on_navigate.clone()}
                                             on_reorder={props.on_reorder.clone()}
+                                            on_toggle_group={props.on_toggle_group.clone()}
                                             total_packages={props.packages.len()}
                                             animation_class={animation_class}
                                         />

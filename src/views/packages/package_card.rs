@@ -2,6 +2,17 @@ use yew::prelude::*;
 use crate::models::Package;
 use crate::context::get_text;
 
+/// Mapea el code_statut_article a un color para el número de paquete
+fn get_package_status_color(code_statut_article: &Option<String>) -> &'static str {
+    match code_statut_article.as_deref() {
+        Some("STATUT_RECEPTIONNER") => "yellow",
+        Some("STATUT_CHARGER") => "normal",
+        Some(s) if s.starts_with("STATUT_LIVRER_") => "green",
+        Some(s) if s.starts_with("STATUT_NONLIV_") => "red",
+        _ => "normal",
+    }
+}
+
 #[derive(Properties, PartialEq)]
 pub struct PackageCardProps {
     pub index: usize,
@@ -14,6 +25,10 @@ pub struct PackageCardProps {
     pub total_packages: usize,
     #[prop_or_default]
     pub animation_class: Option<String>,
+    #[prop_or_default]
+    pub is_expanded: bool,
+    #[prop_or_default]
+    pub on_toggle_group: Option<Callback<String>>,
 }
 
 #[function_component(PackageCard)]
@@ -27,17 +42,8 @@ pub fn package_card(props: &PackageCardProps) -> Html {
         Callback::from(move |_| on_select.emit(index))
     };
     
-    let status_class = match props.package.status.as_str() {
-        "delivered" => "status-delivered",
-        "pending" => "status-pending",
-        _ => "status-pending",
-    };
-    
-    let status_text = match props.package.status.as_str() {
-        "delivered" => get_text("delivered"),
-        "pending" => get_text("pending"),
-        _ => get_text("pending"),
-    };
+    // Obtener el color del número basado en code_statut_article
+    let status_color = get_package_status_color(&props.package.code_statut_article);
     
     let card_class = classes!(
         "package-card",
@@ -47,16 +53,28 @@ pub fn package_card(props: &PackageCardProps) -> Html {
     
     html! {
         <div class={card_class} {onclick}>
-            <div class="package-main">
-                <div class="package-header">
-                    <div class="package-number">{index + 1}</div>
-                    <div class={classes!("package-status", status_class)}>
-                        <span class="status-icon">
-                            {if props.package.status == "delivered" { "✓" } else { "⏳" }}
-                        </span>
-                        <span class="status-text">{status_text}</span>
-                    </div>
+            // Header: número (con color) + info (detalles)
+            <div class="package-header">
+                <div class={classes!("package-number", format!("package-number-{}", status_color))}>
+                    {index + 1}
                 </div>
+                // Info button (detalles)
+                <button
+                    class="btn-info"
+                    onclick={{
+                        let on_show_details = props.on_show_details.clone();
+                        Callback::from(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            on_show_details.emit(index);
+                        })
+                    }}
+                >
+                    {"i"}
+                </button>
+            </div>
+            
+            // Contenido principal: cliente/dirección + botones
+            <div class="package-main">
                 <div class="package-info">
                     <div class="package-recipient">
                         {&props.package.recipient}
@@ -66,48 +84,22 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                     </div>
                 </div>
                 
-                // Reorder Actions (solo cuando está seleccionado)
+                // Botones de acción (solo cuando está seleccionado)
                 if props.is_selected {
-                    <div class="reorder-actions" style="animation: slideInUp 0.2s ease;">
-                        // Reorder buttons
-                        <div class="reorder-buttons">
-                            <button
-                                class="btn-reorder btn-up"
-                                disabled={is_first}
-                                onclick={{
-                                    let on_reorder = props.on_reorder.clone();
-                                    Callback::from(move |e: MouseEvent| {
-                                        e.stop_propagation();
-                                        log::info!("🔼 Click en botón UP para paquete {}, is_first: {}", index, is_first);
-                                        if !is_first {
-                                            on_reorder.emit((index, "up".to_string()));
-                                        } else {
-                                            log::warn!("⚠️ No se puede mover hacia arriba, es el primer paquete");
-                                        }
-                                    })
-                                }}
-                            >
-                                {"↑"}
-                            </button>
-                            <button
-                                class="btn-reorder btn-down"
-                                disabled={is_last}
-                                onclick={{
-                                    let on_reorder = props.on_reorder.clone();
-                                    Callback::from(move |e: MouseEvent| {
-                                        e.stop_propagation();
-                                        log::info!("🔽 Click en botón DOWN para paquete {}, is_last: {}", index, is_last);
-                                        if !is_last {
-                                            on_reorder.emit((index, "down".to_string()));
-                                        } else {
-                                            log::warn!("⚠️ No se puede mover hacia abajo, es el último paquete");
-                                        }
-                                    })
-                                }}
-                            >
-                                {"↓"}
-                            </button>
-                        </div>
+                    <div class="package-actions">
+                        // Reorder button
+                        <button
+                            class="btn-reorder-mode"
+                            onclick={{
+                                // TODO: Implementar modo reordenar
+                                Callback::from(move |e: MouseEvent| {
+                                    e.stop_propagation();
+                                    log::info!("🔄 Modo reordenar activado para paquete {}", index);
+                                })
+                            }}
+                        >
+                            {"reordenar"}
+                        </button>
                         
                         // Navigate button
                         <button
@@ -120,25 +112,74 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                 })
                             }}
                         >
-                            {get_text("go")}
-                        </button>
-                        
-                        // Details button
-                        <button
-                            class="btn-details"
-                            onclick={{
-                                let on_show_details = props.on_show_details.clone();
-                                Callback::from(move |e: MouseEvent| {
-                                    e.stop_propagation();
-                                    on_show_details.emit(index);
-                                })
-                            }}
-                        >
-                            {get_text("details")}
+                            {"ir"}
                         </button>
                     </div>
                 }
             </div>
+            
+            // Mostrar paquetes internos si está expandido (ABAJO de los botones)
+            if props.package.is_group && props.is_expanded {
+                if let Some(group_packages) = &props.package.group_packages {
+                    <div class="group-packages-expanded">
+                        <div class="group-packages-list">
+                            { for group_packages.iter().enumerate().map(|(idx, pkg)| {
+                                html! {
+                                    <>
+                                        <div class="group-package-item" key={pkg.id.clone()}>
+                                            <div class="group-package-header">
+                                                <span class="group-package-number">{format!("#{}", idx + 1)}</span>
+                                                <strong class="group-package-customer">{&pkg.customer_name}</strong>
+                                            </div>
+                                            <div class="group-package-details">
+                                                <div class="group-package-tracking">
+                                                    <span class="tracking-label">{"📦 Tracking:"}</span>
+                                                    <span class="tracking-value">{&pkg.tracking}</span>
+                                                </div>
+                                                if let Some(phone) = &pkg.phone_number {
+                                                    <div class="group-package-phone">
+                                                        <span class="phone-label">{"📞"}</span>
+                                                        <span class="phone-value">{phone}</span>
+                                                    </div>
+                                                }
+                                                if let Some(indication) = &pkg.customer_indication {
+                                                    <div class="group-package-indication">
+                                                        <span class="indication-label">{"💬"}</span>
+                                                        <span class="indication-value">{indication}</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                        // Separador entre paquetes (excepto el último)
+                                        if idx < group_packages.len() - 1 {
+                                            <div class="group-package-divider"></div>
+                                        }
+                                    </>
+                                }
+                            })}
+                        </div>
+                    </div>
+                }
+            }
+            
+            // Botón expandir discreto para grupos (solo cuando está seleccionado)
+            if props.package.is_group && props.is_selected {
+                <div 
+                    class="group-expand-handle"
+                    onclick={{
+                        let package_id = props.package.id.clone();
+                        let on_toggle = props.on_toggle_group.clone();
+                        Callback::from(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            if let Some(toggle_cb) = &on_toggle {
+                                toggle_cb.emit(package_id.clone());
+                            }
+                        })
+                    }}
+                >
+                    <div class="expand-handle-line"></div>
+                </div>
+            }
         </div>
     }
 }

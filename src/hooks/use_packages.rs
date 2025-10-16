@@ -13,6 +13,7 @@ pub struct UsePackagesHandle {
     pub optimizing: UseStateHandle<bool>,
     pub selected_index: UseStateHandle<Option<usize>>,
     pub animations: UseStateHandle<HashMap<usize, String>>,
+    pub expanded_groups: UseStateHandle<Vec<String>>, // IDs de grupos expandidos
     
     // Callbacks
     pub refresh: Callback<MouseEvent>,
@@ -20,6 +21,7 @@ pub struct UsePackagesHandle {
     pub select_package: Callback<usize>,
     pub reorder: Callback<(usize, String)>,
     pub update_package: Callback<(String, f64, f64, String)>,
+    pub toggle_group: Callback<String>, // Toggle expand/collapse de grupo
 }
 
 #[hook]
@@ -30,6 +32,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
     let optimizing = use_state(|| false);
     let selected_index = use_state(|| None::<usize>);
     let animations = use_state(|| HashMap::<usize, String>::new());
+    let expanded_groups = use_state(|| Vec::<String>::new());
     
     // Load packages on login
     {
@@ -269,17 +272,38 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         })
     };
     
+    // Toggle group expansion
+    let toggle_group = {
+        let expanded_groups = expanded_groups.clone();
+        
+        Callback::from(move |group_id: String| {
+            let mut expanded = (*expanded_groups).clone();
+            
+            if let Some(pos) = expanded.iter().position(|id| id == &group_id) {
+                expanded.remove(pos);
+                log::info!("📥 Colapsando grupo {}", group_id);
+            } else {
+                expanded.push(group_id.clone());
+                log::info!("📤 Expandiendo grupo {}", group_id);
+            }
+            
+            expanded_groups.set(expanded);
+        })
+    };
+    
     UsePackagesHandle {
         packages,
         loading,
         optimizing,
         selected_index,
         animations,
+        expanded_groups,
         refresh,
         optimize,
         select_package,
         reorder,
         update_package,
+        toggle_group,
     }
 }
 

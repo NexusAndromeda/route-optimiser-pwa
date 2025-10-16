@@ -112,7 +112,7 @@ pub fn use_grouped_packages(login_data: Option<(String, String)>) -> UseGroupedP
                         date: Some(chrono::Utc::now().format("%Y-%m-%d").to_string()),
                     };
                     
-                    match Request::post("https://api.delivery.nexuslabs.one/api/packages/grouped")
+                    match Request::post("https://api.delivery.nexuslabs.one/colis-prive/packages")
                         .json(&request_body)
                         .unwrap()
                         .send()

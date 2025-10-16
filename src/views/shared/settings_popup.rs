@@ -53,6 +53,29 @@ pub fn settings_popup(props: &SettingsPopupProps) -> Html {
                         </div>
                     </div>
                     
+                    // Color codes section
+                    <div class="color-codes-section">
+                        <div class="color-codes-label">{"🎨 Código de Colores"}</div>
+                        <div class="color-codes-list">
+                            <div class="color-code-item">
+                                <div class="color-indicator yellow"></div>
+                                <span class="color-description">{"Listo para cargar"}</span>
+                            </div>
+                            <div class="color-code-item">
+                                <div class="color-indicator normal"></div>
+                                <span class="color-description">{"En ruta"}</span>
+                            </div>
+                            <div class="color-code-item">
+                                <div class="color-indicator green"></div>
+                                <span class="color-description">{"Entregado"}</span>
+                            </div>
+                            <div class="color-code-item">
+                                <div class="color-indicator red"></div>
+                                <span class="color-description">{"No entregado"}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <button
                         class="btn-logout"
                         onclick={{

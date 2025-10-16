@@ -29,7 +29,8 @@ pub fn app() -> Html {
         use_effect_with((is_logged_in, map_initialized), move |(logged_in, initialized)| {
             if *logged_in && !*initialized {
                 log::info!("🗺️ Preparando mapa...");
-                Timeout::new(100, move || {
+                // Delay más largo para asegurar que el contenedor esté listo
+                Timeout::new(500, move || {
                     map_init.emit(());
                 }).forget();
             }
@@ -231,6 +232,8 @@ pub fn app() -> Html {
                         on_reorder={packages_hook.reorder.clone()}
                         animations={(*packages_hook.animations).clone()}
                         loading={*packages_hook.loading}
+                        expanded_groups={(*packages_hook.expanded_groups).clone()}
+                        on_toggle_group={Some(packages_hook.toggle_group.clone())}
                     />
                 </div>
             </div>

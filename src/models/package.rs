@@ -6,10 +6,28 @@ pub struct Package {
     pub recipient: String,
     pub address: String,
     pub status: String,
+    pub code_statut_article: Option<String>,
     pub coords: Option<[f64; 2]>, // [longitude, latitude]
     pub phone: Option<String>,
     pub phone_fixed: Option<String>,
     pub instructions: Option<String>,
+    
+    // Campos para grupos
+    #[serde(default)]
+    pub is_group: bool,
+    #[serde(default)]
+    pub total_packages: Option<usize>,
+    #[serde(default)]
+    pub group_packages: Option<Vec<GroupPackageInfo>>,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct GroupPackageInfo {
+    pub id: String,
+    pub tracking: String,
+    pub customer_name: String,
+    pub phone_number: Option<String>,
+    pub customer_indication: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]

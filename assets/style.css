@@ -1150,9 +1150,12 @@ body {
     cursor: pointer;
     transition: all 0.3s ease;
     display: flex;
-    gap: 12px;
+    flex-direction: column;
+    gap: 0;
     position: relative;
 }
+
+/* Ya no necesitamos package-content, se eliminó */
 
 .package-card:hover {
     background: var(--bg-surface-container);
@@ -1217,28 +1220,74 @@ body {
     font-weight: 700;
     font-size: 0.875rem;
     flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+/* Colores de estado para el número de paquete */
+.package-number-yellow {
+    background: #fbbf24 !important; /* Amarillo - STATUT_RECEPTIONNER */
+    color: #1f2937 !important;
+    box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.3);
+}
+
+.package-number-green {
+    background: #10b981 !important; /* Verde - STATUT_LIVRER_* */
+    color: white !important;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+}
+
+.package-number-red {
+    background: #ef4444 !important; /* Rojo - STATUT_NONLIV_* */
+    color: white !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
+}
+
+.package-number-normal {
+    /* Color normal - STATUT_CHARGER o sin estado */
+    background: var(--bg-surface);
+    color: var(--text-primary);
 }
 
 .package-card.selected .package-number {
     background: rgba(255, 255, 255, 0.2);
 }
 
-/* Package Main Content */
-.package-main {
-    flex: 1;
+.package-card.selected .package-number-yellow {
+    background: #fbbf24 !important;
+    color: #1f2937 !important;
 }
 
+.package-card.selected .package-number-green {
+    background: #10b981 !important;
+    color: white !important;
+}
+
+.package-card.selected .package-number-red {
+    background: #ef4444 !important;
+    color: white !important;
+}
+
+/* Header: número + status + info */
 .package-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
+}
+
+/* Package Main Content */
+.package-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
 }
 
 .package-info {
+    flex: 1;
     display: flex;
-    gap: 12px;
-    align-items: center;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .package-tracking {
@@ -1276,6 +1325,66 @@ body {
 .package-address {
     font-size: 0.875rem;
     color: var(--text-secondary);
+}
+
+/* Package Actions (nueva estructura) */
+.package-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+}
+
+/* Botón Info (detalles) */
+.btn-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--bg-surface-container);
+    color: var(--text-primary);
+    border: none;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-info:hover {
+    background: var(--bg-surface-container-hover);
+    transform: scale(1.05);
+}
+
+.package-card.selected .btn-info {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* Botón Modo Reordenar */
+.btn-reorder-mode {
+    padding: 8px 16px;
+    background: var(--bg-surface-container);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 80px;
+}
+
+.btn-reorder-mode:hover {
+    background: var(--bg-surface-container-hover);
+    border-color: var(--primary-color);
+}
+
+.package-card.selected .btn-reorder-mode {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 /* Reorder Actions (solo cuando está seleccionado) */
@@ -1701,5 +1810,242 @@ body {
 
 .package-list::-webkit-scrollbar-thumb:hover {
     background: var(--bg-surface-container);
+}
+
+/* ============================================
+   GROUP PACKAGES STYLES
+   ============================================ */
+
+/* Botón discreto de expansión (rayita simple centrada) - solo cuando está seleccionado */
+.group-expand-handle {
+    padding: 12px 0 0px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.group-expand-handle:hover .expand-handle-line {
+    opacity: 0.8;
+    width: 50px;
+}
+
+.expand-handle-line {
+    width: 40px;
+    height: 3px;
+    background: var(--text-secondary);
+    border-radius: 2px;
+    opacity: 0.4;
+    transition: all 0.2s ease;
+}
+
+/* Contenedor de paquetes expandidos */
+.group-packages-expanded {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        max-height: 1000px;
+        transform: translateY(0);
+    }
+}
+
+/* Lista de paquetes del grupo */
+.group-packages-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* Item individual de paquete del grupo */
+.group-package-item {
+    padding: 12px;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    transition: background 0.2s ease;
+}
+
+.group-package-item:hover {
+    background: var(--bg-surface-container);
+}
+
+/* Header del paquete del grupo */
+.group-package-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.group-package-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 8px;
+}
+
+.group-package-customer {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+/* Detalles del paquete del grupo */
+.group-package-details {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 38px;
+}
+
+.group-package-tracking,
+.group-package-phone,
+.group-package-indication {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.tracking-label,
+.phone-label,
+.indication-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.tracking-value {
+    color: var(--text-primary);
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-weight: 600;
+    background: var(--bg-surface-variant);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.phone-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.indication-value {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Separador entre paquetes */
+.group-package-divider {
+    height: 1px;
+    background: linear-gradient(
+        to right,
+        transparent,
+        var(--border-color) 20%,
+        var(--border-color) 80%,
+        transparent
+    );
+    margin: 12px 0;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+    .group-packages-expanded {
+        background: rgba(255, 255, 255, 0.03);
+    }
+    
+    .group-package-item {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .group-package-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+    }
+    
+    .tracking-value {
+        background: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* ============================================
+   COLOR CODES SECTION
+   ============================================ */
+
+.color-codes-section {
+    margin: 20px 0;
+    padding: 16px;
+    background: var(--bg-surface-variant);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.color-codes-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.color-codes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.color-code-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.color-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid var(--border-color);
+}
+
+.color-indicator.yellow {
+    background: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.3);
+}
+
+.color-indicator.green {
+    background: #10b981;
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.color-indicator.red {
+    background: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.color-indicator.normal {
+    background: var(--bg-surface);
+    border-color: var(--border-color);
+}
+
+.color-description {
+    font-size: 13px;
+    color: var(--text-secondary);
 }
 
