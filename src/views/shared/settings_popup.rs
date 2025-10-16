@@ -5,6 +5,10 @@ use crate::context::{get_current_language, get_text, set_language, Language};
 pub struct SettingsPopupProps {
     pub on_close: Callback<()>,
     pub on_logout: Callback<()>,
+    #[prop_or_default]
+    pub reorder_mode: bool,
+    #[prop_or_default]
+    pub on_toggle_reorder: Option<Callback<()>>,
 }
 
 #[function_component(SettingsPopup)]
@@ -51,6 +55,26 @@ pub fn settings_popup(props: &SettingsPopupProps) -> Html {
                                 {"ES"}
                             </button>
                         </div>
+                    </div>
+                    
+                    // Reorder mode toggle
+                    <div class="reorder-mode-section">
+                        <span class="reorder-mode-label">{"Editar"}</span>
+                        <label class="toggle-switch">
+                            <input
+                                type="checkbox"
+                                checked={props.reorder_mode}
+                                onchange={{
+                                    let on_toggle = props.on_toggle_reorder.clone();
+                                    Callback::from(move |_| {
+                                        if let Some(toggle) = &on_toggle {
+                                            toggle.emit(());
+                                        }
+                                    })
+                                }}
+                            />
+                            <span class="toggle-slider"></span>
+                        </label>
                     </div>
                     
                     // Color codes section

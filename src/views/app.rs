@@ -245,6 +245,8 @@ pub fn app() -> Html {
                         loading={*packages_hook.loading}
                         expanded_groups={(*packages_hook.expanded_groups).clone()}
                         on_toggle_group={Some(packages_hook.toggle_group.clone())}
+                        reorder_mode={*packages_hook.reorder_mode}
+                        reorder_origin={*packages_hook.reorder_origin}
                     />
                 </div>
             </div>
@@ -309,6 +311,8 @@ pub fn app() -> Html {
                                 move |_| show_settings.set(false)
                             })}
                             on_logout={on_logout.clone()}
+                            reorder_mode={*packages_hook.reorder_mode}
+                            on_toggle_reorder={packages_hook.toggle_reorder_mode.clone()}
                         />
                     }
                 } else {

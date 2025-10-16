@@ -25,6 +25,10 @@ pub struct PackageListProps {
     pub expanded_groups: Vec<String>,
     #[prop_or_default]
     pub on_toggle_group: Option<Callback<String>>,
+    #[prop_or_default]
+    pub reorder_mode: bool,
+    #[prop_or_default]
+    pub reorder_origin: Option<usize>,
 }
 
 #[function_component(PackageList)]
@@ -83,6 +87,7 @@ pub fn package_list(props: &PackageListProps) -> Html {
                                     let is_selected = props.selected_index == Some(index);
                                     let animation_class = props.animations.get(&index).cloned();
                                     let is_expanded = props.expanded_groups.contains(&package.id);
+                                    let is_reorder_origin = props.reorder_origin == Some(index);
                                     
                                     html! {
                                         <PackageCard
@@ -98,6 +103,8 @@ pub fn package_list(props: &PackageListProps) -> Html {
                                             on_toggle_group={props.on_toggle_group.clone()}
                                             total_packages={props.packages.len()}
                                             animation_class={animation_class}
+                                            reorder_mode={props.reorder_mode}
+                                            is_reorder_origin={is_reorder_origin}
                                         />
                                     }
                                 }) }

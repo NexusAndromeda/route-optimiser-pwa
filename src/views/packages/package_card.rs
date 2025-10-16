@@ -37,6 +37,10 @@ pub struct PackageCardProps {
     pub is_expanded: bool,
     #[prop_or_default]
     pub on_toggle_group: Option<Callback<String>>,
+    #[prop_or_default]
+    pub reorder_mode: bool,
+    #[prop_or_default]
+    pub is_reorder_origin: bool,
 }
 
 #[function_component(PackageCard)]
@@ -56,7 +60,9 @@ pub fn package_card(props: &PackageCardProps) -> Html {
     let card_class = classes!(
         "package-card",
         props.is_selected.then_some("selected"),
-        props.animation_class.as_ref()
+        props.animation_class.as_ref(),
+        props.reorder_mode.then_some("reorder-mode-active"),
+        props.is_reorder_origin.then_some("reorder-origin")
     );
     
     html! {
@@ -92,23 +98,9 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                     </div>
                 </div>
                 
-                // Botones de acción (solo cuando está seleccionado)
-                if props.is_selected {
+                // Botones de acción (solo cuando está seleccionado y NO en modo reordenar)
+                if props.is_selected && !props.reorder_mode {
                     <div class="package-actions">
-                        // Reorder button
-                        <button
-                            class="btn-reorder-mode"
-                            onclick={{
-                                // TODO: Implementar modo reordenar
-                                Callback::from(move |e: MouseEvent| {
-                                    e.stop_propagation();
-                                    log::info!("🔄 Modo reordenar activado para paquete {}", index);
-                                })
-                            }}
-                        >
-                            {"reordenar"}
-                        </button>
-                        
                         // Navigate button
                         <button
                             class="btn-navigate"

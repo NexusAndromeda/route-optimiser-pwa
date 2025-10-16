@@ -15,6 +15,10 @@ pub struct UsePackagesHandle {
     pub animations: UseStateHandle<HashMap<usize, String>>,
     pub expanded_groups: UseStateHandle<Vec<String>>, // IDs de grupos expandidos
     
+    // Reorder mode states
+    pub reorder_mode: UseStateHandle<bool>, // Modo reordenar activado/desactivado
+    pub reorder_origin: UseStateHandle<Option<usize>>, // Primer paquete seleccionado para swap
+    
     // Callbacks
     pub refresh: Callback<MouseEvent>,
     pub optimize: Callback<MouseEvent>,
@@ -22,6 +26,7 @@ pub struct UsePackagesHandle {
     pub reorder: Callback<(usize, String)>,
     pub update_package: Callback<(String, f64, f64, String)>,
     pub toggle_group: Callback<String>, // Toggle expand/collapse de grupo
+    pub toggle_reorder_mode: Callback<()>, // Toggle modo reordenar
 }
 
 #[hook]
@@ -33,6 +38,10 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
     let selected_index = use_state(|| None::<usize>);
     let animations = use_state(|| HashMap::<usize, String>::new());
     let expanded_groups = use_state(|| Vec::<String>::new());
+    
+    // Reorder mode states
+    let reorder_mode = use_state(|| false);
+    let reorder_origin = use_state(|| None::<usize>);
     
     // Load packages on login
     {
@@ -155,13 +164,73 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         })
     };
     
-    // Select package
+    // Select package (ahora maneja modo reordenar)
     let select_package = {
         let selected_index = selected_index.clone();
+        let reorder_mode = reorder_mode.clone();
+        let reorder_origin = reorder_origin.clone();
+        let packages = packages.clone();
+        let animations = animations.clone();
+        
         Callback::from(move |index: usize| {
             log::info!("📍 use_packages: Seleccionando paquete index {}", index);
-            selected_index.set(Some(index));
-            log::info!("✅ Paquete {} seleccionado", index);
+            
+            // Si estamos en modo reordenar
+            if *reorder_mode {
+                if let Some(origin_idx) = *reorder_origin {
+                    // Ya tenemos un origen, hacer swap
+                    if origin_idx != index {
+                        log::info!("🔄 Swap: paquete {} ↔ paquete {}", origin_idx, index);
+                        
+                        let mut pkgs = (*packages).clone();
+                        pkgs.swap(origin_idx, index);
+                        
+                        // Animaciones
+                        let mut anims = (*animations).clone();
+                        if origin_idx < index {
+                            anims.insert(origin_idx, "moving-down".to_string());
+                            anims.insert(index, "moving-up".to_string());
+                        } else {
+                            anims.insert(origin_idx, "moving-up".to_string());
+                            anims.insert(index, "moving-down".to_string());
+                        }
+                        animations.set(anims.clone());
+                        
+                        // Actualizar paquetes
+                        packages.set(pkgs);
+                        
+                        // Limpiar animaciones después de 300ms
+                        let animations_clear = animations.clone();
+                        Timeout::new(300, move || {
+                            let mut anims = (*animations_clear).clone();
+                            anims.insert(origin_idx, "moved".to_string());
+                            anims.insert(index, "moved".to_string());
+                            animations_clear.set(anims);
+                            
+                            Timeout::new(500, move || {
+                                animations_clear.set(HashMap::new());
+                            }).forget();
+                        }).forget();
+                        
+                        // Resetear origen
+                        reorder_origin.set(None);
+                        selected_index.set(Some(index));
+                    } else {
+                        // Mismo paquete, deseleccionar origen
+                        log::info!("❌ Mismo paquete, cancelando origen");
+                        reorder_origin.set(None);
+                    }
+                } else {
+                    // Primer paquete seleccionado, marcar como origen
+                    log::info!("✅ Paquete {} marcado como origen", index);
+                    reorder_origin.set(Some(index));
+                    selected_index.set(Some(index));
+                }
+            } else {
+                // Modo normal, solo seleccionar
+                selected_index.set(Some(index));
+                log::info!("✅ Paquete {} seleccionado", index);
+            }
         })
     };
     
@@ -291,6 +360,25 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         })
     };
     
+    // Toggle reorder mode
+    let toggle_reorder_mode = {
+        let reorder_mode = reorder_mode.clone();
+        let reorder_origin = reorder_origin.clone();
+        
+        Callback::from(move |_| {
+            let new_mode = !*reorder_mode;
+            reorder_mode.set(new_mode);
+            
+            // Si desactivamos el modo, limpiar origen
+            if !new_mode {
+                reorder_origin.set(None);
+                log::info!("🔄 Modo reordenar DESACTIVADO");
+            } else {
+                log::info!("🔄 Modo reordenar ACTIVADO");
+            }
+        })
+    };
+    
     UsePackagesHandle {
         packages,
         loading,
@@ -298,12 +386,15 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         selected_index,
         animations,
         expanded_groups,
+        reorder_mode,
+        reorder_origin,
         refresh,
         optimize,
         select_package,
         reorder,
         update_package,
         toggle_group,
+        toggle_reorder_mode,
     }
 }
 
