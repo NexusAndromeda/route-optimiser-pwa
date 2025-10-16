@@ -112,7 +112,7 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                 })
                             }}
                         >
-                            {"ir"}
+                            {get_text("go")}
                         </button>
                     </div>
                 }

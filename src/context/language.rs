@@ -87,6 +87,12 @@ impl LanguageContext {
                 texts.insert("language".to_string(), "Langue".to_string());
                 texts.insert("french".to_string(), "Français".to_string());
                 texts.insert("spanish".to_string(), "Español".to_string());
+                texts.insert("edit_mode".to_string(), "Éditer".to_string());
+                texts.insert("color_codes".to_string(), "Code couleurs".to_string());
+                texts.insert("ready_to_load".to_string(), "Prêt à charger".to_string());
+                texts.insert("in_transit".to_string(), "En route".to_string());
+                texts.insert("delivered_status".to_string(), "Livré".to_string());
+                texts.insert("not_delivered".to_string(), "Non livré".to_string());
                 
                 // Geocoding
                 texts.insert("geocoding_prompt".to_string(), "Modifier l'adresse pour géocodage:\n\nEntrez la nouvelle adresse complète:".to_string());
@@ -140,6 +146,12 @@ impl LanguageContext {
                 texts.insert("language".to_string(), "Idioma".to_string());
                 texts.insert("french".to_string(), "Français".to_string());
                 texts.insert("spanish".to_string(), "Español".to_string());
+                texts.insert("edit_mode".to_string(), "Editar".to_string());
+                texts.insert("color_codes".to_string(), "Código de colores".to_string());
+                texts.insert("ready_to_load".to_string(), "Listo para cargar".to_string());
+                texts.insert("in_transit".to_string(), "En ruta".to_string());
+                texts.insert("delivered_status".to_string(), "Entregado".to_string());
+                texts.insert("not_delivered".to_string(), "No entregado".to_string());
                 
                 // Geocoding
                 texts.insert("geocoding_prompt".to_string(), "Modificar dirección para geocodificación:\n\nIngrese la nueva dirección completa:".to_string());

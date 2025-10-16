@@ -59,7 +59,7 @@ pub fn settings_popup(props: &SettingsPopupProps) -> Html {
                     
                     // Reorder mode toggle
                     <div class="reorder-mode-section">
-                        <span class="reorder-mode-label">{"Editar"}</span>
+                        <span class="reorder-mode-label">{get_text("edit_mode")}</span>
                         <label class="toggle-switch">
                             <input
                                 type="checkbox"
@@ -79,23 +79,23 @@ pub fn settings_popup(props: &SettingsPopupProps) -> Html {
                     
                     // Color codes section
                     <div class="color-codes-section">
-                        <div class="color-codes-label">{"🎨 Código de Colores"}</div>
+                        <div class="color-codes-label">{format!("🎨 {}", get_text("color_codes"))}</div>
                         <div class="color-codes-list">
                             <div class="color-code-item">
                                 <div class="color-indicator yellow"></div>
-                                <span class="color-description">{"Listo para cargar"}</span>
+                                <span class="color-description">{get_text("ready_to_load")}</span>
                             </div>
                             <div class="color-code-item">
                                 <div class="color-indicator normal"></div>
-                                <span class="color-description">{"En ruta"}</span>
+                                <span class="color-description">{get_text("in_transit")}</span>
                             </div>
                             <div class="color-code-item">
                                 <div class="color-indicator green"></div>
-                                <span class="color-description">{"Entregado"}</span>
+                                <span class="color-description">{get_text("delivered_status")}</span>
                             </div>
                             <div class="color-code-item">
                                 <div class="color-indicator red"></div>
-                                <span class="color-description">{"No entregado"}</span>
+                                <span class="color-description">{get_text("not_delivered")}</span>
                             </div>
                         </div>
                     </div>
