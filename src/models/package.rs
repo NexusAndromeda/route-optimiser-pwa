@@ -41,5 +41,7 @@ pub struct PackageRequest {
 pub struct PackagesCache {
     pub packages: Vec<Package>,
     pub timestamp: String,
+    #[serde(default)]
+    pub version: u32, // Version del cache para invalidar cuando cambia la estructura
 }
 

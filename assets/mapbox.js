@@ -241,6 +241,7 @@ window.addPackagesToMap = function(packagesJson) {
                         id: pkg.id,
                         index: index,
                         status: pkg.status,
+                        code_statut_article: pkg.code_statut_article || null,
                         recipient: pkg.recipient,
                         address: pkg.address,
                         isSelected: selectedPackageIndex === index
@@ -264,14 +265,20 @@ window.addPackagesToMap = function(packagesJson) {
                 'circle-radius': [
                     'case',
                     ['get', 'isSelected'], 12, // Selected: larger
-                    ['==', ['get', 'status'], 'delivered'], 8, // Delivered: smaller
-                    8 // Pending: smaller
+                    8 // Default: smaller
                 ],
                 'circle-color': [
                     'case',
                     ['get', 'isSelected'], '#FFD700', // Selected: gold
-                    ['==', ['get', 'status'], 'delivered'], '#10B981', // Delivered: green
-                    '#3B82F6' // Pending: blue
+                    // STATUT_LIVRER_* → Verde
+                    ['has', 'code_statut_article'], [
+                        'case',
+                        ['in', 'STATUT_LIVRER', ['get', 'code_statut_article']], '#10B981', // Verde - Entregado
+                        ['in', 'STATUT_NONLIV', ['get', 'code_statut_article']], '#EF4444', // Rojo - No entregado
+                        ['==', ['get', 'code_statut_article'], 'STATUT_RECEPTIONNER'], '#FBBF24', // Amarillo - Recepcionado
+                        '#3B82F6' // Azul - STATUT_CHARGER o default
+                    ],
+                    '#3B82F6' // Default: blue (si no tiene code_statut_article)
                 ],
                 'circle-stroke-width': [
                     'case',

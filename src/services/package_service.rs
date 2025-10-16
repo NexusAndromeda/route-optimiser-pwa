@@ -26,18 +26,17 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                         let cache_age = now.signed_duration_since(cache_time.with_timezone(&chrono::Utc));
                         let cache_age_minutes = cache_age.num_minutes();
                         
-                        // Verificar si el cache tiene el campo code_statut_article
-                        let has_code_statut = cache.packages.first()
-                            .map(|p| p.code_statut_article.is_some())
-                            .unwrap_or(false);
+                        // Verificar versión del cache (v2 tiene code_statut_article)
+                        let cache_version = cache.version;
+                        let is_valid_version = cache_version >= 2;
                         
-                        // Cache valid for configured duration AND has code_statut_article
-                        if cache_age_minutes < CACHE_DURATION_MINUTES && has_code_statut {
-                            log::info!("📦 Usando paquetes del cache ({} min de antigüedad)", cache_age_minutes);
+                        // Cache valid for configured duration AND correct version
+                        if cache_age_minutes < CACHE_DURATION_MINUTES && is_valid_version {
+                            log::info!("📦 Usando paquetes del cache v{} ({} min de antigüedad)", cache_version, cache_age_minutes);
                             return Ok(cache.packages);
                         } else {
-                            if !has_code_statut {
-                                log::info!("📦 Cache sin code_statut_article, obteniendo datos frescos...");
+                            if !is_valid_version {
+                                log::info!("📦 Cache v{} obsoleto, obteniendo datos frescos...", cache_version);
                             } else {
                                 log::info!("📦 Cache expirado, obteniendo datos frescos...");
                             }
@@ -194,10 +193,11 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                             let cache = PackagesCache {
                                 packages: packages.clone(),
                                 timestamp: chrono::Utc::now().to_rfc3339(),
+                                version: 2, // Version con code_statut_article
                             };
                             if let Ok(cache_json) = serde_json::to_string(&cache) {
                                 let _ = storage.set_item(&cache_key, &cache_json);
-                                log::info!("💾 Paquetes guardados en cache");
+                                log::info!("💾 Paquetes guardados en cache (v2)");
                             }
                         }
                         
@@ -213,10 +213,11 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                     let cache = PackagesCache {
                         packages: all_packages.clone(),
                         timestamp: chrono::Utc::now().to_rfc3339(),
+                        version: 2, // Version con code_statut_article
                     };
                     if let Ok(cache_json) = serde_json::to_string(&cache) {
                         let _ = storage.set_item(&cache_key, &cache_json);
-                        log::info!("💾 Paquetes guardados en cache");
+                        log::info!("💾 Paquetes guardados en cache (v2)");
                     }
                 }
                 
