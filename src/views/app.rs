@@ -20,18 +20,21 @@ pub fn app() -> Html {
     let show_bal_modal = use_state(|| false);
     let show_settings = use_state(|| false);
     
-    // Initialize map when logged in
+    // Initialize map when user logs in (only if not already initialized)
     {
-        let map_init = map.initialize_map.clone();
-        let map_initialized = map.state.initialized;
         let is_logged_in = auth.state.is_logged_in;
+        let map_initialized = map.state.initialized;
+        let map_init = map.initialize_map.clone();
         
-        use_effect_with((is_logged_in, map_initialized), move |(logged_in, initialized)| {
-            if *logged_in && !*initialized {
+        use_effect_with(is_logged_in, move |logged_in| {
+            if *logged_in && !map_initialized {
                 log::info!("🗺️ Preparando mapa...");
-                // Delay más largo para asegurar que el contenedor esté listo
-                Timeout::new(500, move || {
-                    map_init.emit(());
+                Timeout::new(100, move || {
+                    let map_init = map_init.clone();
+                    // Delay más largo para asegurar que el contenedor esté listo
+                    Timeout::new(500, move || {
+                        map_init.emit(());
+                    }).forget();
                 }).forget();
             }
             || ()
