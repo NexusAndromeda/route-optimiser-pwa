@@ -178,21 +178,36 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
             // Si estamos en modo reordenar
             if *reorder_mode {
                 if let Some(origin_idx) = *reorder_origin {
-                    // Ya tenemos un origen, hacer swap
+                    // Ya tenemos un origen, mover (insert) el paquete origen a la posición del segundo
                     if origin_idx != index {
-                        log::info!("🔄 Swap: paquete {} ↔ paquete {}", origin_idx, index);
+                        log::info!("🔄 Moviendo paquete {} → posición {}", origin_idx, index);
                         
                         let mut pkgs = (*packages).clone();
-                        pkgs.swap(origin_idx, index);
+                        
+                        // Remover el paquete origen
+                        let package_to_move = pkgs.remove(origin_idx);
+                        
+                        // Insertarlo en la nueva posición
+                        // Si origin_idx < index, el índice se desplaza -1 después de remove
+                        let insert_idx = if origin_idx < index { index } else { index };
+                        pkgs.insert(insert_idx, package_to_move);
                         
                         // Animaciones
                         let mut anims = (*animations).clone();
                         if origin_idx < index {
+                            // Moviendo hacia abajo
                             anims.insert(origin_idx, "moving-down".to_string());
-                            anims.insert(index, "moving-up".to_string());
+                            // Los paquetes entre origin e index se mueven hacia arriba
+                            for i in (origin_idx + 1)..=index {
+                                anims.insert(i, "moving-up".to_string());
+                            }
                         } else {
+                            // Moviendo hacia arriba
                             anims.insert(origin_idx, "moving-up".to_string());
-                            anims.insert(index, "moving-down".to_string());
+                            // Los paquetes entre index y origin se mueven hacia abajo
+                            for i in index..origin_idx {
+                                anims.insert(i, "moving-down".to_string());
+                            }
                         }
                         animations.set(anims.clone());
                         
@@ -203,8 +218,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                         let animations_clear = animations.clone();
                         Timeout::new(300, move || {
                             let mut anims = (*animations_clear).clone();
-                            anims.insert(origin_idx, "moved".to_string());
-                            anims.insert(index, "moved".to_string());
+                            anims.insert(insert_idx, "moved".to_string());
                             animations_clear.set(anims);
                             
                             Timeout::new(500, move || {
@@ -212,9 +226,9 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                             }).forget();
                         }).forget();
                         
-                        // Resetear origen
+                        // Resetear origen y seleccionar el paquete en su nueva posición
                         reorder_origin.set(None);
-                        selected_index.set(Some(index));
+                        selected_index.set(Some(insert_idx));
                     } else {
                         // Mismo paquete, deseleccionar origen
                         log::info!("❌ Mismo paquete, cancelando origen");
