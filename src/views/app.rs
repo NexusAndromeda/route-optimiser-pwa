@@ -1,5 +1,5 @@
 use yew::prelude::*;
-use crate::hooks::{use_auth, use_packages, use_map, use_sheet, use_map_selection_listener, clear_packages_cache};
+use crate::hooks::{use_auth, use_packages, use_map, use_sheet, use_map_selection_listener, clear_packages_cache, use_auto_sync};
 use crate::views::auth::{LoginView, RegisterView, CompanySelector};
 use crate::views::packages::{PackageList, PackageDetails};
 use crate::views::shared::{SettingsPopup, BalModal};
@@ -13,6 +13,16 @@ pub fn app() -> Html {
     let packages_hook = use_packages(auth.state.login_data.clone());
     let map = use_map();
     let sheet = use_sheet();
+    
+    // Detectar actividad del usuario para ajustar frecuencia de sync
+    let user_active = use_state(|| false);
+    
+    // Auto-sincronización
+    let _auto_sync = use_auto_sync(
+        auth.state.login_data.clone(),
+        packages_hook.packages.clone(),
+        *user_active
+    );
     
     // UI state
     let show_details = use_state(|| false);
@@ -118,9 +128,18 @@ pub fn app() -> Html {
     let on_show_details = {
         let show_details = show_details.clone();
         let details_package_index = details_package_index.clone();
+        let user_active = user_active.clone();
+        
         Callback::from(move |index: usize| {
             details_package_index.set(Some(index));
             show_details.set(true);
+            user_active.set(true);
+            
+            // Resetear actividad después de 2 minutos
+            let user_active = user_active.clone();
+            gloo_timers::callback::Timeout::new(120_000, move || {
+                user_active.set(false);
+            }).forget();
         })
     };
     

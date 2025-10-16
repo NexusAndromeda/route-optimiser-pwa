@@ -4,6 +4,7 @@ pub mod use_packages;
 pub mod use_map;
 pub mod use_sheet;
 pub mod use_grouped_packages;
+pub mod use_auto_sync;
 
 pub use use_auth::*;
 pub use use_auth_dual::use_auth_dual;
@@ -11,4 +12,5 @@ pub use use_packages::*;
 pub use use_map::*;
 pub use use_sheet::*;
 pub use use_grouped_packages::*;
+pub use use_auto_sync::*;
 
