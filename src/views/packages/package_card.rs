@@ -133,22 +133,40 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                                 <strong class="group-package-customer">{&pkg.customer_name}</strong>
                                             </div>
                                             <div class="group-package-details">
-                                                <div class="group-package-tracking">
-                                                    <span class="tracking-label">{"📦 Tracking:"}</span>
-                                                    <span class="tracking-value">{&pkg.tracking}</span>
+                                                <div class="group-package-info">
+                                                    <div class="group-package-tracking">
+                                                        <span class="tracking-label">{"📦 Tracking:"}</span>
+                                                        <span class="tracking-value">{&pkg.tracking}</span>
+                                                    </div>
+                                                    if let Some(phone) = &pkg.phone_number {
+                                                        <div class="group-package-phone">
+                                                            <span class="phone-label">{"📞"}</span>
+                                                            <span class="phone-value">{phone}</span>
+                                                        </div>
+                                                    }
+                                                    if let Some(indication) = &pkg.customer_indication {
+                                                        <div class="group-package-indication">
+                                                            <span class="indication-label">{"💬"}</span>
+                                                            <span class="indication-value">{indication}</span>
+                                                        </div>
+                                                    }
                                                 </div>
-                                                if let Some(phone) = &pkg.phone_number {
-                                                    <div class="group-package-phone">
-                                                        <span class="phone-label">{"📞"}</span>
-                                                        <span class="phone-value">{phone}</span>
-                                                    </div>
-                                                }
-                                                if let Some(indication) = &pkg.customer_indication {
-                                                    <div class="group-package-indication">
-                                                        <span class="indication-label">{"💬"}</span>
-                                                        <span class="indication-value">{indication}</span>
-                                                    </div>
-                                                }
+                                                // Botón Detalles para cada paquete del grupo
+                                                <button
+                                                    class="btn-group-package-details"
+                                                    onclick={{
+                                                        let tracking = pkg.tracking.clone();
+                                                        let on_show_details = props.on_show_details.clone();
+                                                        Callback::from(move |e: MouseEvent| {
+                                                            e.stop_propagation();
+                                                            // Buscar el índice del paquete por tracking
+                                                            // Por ahora, emitir el índice del grupo
+                                                            on_show_details.emit(index);
+                                                        })
+                                                    }}
+                                                >
+                                                    {"i"}
+                                                </button>
                                             </div>
                                         </div>
                                         // Separador entre paquetes (excepto el último)
@@ -166,7 +184,7 @@ pub fn package_card(props: &PackageCardProps) -> Html {
             // Botón expandir discreto para grupos (solo cuando está seleccionado)
             if props.package.is_group && props.is_selected {
                 <div 
-                    class="group-expand-handle"
+                    class={classes!("group-expand-handle", if !props.is_expanded { Some("pulse") } else { None })}
                     onclick={{
                         let package_id = props.package.id.clone();
                         let on_toggle = props.on_toggle_group.clone();

@@ -32,6 +32,10 @@ pub struct GroupPackageInfo {
     pub customer_name: String,
     pub phone_number: Option<String>,
     pub customer_indication: Option<String>,
+    #[serde(default)]
+    pub code_statut_article: Option<String>,
+    #[serde(default)]
+    pub is_problematic: bool,
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]

@@ -336,6 +336,12 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
                         customer_indication: pkg.get("customer_indication")
                             .and_then(|i| i.as_str())
                             .map(|s| s.to_string()),
+                        code_statut_article: pkg.get("code_statut_article")
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_string()),
+                        is_problematic: pkg.get("is_problematic")
+                            .and_then(|p| p.as_bool())
+                            .unwrap_or(false),
                     });
                 }
             }
