@@ -323,15 +323,10 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
                             .and_then(|t| t.as_str())
                             .unwrap_or("N/A")
                             .to_string(),
-                        customer_name: {
-                            let name = pkg.get("customer_name")
-                                .and_then(|n| n.as_str())
-                                .unwrap_or("Cliente desconocido");
-                            log::info!("👤 Package {} customer_name: {}", 
-                                pkg.get("tracking").and_then(|t| t.as_str()).unwrap_or("?"), 
-                                name);
-                            name.to_string()
-                        },
+                        customer_name: pkg.get("customer_name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("Cliente desconocido")
+                            .to_string(),
                         phone_number: pkg.get("phone_number")
                             .and_then(|p| p.as_str())
                             .map(|s| s.to_string()),
