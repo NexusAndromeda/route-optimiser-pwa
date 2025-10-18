@@ -312,14 +312,6 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
     
     if let Some(customers) = group.get("customers").and_then(|c| c.as_array()) {
         for customer in customers {
-            let customer_name = customer.get("customer_name")
-                .and_then(|n| n.as_str())
-                .unwrap_or("Cliente desconocido")
-                .to_string();
-            let phone_number = customer.get("phone_number")
-                .and_then(|p| p.as_str())
-                .map(|s| s.to_string());
-            
             if let Some(packages) = customer.get("packages").and_then(|p| p.as_array()) {
                 for pkg in packages {
                     group_packages_list.push(GroupPackageInfo {
@@ -331,8 +323,18 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
                             .and_then(|t| t.as_str())
                             .unwrap_or("N/A")
                             .to_string(),
-                        customer_name: customer_name.clone(),
-                        phone_number: phone_number.clone(),
+                        customer_name: {
+                            let name = pkg.get("customer_name")
+                                .and_then(|n| n.as_str())
+                                .unwrap_or("Cliente desconocido");
+                            log::info!("👤 Package {} customer_name: {}", 
+                                pkg.get("tracking").and_then(|t| t.as_str()).unwrap_or("?"), 
+                                name);
+                            name.to_string()
+                        },
+                        phone_number: pkg.get("phone_number")
+                            .and_then(|p| p.as_str())
+                            .map(|s| s.to_string()),
                         customer_indication: pkg.get("customer_indication")
                             .and_then(|i| i.as_str())
                             .map(|s| s.to_string()),
@@ -353,7 +355,7 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
             .and_then(|i| i.as_str())
             .unwrap_or(&format!("group-{}", index))
             .to_string(),
-        recipient: format!("{} paquetes", total_packages),
+        recipient: format!("Groupe ({})", total_packages),
         address: group.get("official_label")
             .and_then(|a| a.as_str())
             .unwrap_or("Dirección no disponible")

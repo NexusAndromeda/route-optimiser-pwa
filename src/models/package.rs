@@ -38,6 +38,27 @@ pub struct GroupPackageInfo {
     pub is_problematic: bool,
 }
 
+impl GroupPackageInfo {
+    /// Convierte GroupPackageInfo a Package (para mostrar detalles)
+    pub fn to_package(&self, group_address: &str, group_coords: Option<[f64; 2]>) -> Package {
+        Package {
+            id: self.tracking.clone(),
+            recipient: self.customer_name.clone(),
+            address: group_address.to_string(),
+            status: "pending".to_string(),
+            code_statut_article: self.code_statut_article.clone(),
+            coords: group_coords,
+            phone: self.phone_number.clone(),
+            phone_fixed: None,
+            instructions: self.customer_indication.clone(),
+            is_group: false,
+            total_packages: None,
+            group_packages: None,
+            is_problematic: self.is_problematic,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct PackageRequest {
     pub matricule: String,

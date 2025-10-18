@@ -26,6 +26,8 @@ pub struct PackageListProps {
     #[prop_or_default]
     pub on_toggle_group: Option<Callback<String>>,
     #[prop_or_default]
+    pub on_show_package_details: Option<Callback<Package>>,
+    #[prop_or_default]
     pub reorder_mode: bool,
     #[prop_or_default]
     pub reorder_origin: Option<usize>,
@@ -101,6 +103,7 @@ pub fn package_list(props: &PackageListProps) -> Html {
                                             on_navigate={props.on_navigate.clone()}
                                             on_reorder={props.on_reorder.clone()}
                                             on_toggle_group={props.on_toggle_group.clone()}
+                                            on_show_package_details={props.on_show_package_details.clone()}
                                             total_packages={props.packages.len()}
                                             animation_class={animation_class}
                                             reorder_mode={props.reorder_mode}

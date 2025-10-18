@@ -148,7 +148,7 @@ pub fn package_details(props: &PackageDetailsProps) -> Html {
             <div class="modal-overlay" onclick={Callback::from(move |_| close_overlay.emit(()))}></div>
             <div class="modal-content" onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}>
                 <div class="modal-header">
-                    <h2>{format!("Colis #{}", props.package.id)}</h2>
+                    <h2>{format!("Colis {}", props.package.id)}</h2>
                     <button class="btn-close" onclick={Callback::from(move |_| close.emit(()))}>
                         {"✕"}
                     </button>

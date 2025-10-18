@@ -38,6 +38,8 @@ pub struct PackageCardProps {
     #[prop_or_default]
     pub on_toggle_group: Option<Callback<String>>,
     #[prop_or_default]
+    pub on_show_package_details: Option<Callback<Package>>,
+    #[prop_or_default]
     pub reorder_mode: bool,
     #[prop_or_default]
     pub is_reorder_origin: bool,
@@ -73,19 +75,21 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                 <div class={classes!("package-number", format!("package-number-{}", status_color))}>
                     {index + 1}
                 </div>
-                // Info button (detalles)
-                <button
-                    class="btn-info"
-                    onclick={{
-                        let on_show_details = props.on_show_details.clone();
-                        Callback::from(move |e: MouseEvent| {
-                            e.stop_propagation();
-                            on_show_details.emit(index);
-                        })
-                    }}
-                >
-                    {"i"}
-                </button>
+                // Info button (detalles) - solo para singles, NO para grupos
+                if !props.package.is_group {
+                    <button
+                        class="btn-info"
+                        onclick={{
+                            let on_show_details = props.on_show_details.clone();
+                            Callback::from(move |e: MouseEvent| {
+                                e.stop_propagation();
+                                on_show_details.emit(index);
+                            })
+                        }}
+                    >
+                        {"i"}
+                    </button>
+                }
             </div>
             
             // Contenido principal: cliente/dirección + botones
@@ -155,13 +159,17 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                                 <button
                                                     class="btn-group-package-details"
                                                     onclick={{
-                                                        let tracking = pkg.tracking.clone();
-                                                        let on_show_details = props.on_show_details.clone();
+                                                        let pkg_clone = pkg.clone();
+                                                        let group_address = props.package.address.clone();
+                                                        let group_coords = props.package.coords;
+                                                        let on_show_package_details = props.on_show_package_details.clone();
                                                         Callback::from(move |e: MouseEvent| {
                                                             e.stop_propagation();
-                                                            // Buscar el índice del paquete por tracking
-                                                            // Por ahora, emitir el índice del grupo
-                                                            on_show_details.emit(index);
+                                                            if let Some(callback) = &on_show_package_details {
+                                                                // Crear Package completo desde GroupPackageInfo
+                                                                let package = pkg_clone.to_package(&group_address, group_coords);
+                                                                callback.emit(package);
+                                                            }
                                                         })
                                                     }}
                                                 >

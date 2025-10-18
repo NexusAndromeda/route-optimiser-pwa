@@ -4,6 +4,7 @@ use crate::views::auth::{LoginView, RegisterView, CompanySelector};
 use crate::views::packages::{PackageList, PackageDetails};
 use crate::views::shared::{SettingsPopup, BalModal};
 use crate::context::get_text;
+use crate::models::Package;
 use gloo_timers::callback::Timeout;
 
 #[function_component(App)]
@@ -17,6 +18,7 @@ pub fn app() -> Html {
     // UI state
     let show_details = use_state(|| false);
     let details_package_index = use_state(|| None::<usize>);
+    let details_package = use_state(|| None::<Package>);
     let show_bal_modal = use_state(|| false);
     let show_settings = use_state(|| false);
     
@@ -108,12 +110,26 @@ pub fn app() -> Html {
         use_map_selection_listener(on_map_select);
     }
     
-    // Show details handler
+    // Show details handler (para singles por índice)
     let on_show_details = {
         let show_details = show_details.clone();
         let details_package_index = details_package_index.clone();
+        let details_package = details_package.clone();
         Callback::from(move |index: usize| {
             details_package_index.set(Some(index));
+            details_package.set(None); // Limpiar paquete directo
+            show_details.set(true);
+        })
+    };
+    
+    // Show details handler (para paquetes individuales de grupos)
+    let on_show_package_details = {
+        let show_details = show_details.clone();
+        let details_package_index = details_package_index.clone();
+        let details_package = details_package.clone();
+        Callback::from(move |package: Package| {
+            details_package.set(Some(package));
+            details_package_index.set(None); // Limpiar índice
             show_details.set(true);
         })
     };
@@ -245,6 +261,7 @@ pub fn app() -> Html {
                         loading={*packages_hook.loading}
                         expanded_groups={(*packages_hook.expanded_groups).clone()}
                         on_toggle_group={Some(packages_hook.toggle_group.clone())}
+                        on_show_package_details={Some(on_show_package_details)}
                         reorder_mode={*packages_hook.reorder_mode}
                         reorder_origin={*packages_hook.reorder_origin}
                     />
@@ -253,29 +270,34 @@ pub fn app() -> Html {
             
             {
                 if *show_details {
-                    if let Some(idx) = *details_package_index {
-                        if let Some(pkg) = packages_hook.packages.get(idx) {
-                            html! {
-                                <PackageDetails
-                                    package={pkg.clone()}
-                                    on_close={Callback::from({
-                                        let show_details = show_details.clone();
-                                        move |_| show_details.set(false)
-                                    })}
-                                    on_edit_bal={Callback::from({
-                                        let show_bal_modal = show_bal_modal.clone();
-                                        let show_details = show_details.clone();
-                                        move |_| {
-                                            show_details.set(false);
-                                            show_bal_modal.set(true);
-                                        }
-                                    })}
-                                    on_update_package={packages_hook.update_package.clone()}
-                                    on_mark_problematic={packages_hook.mark_problematic.clone()}
-                                />
-                            }
-                        } else {
-                            html! {}
+                    // Prioridad: paquete directo (de grupo) o por índice (single)
+                    let package_to_show = if let Some(pkg) = (*details_package).clone() {
+                        Some(pkg)
+                    } else if let Some(idx) = *details_package_index {
+                        packages_hook.packages.get(idx).cloned()
+                    } else {
+                        None
+                    };
+                    
+                    if let Some(pkg) = package_to_show {
+                        html! {
+                            <PackageDetails
+                                package={pkg}
+                                on_close={Callback::from({
+                                    let show_details = show_details.clone();
+                                    move |_| show_details.set(false)
+                                })}
+                                on_edit_bal={Callback::from({
+                                    let show_bal_modal = show_bal_modal.clone();
+                                    let show_details = show_details.clone();
+                                    move |_| {
+                                        show_details.set(false);
+                                        show_bal_modal.set(true);
+                                    }
+                                })}
+                                on_update_package={packages_hook.update_package.clone()}
+                                on_mark_problematic={packages_hook.mark_problematic.clone()}
+                            />
                         }
                     } else {
                         html! {}
