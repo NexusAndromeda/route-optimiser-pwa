@@ -279,7 +279,12 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
             single.get("latitude").and_then(|l| l.as_f64()),
             single.get("longitude").and_then(|l| l.as_f64())
         ) {
-            Some([lng, lat])
+            // No usar coordenadas inválidas (0,0) o problemáticos
+            if lat != 0.0 && lng != 0.0 {
+                Some([lng, lat])
+            } else {
+                None
+            }
         } else {
             None
         },
