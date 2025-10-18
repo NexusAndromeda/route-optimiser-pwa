@@ -352,8 +352,19 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
             if let Some(pkg) = pkgs.iter_mut().find(|p| p.id == id) {
                 pkg.address = new_address;
                 pkg.coords = Some([lng, lat]);
-                log::info!("✅ Paquete {} actualizado en estado", id);
+                pkg.is_problematic = false; // Ya no es problemático si se geocodificó correctamente
+                log::info!("✅ Paquete {} actualizado y removido de problemáticos", id);
             }
+            
+            // Reordenar: paquetes problemáticos al final
+            pkgs.sort_by(|a, b| {
+                match (a.is_problematic, b.is_problematic) {
+                    (true, false) => std::cmp::Ordering::Greater,  // a va después de b
+                    (false, true) => std::cmp::Ordering::Less,     // a va antes de b
+                    _ => std::cmp::Ordering::Equal,                // mantener orden original
+                }
+            });
+            
             packages.set(pkgs);
         })
     };

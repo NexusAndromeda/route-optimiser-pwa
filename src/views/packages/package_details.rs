@@ -10,6 +10,9 @@ extern "C" {
     #[wasm_bindgen(js_name = updatePackageCoordinates)]
     fn update_package_coordinates(package_id: &str, latitude: f64, longitude: f64) -> bool;
     
+    #[wasm_bindgen(js_name = addPackageToMap)]
+    fn add_package_to_map(package_id: &str, latitude: f64, longitude: f64, address: &str, code_statut_article: Option<String>) -> bool;
+    
     #[wasm_bindgen(js_name = removePackageFromMap)]
     fn remove_package_from_map(package_id: &str) -> bool;
 }
@@ -34,6 +37,7 @@ pub fn package_details(props: &PackageDetailsProps) -> Html {
         let package_id = package_id.clone();
         let on_update = props.on_update_package.clone();
         let on_mark_problematic = props.on_mark_problematic.clone();
+        let code_statut = props.package.code_statut_article.clone();
         Callback::from(move |e: MouseEvent| {
             e.stop_propagation();
             if let Some(win) = window() {
@@ -57,6 +61,7 @@ pub fn package_details(props: &PackageDetailsProps) -> Html {
                         // Geocodificar la nueva dirección
                         let package_id = package_id.clone();
                         let on_update = on_update.clone();
+                        let code_statut_clone = code_statut.clone();
                         log::info!("🌍 Géocodage demandé pour paquete {}: {}", package_id, trimmed_address);
                         
                         // Llamar al endpoint de geocodificación
@@ -72,14 +77,14 @@ pub fn package_details(props: &PackageDetailsProps) -> Html {
                                             formatted, lat, lng
                                         );
                                         
-                                        // Actualizar el paquete en el mapa
-                                        if update_package_coordinates(&package_id, lat, lng) {
-                                            log::info!("📍 Coordonnées mises à jour sur la carte: {}", package_id);
+                                        // Agregar/actualizar el paquete en el mapa
+                                        if add_package_to_map(&package_id, lat, lng, &formatted, code_statut_clone) {
+                                            log::info!("📍 Package ajouté/mis à jour sur la carte: {}", package_id);
                                             
                                             // Actualizar el paquete en el estado de Yew
                                             on_update.emit((package_id.clone(), lat, lng, formatted));
                                         } else {
-                                            log::error!("❌ Échec de la mise à jour des coordonnées sur la carte");
+                                            log::error!("❌ Échec de l'ajout du package sur la carte");
                                         }
                                     } else {
                                         log::error!("❌ Géocodage échoué: {}", response.message.clone().unwrap_or_default());

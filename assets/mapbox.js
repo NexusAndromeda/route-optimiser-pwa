@@ -457,6 +457,64 @@ window.updatePackageCoordinates = function(packageId, latitude, longitude) {
     return true;
 };
 
+// Add single package to map (when geocoded from problematic)
+window.addPackageToMap = function(packageId, latitude, longitude, address, code_statut_article) {
+    if (!map) {
+        console.error('❌ Map not initialized');
+        return false;
+    }
+    
+    const source = map.getSource('packages');
+    if (!source) {
+        console.error('❌ Packages source not found');
+        return false;
+    }
+    
+    const data = source._data;
+    if (!data || !data.features) {
+        console.error('❌ No package data found');
+        return false;
+    }
+    
+    // Check if package already exists
+    const existingIndex = data.features.findIndex(f => f.properties.id === packageId);
+    if (existingIndex !== -1) {
+        // Update existing package
+        data.features[existingIndex].geometry.coordinates = [longitude, latitude];
+        data.features[existingIndex].properties.address = address;
+        data.features[existingIndex].properties.code_statut_article = code_statut_article || null;
+        console.log('🔄 Package updated on map:', packageId);
+    } else {
+        // Add new package
+        const newFeature = {
+            type: 'Feature',
+            geometry: {
+                type: 'Point',
+                coordinates: [longitude, latitude]
+            },
+            properties: {
+                id: packageId,
+                address: address,
+                code_statut_article: code_statut_article || null
+            }
+        };
+        data.features.push(newFeature);
+        console.log('➕ Package added to map:', packageId);
+    }
+    
+    // Update the source
+    source.setData(data);
+    
+    // Fly to the package
+    map.flyTo({
+        center: [longitude, latitude],
+        zoom: 15,
+        duration: 1500
+    });
+    
+    return true;
+};
+
 // Remove package from map
 window.removePackageFromMap = function(packageId) {
     if (!map) {
