@@ -1,4 +1,4 @@
-pub mod package;
+mod package;
 mod auth;
 mod optimization;
 

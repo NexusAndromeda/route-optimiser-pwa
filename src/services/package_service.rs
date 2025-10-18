@@ -289,7 +289,9 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
         is_group: false,
         total_packages: None,
         group_packages: None,
-        is_problematic: false,
+        is_problematic: single.get("is_problematic")
+            .and_then(|p| p.as_bool())
+            .unwrap_or(false),
     })
 }
 

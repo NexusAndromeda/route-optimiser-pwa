@@ -99,7 +99,6 @@ pub fn use_auth() -> UseAuthHandle {
                     current_state.selected_company = Some(saved_company);
                     current_state.is_logged_in = true;
                     state.set(current_state);
-                    
                 }
             }
             || ()
