@@ -251,8 +251,9 @@ use crate::models::GroupPackageInfo;
 /// Parsea un single package de la nueva estructura
 fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Package, String> {
     Ok(Package {
-        id: single.get("id")
-            .and_then(|i| i.as_str())
+        id: single.get("tracking")
+            .and_then(|t| t.as_str())
+            .or_else(|| single.get("id").and_then(|i| i.as_str()))
             .unwrap_or(&format!("single-{}", index))
             .to_string(),
         recipient: single.get("customer_name")
