@@ -159,18 +159,27 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                                 <button
                                                     class="btn-group-package-details"
                                                     onclick={{
-                                                        let pkg_clone = pkg.clone();
-                                                        let group_address = props.package.address.clone();
-                                                        let group_coords = props.package.coords;
-                                                        let on_show_package_details = props.on_show_package_details.clone();
-                                                        Callback::from(move |e: MouseEvent| {
-                                                            e.stop_propagation();
-                                                            if let Some(callback) = &on_show_package_details {
-                                                                // Crear Package completo desde GroupPackageInfo
-                                                                let package = pkg_clone.to_package(&group_address, group_coords);
-                                                                callback.emit(package);
-                                                            }
-                                                        })
+                                                    let pkg_clone = pkg.clone();
+                                                    let group_address = props.package.address.clone();
+                                                    let group_coords = props.package.coords;
+                                                    let group_door_code = props.package.door_code.clone();
+                                                    let group_mailbox_access = props.package.has_mailbox_access;
+                                                    let group_driver_notes = props.package.driver_notes.clone();
+                                                    let on_show_package_details = props.on_show_package_details.clone();
+                                                    Callback::from(move |e: MouseEvent| {
+                                                        e.stop_propagation();
+                                                        if let Some(callback) = &on_show_package_details {
+                                                            // Crear Package completo desde GroupPackageInfo
+                                                            let package = pkg_clone.to_package(
+                                                                &group_address, 
+                                                                group_coords,
+                                                                group_door_code.clone(),
+                                                                group_mailbox_access,
+                                                                group_driver_notes.clone()
+                                                            );
+                                                            callback.emit(package);
+                                                        }
+                                                    })
                                                     }}
                                                 >
                                                     {"i"}

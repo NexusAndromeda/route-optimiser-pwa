@@ -12,6 +12,14 @@ pub struct Package {
     pub phone_fixed: Option<String>,
     pub instructions: Option<String>,
     
+    // Campos enriquecidos desde la BD
+    #[serde(default)]
+    pub door_code: Option<String>,
+    #[serde(default)]
+    pub has_mailbox_access: bool,
+    #[serde(default)]
+    pub driver_notes: Option<String>,
+    
     // Campos para grupos
     #[serde(default)]
     pub is_group: bool,
@@ -40,7 +48,7 @@ pub struct GroupPackageInfo {
 
 impl GroupPackageInfo {
     /// Convierte GroupPackageInfo a Package (para mostrar detalles)
-    pub fn to_package(&self, group_address: &str, group_coords: Option<[f64; 2]>) -> Package {
+    pub fn to_package(&self, group_address: &str, group_coords: Option<[f64; 2]>, door_code: Option<String>, has_mailbox_access: bool, driver_notes: Option<String>) -> Package {
         Package {
             id: self.tracking.clone(),
             recipient: self.customer_name.clone(),
@@ -51,6 +59,9 @@ impl GroupPackageInfo {
             phone: self.phone_number.clone(),
             phone_fixed: None,
             instructions: self.customer_indication.clone(),
+            door_code,
+            has_mailbox_access,
+            driver_notes,
             is_group: false,
             total_packages: None,
             group_packages: None,

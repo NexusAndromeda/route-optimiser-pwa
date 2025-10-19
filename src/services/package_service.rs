@@ -175,6 +175,9 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                                     phone: pkg.get("phone").and_then(|p| p.as_str()).map(|s| s.to_string()),
                                     phone_fixed: pkg.get("phone_fixed").and_then(|p| p.as_str()).map(|s| s.to_string()),
                                     instructions: None,
+                                    door_code: None,
+                                    has_mailbox_access: false,
+                                    driver_notes: None,
                                     is_group: false,
                                     total_packages: None,
                                     group_packages: None,
@@ -292,6 +295,9 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
         phone: single.get("phone_number").and_then(|p| p.as_str()).map(|s| s.to_string()),
         phone_fixed: None,
         instructions: single.get("customer_indication").and_then(|i| i.as_str()).map(|s| s.to_string()),
+        door_code: single.get("door_code").and_then(|d| d.as_str()).map(|s| s.to_string()),
+        has_mailbox_access: single.get("mailbox_access").and_then(|m| m.as_bool()).unwrap_or(false),
+        driver_notes: single.get("driver_notes").and_then(|n| n.as_str()).map(|s| s.to_string()),
         is_group: false,
         total_packages: None,
         group_packages: None,
@@ -350,7 +356,7 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
             .and_then(|i| i.as_str())
             .unwrap_or(&format!("group-{}", index))
             .to_string(),
-        recipient: format!("Groupe ({})", total_packages),
+        recipient: format!("{} paquetes", total_packages),
         address: group.get("official_label")
             .and_then(|a| a.as_str())
             .unwrap_or("Dirección no disponible")
@@ -367,7 +373,10 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
         },
         phone: None,
         phone_fixed: None,
-        instructions: group.get("driver_notes").and_then(|n| n.as_str()).map(|s| s.to_string()),
+        instructions: None, // Las instrucciones van en los paquetes individuales
+        door_code: group.get("door_code").and_then(|d| d.as_str()).map(|s| s.to_string()),
+        has_mailbox_access: group.get("mailbox_access").and_then(|m| m.as_bool()).unwrap_or(false),
+        driver_notes: group.get("driver_notes").and_then(|n| n.as_str()).map(|s| s.to_string()),
         is_group: true,
         total_packages: Some(total_packages),
         group_packages: Some(group_packages_list),
