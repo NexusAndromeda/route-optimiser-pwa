@@ -295,9 +295,25 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
         phone: single.get("phone_number").and_then(|p| p.as_str()).map(|s| s.to_string()),
         phone_fixed: None,
         instructions: single.get("customer_indication").and_then(|i| i.as_str()).map(|s| s.to_string()),
-        door_code: single.get("door_code").and_then(|d| d.as_str()).map(|s| s.to_string()),
-        has_mailbox_access: single.get("mailbox_access").and_then(|m| m.as_bool()).unwrap_or(false),
-        driver_notes: single.get("driver_notes").and_then(|n| n.as_str()).map(|s| s.to_string()),
+        door_code: {
+            let dc = single.get("door_code").and_then(|d| d.as_str()).map(|s| s.to_string());
+            if let Some(ref code) = dc {
+                log::info!("🔑 Paquete {}: door_code = {}", index, code);
+            }
+            dc
+        },
+        has_mailbox_access: {
+            let bal = single.get("mailbox_access").and_then(|m| m.as_bool()).unwrap_or(false);
+            log::info!("📬 Paquete {}: mailbox_access = {}", index, bal);
+            bal
+        },
+        driver_notes: {
+            let dn = single.get("driver_notes").and_then(|n| n.as_str()).map(|s| s.to_string());
+            if let Some(ref notes) = dn {
+                log::info!("📝 Paquete {}: driver_notes = {}", index, notes);
+            }
+            dn
+        },
         is_group: false,
         total_packages: None,
         group_packages: None,

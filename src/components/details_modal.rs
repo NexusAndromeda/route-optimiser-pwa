@@ -4,6 +4,7 @@ use crate::context::get_text;
 use web_sys::window;
 use gloo_net::http::Request;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
 #[wasm_bindgen]
 extern "C" {
@@ -25,6 +26,12 @@ pub struct DetailsModalProps {
 
 #[function_component(DetailsModal)]
 pub fn details_modal(props: &DetailsModalProps) -> Html {
+    // Debug: log package data
+    log::info!("🔍 DetailsModal - Package ID: {}", props.package.id);
+    log::info!("🔍 DetailsModal - door_code: {:?}", props.package.door_code);
+    log::info!("🔍 DetailsModal - has_mailbox_access: {}", props.package.has_mailbox_access);
+    log::info!("🔍 DetailsModal - driver_notes: {:?}", props.package.driver_notes);
+    
     let close = props.on_close.clone();
     let close_overlay = props.on_close.clone();
     
@@ -76,6 +83,28 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                         if update_package_coordinates(&package_id, lat, lng) {
                                             log::info!("📍 Coordonnées mises à jour sur la carte: {}", package_id);
                                             
+                                            // Enviar corrección al backend
+                                            let package_id_for_backend = package_id.clone();
+                                            let formatted_for_backend = formatted.clone();
+                                            wasm_bindgen_futures::spawn_local(async move {
+                                                match send_address_correction_to_backend(
+                                                    package_id_for_backend.clone(),
+                                                    formatted_for_backend.clone(),
+                                                    lat,
+                                                    lng,
+                                                    None, // door_code
+                                                    None, // has_mailbox_access
+                                                    None, // driver_notes
+                                                ).await {
+                                                    Ok(_) => {
+                                                        log::info!("✅ Corrección enviada al backend: {}", package_id_for_backend);
+                                                    }
+                                                    Err(e) => {
+                                                        log::error!("❌ Error enviando corrección al backend: {}", e);
+                                                    }
+                                                }
+                                            });
+                                            
                                             // Actualizar el paquete en el estado de Yew
                                             on_update.emit((package_id.clone(), lat, lng, formatted));
                                         } else {
@@ -103,37 +132,216 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     };
     
     // Handler para editar código de puerta
+    let package_id_1 = props.package.id.clone();
+    let address_1 = props.package.address.clone();
+    let coords_1 = props.package.coords.clone();
+    let has_mailbox_access_1 = props.package.has_mailbox_access;
+    let driver_notes_1 = props.package.driver_notes.clone();
+    let door_code_1 = props.package.door_code.clone();
+    
     let on_edit_door_code = Callback::from(move |e: MouseEvent| {
         e.stop_propagation();
         if let Some(win) = window() {
             if let Ok(Some(value)) = win.prompt_with_message(&get_text("edit_door_code")) {
-                if !value.trim().is_empty() {
-                    let _ = win.alert_with_message(&format!("✅ Code de porte enregistré:\n{}", value));
+                let trimmed_value = value.trim().to_string();
+                if !trimmed_value.is_empty() {
+                    // Enviar al backend
+                    let package_id = package_id_1.clone();
+                    let address = address_1.clone();
+                    let coords = coords_1.clone();
+                    let has_mailbox_access = has_mailbox_access_1;
+                    let driver_notes = driver_notes_1.clone();
+                    
+                    spawn_local(async move {
+                        let [lat, lng] = coords.unwrap_or([0.0, 0.0]);
+                        let trimmed_value_clone = trimmed_value.clone();
+                        match send_address_correction_to_backend(
+                            package_id,
+                            address,
+                            lat,
+                            lng,
+                            Some(trimmed_value),
+                            Some(has_mailbox_access),
+                            driver_notes,
+                        ).await {
+                            Ok(_) => {
+                                log::info!("✅ Code de porte envoyé au backend: {}", trimmed_value_clone);
+                                if let Some(win) = window() {
+                                    let _ = win.alert_with_message(&format!("✅ Code de porte enregistré:\n{}", trimmed_value_clone));
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("❌ Erreur lors de l'envoi du code de porte: {}", e);
+                                if let Some(win) = window() {
+                                    let _ = win.alert_with_message(&format!("❌ Erreur lors de l'enregistrement: {}", e));
+                                }
+                            }
+                        }
+                    });
                 }
             }
         }
     });
     
     // Handler para editar indicaciones cliente
+    let package_id_2 = props.package.id.clone();
+    let address_2 = props.package.address.clone();
+    let coords_2 = props.package.coords.clone();
+    let has_mailbox_access_2 = props.package.has_mailbox_access;
+    let driver_notes_2 = props.package.driver_notes.clone();
+    let door_code_2 = props.package.door_code.clone();
+    
     let on_edit_client_notes = Callback::from(move |e: MouseEvent| {
         e.stop_propagation();
         if let Some(win) = window() {
             if let Ok(Some(value)) = win.prompt_with_message(&get_text("edit_client_instructions")) {
-                if !value.trim().is_empty() {
-                    let _ = win.alert_with_message(&format!("✅ Indications du client enregistré:\n{}", value));
+                let trimmed_value = value.trim().to_string();
+                if !trimmed_value.is_empty() {
+                    // Enviar al backend
+                    let package_id = package_id_2.clone();
+                    let address = address_2.clone();
+                    let coords = coords_2.clone();
+                    let door_code = door_code_2.clone();
+                    let has_mailbox_access = has_mailbox_access_2;
+                    
+                    spawn_local(async move {
+                        let [lat, lng] = coords.unwrap_or([0.0, 0.0]);
+                        let trimmed_value_clone = trimmed_value.clone();
+                        match send_address_correction_to_backend(
+                            package_id,
+                            address,
+                            lat,
+                            lng,
+                            door_code,
+                            Some(has_mailbox_access),
+                            Some(trimmed_value),
+                        ).await {
+                            Ok(_) => {
+                                log::info!("✅ Indications client envoyées au backend: {}", trimmed_value_clone);
+                                if let Some(win) = window() {
+                                    let _ = win.alert_with_message(&format!("✅ Indications du client enregistré:\n{}", trimmed_value_clone));
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("❌ Erreur lors de l'envoi des indications client: {}", e);
+                                if let Some(win) = window() {
+                                    let _ = win.alert_with_message(&format!("❌ Erreur lors de l'enregistrement: {}", e));
+                                }
+                            }
+                        }
+                    });
                 }
             }
         }
     });
     
     // Handler para editar notas del chauffeur
+    let package_id_3 = props.package.id.clone();
+    let address_3 = props.package.address.clone();
+    let coords_3 = props.package.coords.clone();
+    let has_mailbox_access_3 = props.package.has_mailbox_access;
+    let driver_notes_3 = props.package.driver_notes.clone();
+    let door_code_3 = props.package.door_code.clone();
+    
     let on_edit_driver_notes = Callback::from(move |e: MouseEvent| {
         e.stop_propagation();
         if let Some(win) = window() {
             if let Ok(Some(value)) = win.prompt_with_message(&get_text("edit_driver_notes")) {
-                if !value.trim().is_empty() {
-                    let _ = win.alert_with_message(&format!("✅ Notes du chauffeur enregistré:\n{}", value));
+                let trimmed_value = value.trim().to_string();
+                if !trimmed_value.is_empty() {
+                    // Enviar al backend
+                    let package_id = package_id_3.clone();
+                    let address = address_3.clone();
+                    let coords = coords_3.clone();
+                    let door_code = door_code_3.clone();
+                    let has_mailbox_access = has_mailbox_access_3;
+                    
+                    spawn_local(async move {
+                        let [lat, lng] = coords.unwrap_or([0.0, 0.0]);
+                        let trimmed_value_clone = trimmed_value.clone();
+                        match send_address_correction_to_backend(
+                            package_id,
+                            address,
+                            lat,
+                            lng,
+                            door_code,
+                            Some(has_mailbox_access),
+                            Some(trimmed_value),
+                        ).await {
+                            Ok(_) => {
+                                log::info!("✅ Notes chauffeur envoyées au backend: {}", trimmed_value_clone);
+                                if let Some(win) = window() {
+                                    let _ = win.alert_with_message(&format!("✅ Notes du chauffeur enregistré:\n{}", trimmed_value_clone));
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("❌ Erreur lors de l'envoi des notes chauffeur: {}", e);
+                                if let Some(win) = window() {
+                                    let _ = win.alert_with_message(&format!("❌ Erreur lors de l'enregistrement: {}", e));
+                                }
+                            }
+                        }
+                    });
                 }
+            }
+        }
+    });
+    
+    // Handler para editar acceso al buzón (BAL)
+    let package_id_4 = props.package.id.clone();
+    let address_4 = props.package.address.clone();
+    let coords_4 = props.package.coords.clone();
+    let has_mailbox_access_4 = props.package.has_mailbox_access;
+    let driver_notes_4 = props.package.driver_notes.clone();
+    let door_code_4 = props.package.door_code.clone();
+    
+    let on_edit_bal = Callback::from(move |e: MouseEvent| {
+        e.stop_propagation();
+        if let Some(win) = window() {
+            let current_value = has_mailbox_access_4;
+            let message = if current_value {
+                "¿Desactivar acceso al buzón? (Oui/Non)"
+            } else {
+                "¿Activar acceso al buzón? (Oui/Non)"
+            };
+            
+            if let Ok(Some(value)) = win.prompt_with_message(message) {
+                let trimmed_value = value.trim().to_lowercase();
+                let new_value = trimmed_value == "oui" || trimmed_value == "si" || trimmed_value == "yes" || trimmed_value == "1";
+                
+                // Enviar al backend
+                let package_id = package_id_4.clone();
+                let address = address_4.clone();
+                let coords = coords_4.clone();
+                let door_code = door_code_4.clone();
+                let driver_notes = driver_notes_4.clone();
+                
+                spawn_local(async move {
+                    let [lat, lng] = coords.unwrap_or([0.0, 0.0]);
+                    match send_address_correction_to_backend(
+                        package_id,
+                        address,
+                        lat,
+                        lng,
+                        door_code,
+                        Some(new_value),
+                        driver_notes,
+                    ).await {
+                        Ok(_) => {
+                            log::info!("✅ Accès buzón envoyé au backend: {}", new_value);
+                            if let Some(win) = window() {
+                                let status = if new_value { "activé" } else { "désactivé" };
+                                let _ = win.alert_with_message(&format!("✅ Accès au buzón {}:\n{}", status, if new_value { "✅ Oui" } else { "❌ Non" }));
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("❌ Erreur lors de l'envoi de l'accès buzón: {}", e);
+                            if let Some(win) = window() {
+                                let _ = win.alert_with_message(&format!("❌ Erreur lors de l'enregistrement: {}", e));
+                            }
+                        }
+                    }
+                });
             }
         }
     });
@@ -196,7 +404,11 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     <div class="detail-section editable">
                         <div class="detail-label">{get_text("door_codes")}</div>
                         <div class="detail-value-with-action">
-                            <span class="empty-value">{get_text("not_provided")}</span>
+                            {if let Some(door_code) = &props.package.door_code {
+                                html! { <span>{door_code}</span> }
+                            } else {
+                                html! { <span class="empty-value">{get_text("not_provided")}</span> }
+                            }}
                             <button 
                                 class="btn-icon-edit" 
                                 title={get_text("modify")}
@@ -211,17 +423,11 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     <div class="detail-section editable">
                         <div class="detail-label">{get_text("mailbox_access")}</div>
                         <div class="detail-value-with-action">
-                            <span class="empty-value">{get_text("not_provided")}</span>
+                            <span>{if props.package.has_mailbox_access { "✅ Oui" } else { "❌ Non" }}</span>
                             <button 
                                 class="btn-icon-edit" 
                                 title={get_text("modify")}
-                                onclick={{
-                                    let on_edit = props.on_edit_bal.clone();
-                                    Callback::from(move |e: MouseEvent| {
-                                        e.stop_propagation();
-                                        on_edit.emit(());
-                                    })
-                                }}
+                                onclick={on_edit_bal}
                             >
                                 {"✏️"}
                             </button>
@@ -251,7 +457,15 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     <div class="detail-section editable">
                         <div class="detail-label">{get_text("driver_notes")}</div>
                         <div class="detail-value-with-action">
-                            <span class="empty-value">{get_text("add_note")}</span>
+                            {if let Some(notes) = &props.package.driver_notes {
+                                if !notes.is_empty() {
+                                    html! { <span>{format!("\"{}\"", notes)}</span> }
+                                } else {
+                                    html! { <span class="empty-value">{get_text("add_note")}</span> }
+                                }
+                            } else {
+                                html! { <span class="empty-value">{get_text("add_note")}</span> }
+                            }}
                             <button 
                                 class="btn-icon-edit" 
                                 title={get_text("modify")}
@@ -302,5 +516,57 @@ async fn geocode_address(address: String) -> Result<GeocodeResponse, String> {
         serde_json::from_value(data.clone()).map_err(|e| format!("Failed to parse response data: {}", e))
     } else {
         Err("No data in response".to_string())
+    }
+}
+
+async fn send_address_correction_to_backend(
+    tracking: String,
+    address: String,
+    latitude: f64,
+    longitude: f64,
+    door_code: Option<String>,
+    has_mailbox_access: Option<bool>,
+    driver_notes: Option<String>,
+) -> Result<(), String> {
+    let url = "https://api.delivery.nexuslabs.one/address/update";
+    let body = serde_json::json!({
+        "tracking": tracking,
+        "address": address,
+        "latitude": latitude,
+        "longitude": longitude,
+        "door_code": door_code,
+        "driver_notes": driver_notes,
+        "has_mailbox_access": has_mailbox_access
+    });
+    
+    log::info!("📤 Enviando corrección al backend: {} -> {}", tracking, address);
+    
+    let response = Request::post(url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .map_err(|e| format!("Failed to create request: {:?}", e))?
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {:?}", e))?;
+    
+    if !response.ok() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+    
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse JSON: {:?}", e))?;
+    
+    // Verificar si la respuesta indica éxito
+    if let Some(success) = json.get("success") {
+        if success.as_bool().unwrap_or(false) {
+            log::info!("✅ Corrección guardada en backend exitosamente");
+            Ok(())
+        } else {
+            Err("Backend returned success: false".to_string())
+        }
+    } else {
+        Err("No success field in response".to_string())
     }
 }

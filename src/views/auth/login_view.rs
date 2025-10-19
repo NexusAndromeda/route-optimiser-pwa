@@ -1,23 +1,50 @@
 use yew::prelude::*;
 use web_sys::HtmlInputElement;
-use crate::models::Company;
+use crate::models::{Company, SavedCredentials};
 
 #[derive(Properties, PartialEq)]
 pub struct LoginViewProps {
     pub on_show_companies: Callback<()>,
     pub selected_company: Option<Company>,
+    pub saved_credentials: Option<SavedCredentials>,
     pub on_login: Callback<(String, String)>,
     pub on_show_register: Callback<()>,
 }
 
 #[function_component(LoginView)]
 pub fn login_view(props: &LoginViewProps) -> Html {
-    let username_ref = use_node_ref();
-    let password_ref = use_node_ref();
+    // Estados para los valores de los inputs
+    let username = use_state(|| {
+        props.saved_credentials.as_ref()
+            .map(|c| c.username.clone())
+            .unwrap_or_default()
+    });
+    
+    let password = use_state(|| {
+        props.saved_credentials.as_ref()
+            .map(|c| c.password.clone())
+            .unwrap_or_default()
+    });
+    
+    let on_username_change = {
+        let username = username.clone();
+        Callback::from(move |e: InputEvent| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            username.set(input.value());
+        })
+    };
+    
+    let on_password_change = {
+        let password = password.clone();
+        Callback::from(move |e: InputEvent| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            password.set(input.value());
+        })
+    };
     
     let on_submit = {
-        let username_ref = username_ref.clone();
-        let password_ref = password_ref.clone();
+        let username = username.clone();
+        let password = password.clone();
         let on_login = props.on_login.clone();
         let selected_company = props.selected_company.clone();
         
@@ -33,24 +60,19 @@ pub fn login_view(props: &LoginViewProps) -> Html {
                 return;
             }
             
-            if let (Some(username_input), Some(password_input)) = (
-                username_ref.cast::<HtmlInputElement>(),
-                password_ref.cast::<HtmlInputElement>()
-            ) {
-                let username = username_input.value();
-                let password = password_input.value();
-                
-                // Validate fields
-                if username.is_empty() || password.is_empty() {
-                    web_sys::window()
-                        .unwrap()
-                        .alert_with_message("Por favor, completa todos los campos")
-                        .ok();
-                    return;
-                }
-                
-                on_login.emit((username, password));
+            let username_val = (*username).clone();
+            let password_val = (*password).clone();
+            
+            // Validate fields
+            if username_val.is_empty() || password_val.is_empty() {
+                web_sys::window()
+                    .unwrap()
+                    .alert_with_message("Por favor, completa todos los campos")
+                    .ok();
+                return;
             }
+            
+            on_login.emit((username_val, password_val));
         })
     };
     
@@ -78,7 +100,8 @@ pub fn login_view(props: &LoginViewProps) -> Html {
                             id="username"
                             name="username"
                             placeholder="Ingresa tu usuario"
-                            ref={username_ref}
+                            value={(*username).clone()}
+                            oninput={on_username_change}
                             required=true
                         />
                     </div>
@@ -90,7 +113,8 @@ pub fn login_view(props: &LoginViewProps) -> Html {
                             id="password"
                             name="password"
                             placeholder="Ingresa tu contraseña"
-                            ref={password_ref}
+                            value={(*password).clone()}
+                            oninput={on_password_change}
                             required=true
                         />
                     </div>

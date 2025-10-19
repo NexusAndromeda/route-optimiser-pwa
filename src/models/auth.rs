@@ -58,3 +58,10 @@ pub struct LoginData {
     pub company: Company,
 }
 
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct SavedCredentials {
+    pub username: String,
+    pub password: String,
+    pub company: Company,
+}
+

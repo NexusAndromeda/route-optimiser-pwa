@@ -1,7 +1,8 @@
 use yew::prelude::*;
 use crate::hooks::{use_auth, use_packages, use_map, use_sheet, use_map_selection_listener, clear_packages_cache};
 use crate::views::auth::{LoginView, RegisterView, CompanySelector};
-use crate::views::packages::{PackageList, PackageDetails};
+use crate::views::packages::PackageList;
+use crate::components::details_modal::DetailsModal;
 use crate::views::shared::{SettingsPopup, BalModal};
 use crate::context::get_text;
 use crate::models::Package;
@@ -192,6 +193,7 @@ pub fn app() -> Html {
                         <LoginView
                             on_show_companies={auth.show_companies.clone()}
                             selected_company={auth.state.selected_company.clone()}
+                            saved_credentials={auth.state.saved_credentials.clone()}
                             on_login={auth.login.clone()}
                             on_show_register={auth.show_register.clone()}
                         />
@@ -281,7 +283,7 @@ pub fn app() -> Html {
                     
                     if let Some(pkg) = package_to_show {
                         html! {
-                            <PackageDetails
+                            <DetailsModal
                                 package={pkg}
                                 on_close={Callback::from({
                                     let show_details = show_details.clone();

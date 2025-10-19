@@ -1,14 +1,15 @@
 use yew::prelude::*;
 use web_sys::window;
-use crate::models::{Company, LoginData, LoginResponse};
+use crate::models::{Company, LoginData, LoginResponse, SavedCredentials};
 use crate::services::{load_companies, perform_login, register_company};
-use crate::utils::{save_to_storage, load_from_storage, remove_from_storage, STORAGE_KEY_LOGIN_DATA, STORAGE_KEY_SELECTED_COMPANY};
+use crate::utils::{save_to_storage, load_from_storage, remove_from_storage, STORAGE_KEY_LOGIN_DATA, STORAGE_KEY_SELECTED_COMPANY, STORAGE_KEY_SAVED_CREDENTIALS};
 
 #[derive(Clone, PartialEq)]
 pub struct AuthState {
     pub is_logged_in: bool,
     pub login_data: Option<LoginData>,
     pub selected_company: Option<Company>,
+    pub saved_credentials: Option<SavedCredentials>,
     pub companies: Vec<Company>,
     pub companies_loading: bool,
     pub show_company_modal: bool,
@@ -43,6 +44,7 @@ pub fn use_auth() -> UseAuthHandle {
         is_logged_in: false,
         login_data: None,
         selected_company: None,
+        saved_credentials: None,
         companies: Vec::new(),
         companies_loading: false,
         show_company_modal: false,
@@ -86,21 +88,41 @@ pub fn use_auth() -> UseAuthHandle {
         });
     }
     
-    // Check login status on mount
+    // Check login status and load saved credentials on mount
     {
         let state = state.clone();
         use_effect_with((), move |_| {
+            let mut current_state = (*state).clone();
+            let mut updated = false;
+            
+            // Check if user is already logged in
             if let Some(saved_login) = load_from_storage::<LoginData>(STORAGE_KEY_LOGIN_DATA) {
                 log::info!("✅ Login data encontrada: {}", saved_login.username);
                 
                 if let Some(saved_company) = load_from_storage::<Company>(STORAGE_KEY_SELECTED_COMPANY) {
-                    let mut current_state = (*state).clone();
                     current_state.login_data = Some(saved_login);
-                    current_state.selected_company = Some(saved_company);
+                    current_state.selected_company = Some(saved_company.clone());
                     current_state.is_logged_in = true;
-                    state.set(current_state);
+                    updated = true;
                 }
             }
+            
+            // Load saved credentials (username, password, company) for auto-fill
+            if let Some(saved_creds) = load_from_storage::<SavedCredentials>(STORAGE_KEY_SAVED_CREDENTIALS) {
+                log::info!("✅ Credenciales guardadas encontradas: {}", saved_creds.username);
+                current_state.saved_credentials = Some(saved_creds.clone());
+                
+                // Si no está logueado, pre-seleccionar la empresa guardada
+                if !current_state.is_logged_in {
+                    current_state.selected_company = Some(saved_creds.company);
+                }
+                updated = true;
+            }
+            
+            if updated {
+                state.set(current_state);
+            }
+            
             || ()
         });
     }
@@ -112,10 +134,11 @@ pub fn use_auth() -> UseAuthHandle {
             let current_state = (*state).clone();
             if let Some(company) = current_state.selected_company {
                 let state = state.clone();
+                let password_clone = password.clone();
                 wasm_bindgen_futures::spawn_local(async move {
                     match perform_login(&username, &password, &company.code).await {
                         Ok(response) => {
-                            handle_login_response(response, username, company, state).await;
+                            handle_login_response(response, username, password_clone, company, state).await;
                         }
                         Err(e) => {
                             log::error!("❌ Error en login: {}", e);
@@ -135,17 +158,22 @@ pub fn use_auth() -> UseAuthHandle {
     let logout = {
         let state = state.clone();
         Callback::from(move |_| {
-            // Clear storage
+            // Clear login storage (pero NO las credenciales guardadas)
             let _ = remove_from_storage(STORAGE_KEY_LOGIN_DATA);
             let _ = remove_from_storage(STORAGE_KEY_SELECTED_COMPANY);
             
             log::info!("👋 Logout");
             
+            // Mantener credenciales guardadas para próximo login
+            let saved_creds = load_from_storage::<SavedCredentials>(STORAGE_KEY_SAVED_CREDENTIALS);
+            let saved_company = saved_creds.as_ref().map(|c| c.company.clone());
+            
             // Reset state
             let mut new_state = AuthState {
                 is_logged_in: false,
                 login_data: None,
-                selected_company: None,
+                selected_company: saved_company,
+                saved_credentials: saved_creds,
                 companies: Vec::new(),
                 companies_loading: false,
                 show_company_modal: false,
@@ -277,6 +305,7 @@ pub fn use_auth() -> UseAuthHandle {
 async fn handle_login_response(
     response: LoginResponse,
     username: String,
+    password: String,
     company: Company,
     state: UseStateHandle<AuthState>,
 ) {
@@ -318,10 +347,20 @@ async fn handle_login_response(
     let _ = save_to_storage(STORAGE_KEY_LOGIN_DATA, &login_data);
     let _ = save_to_storage(STORAGE_KEY_SELECTED_COMPANY, &company);
     
+    // Save credentials for next login (auto-fill)
+    let saved_credentials = SavedCredentials {
+        username: username.clone(),
+        password,
+        company: company.clone(),
+    };
+    let _ = save_to_storage(STORAGE_KEY_SAVED_CREDENTIALS, &saved_credentials);
+    log::info!("💾 Credenciales guardadas para próximo login");
+    
     log::info!("✅ Login exitoso: {}", username);
     
     let mut current_state = (*state).clone();
     current_state.login_data = Some(login_data);
+    current_state.saved_credentials = Some(saved_credentials);
     current_state.is_logged_in = true;
     state.set(current_state);
 }
