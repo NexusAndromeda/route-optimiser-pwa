@@ -32,6 +32,9 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     log::info!("🔍 DetailsModal - has_mailbox_access: {}", props.package.has_mailbox_access);
     log::info!("🔍 DetailsModal - driver_notes: {:?}", props.package.driver_notes);
     
+    // State para mostrar el popup de confirmación BAL
+    let show_bal_confirm = use_state(|| false);
+    
     let close = props.on_close.clone();
     let close_overlay = props.on_close.clone();
     
@@ -295,61 +298,77 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     let driver_notes_4 = props.package.driver_notes.clone();
     let door_code_4 = props.package.door_code.clone();
     
-    let on_edit_bal = Callback::from(move |e: MouseEvent| {
-        e.stop_propagation();
-        if let Some(win) = window() {
-            let current_value = has_mailbox_access_4;
-            let message = if current_value {
-                "Accès boîte aux lettres (BAL):\n\nCliquez OK pour DÉSACTIVER l'accès\nCliquez Annuler pour garder l'accès"
-            } else {
-                "Accès boîte aux lettres (BAL):\n\nCliquez OK pour ACTIVER l'accès\nCliquez Annuler pour ne pas donner accès"
-            };
+    let on_edit_bal = {
+        let show_bal_confirm = show_bal_confirm.clone();
+        Callback::from(move |e: MouseEvent| {
+            e.stop_propagation();
+            show_bal_confirm.set(true);
+        })
+    };
+    
+    // Handler para confirmar cambio de BAL con "Oui"
+    let on_bal_confirm_yes = {
+        let show_bal_confirm = show_bal_confirm.clone();
+        let package_id = package_id_4.clone();
+        let address = address_4.clone();
+        let coords = coords_4.clone();
+        let door_code = door_code_4.clone();
+        let driver_notes = driver_notes_4.clone();
+        let current_value = has_mailbox_access_4;
+        
+        Callback::from(move |e: MouseEvent| {
+            e.stop_propagation();
+            show_bal_confirm.set(false);
             
-            // confirm() retorna true si el usuario hace clic en OK, false si hace clic en Cancelar
-            if win.confirm_with_message(message).unwrap_or(false) {
-                // Usuario hizo clic en OK → invertir el estado actual
-                let new_value = !current_value;
-                
-                log::info!("📬 Usuario cambió accès BAL: {} → {}", current_value, new_value);
-                
-                // Enviar al backend
-                let package_id = package_id_4.clone();
-                let address = address_4.clone();
-                let coords = coords_4.clone();
-                let door_code = door_code_4.clone();
-                let driver_notes = driver_notes_4.clone();
-                
-                spawn_local(async move {
-                    let [lat, lng] = coords.unwrap_or([0.0, 0.0]);
-                    match send_address_correction_to_backend(
-                        package_id,
-                        address,
-                        lat,
-                        lng,
-                        door_code,
-                        Some(new_value),
-                        driver_notes,
-                    ).await {
-                        Ok(_) => {
-                            log::info!("✅ Accès buzón envoyé au backend: {}", new_value);
-                            if let Some(win) = window() {
-                                let status = if new_value { "ACTIVÉ ✅" } else { "DÉSACTIVÉ ❌" };
-                                let _ = win.alert_with_message(&format!("✅ Accès boîte aux lettres {}!", status));
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("❌ Erreur lors de l'envoi de l'accès buzón: {}", e);
-                            if let Some(win) = window() {
-                                let _ = win.alert_with_message(&format!("❌ Erreur lors de l'enregistrement: {}", e));
-                            }
+            // Invertir el estado actual
+            let new_value = !current_value;
+            log::info!("📬 Usuario cambió accès BAL: {} → {}", current_value, new_value);
+            
+            // Enviar al backend
+            let package_id = package_id.clone();
+            let address = address.clone();
+            let coords = coords.clone();
+            let door_code = door_code.clone();
+            let driver_notes = driver_notes.clone();
+            
+            spawn_local(async move {
+                let [lat, lng] = coords.unwrap_or([0.0, 0.0]);
+                match send_address_correction_to_backend(
+                    package_id,
+                    address,
+                    lat,
+                    lng,
+                    door_code,
+                    Some(new_value),
+                    driver_notes,
+                ).await {
+                    Ok(_) => {
+                        log::info!("✅ Accès buzón envoyé au backend: {}", new_value);
+                        if let Some(win) = window() {
+                            let status = if new_value { "ACTIVÉ ✅" } else { "DÉSACTIVÉ ❌" };
+                            let _ = win.alert_with_message(&format!("✅ Accès boîte aux lettres {}!", status));
                         }
                     }
-                });
-            } else {
-                log::info!("❌ Usuario canceló el cambio de accès BAL");
-            }
-        }
-    });
+                    Err(e) => {
+                        log::error!("❌ Erreur lors de l'envoi de l'accès buzón: {}", e);
+                        if let Some(win) = window() {
+                            let _ = win.alert_with_message(&format!("❌ Erreur lors de l'enregistrement: {}", e));
+                        }
+                    }
+                }
+            });
+        })
+    };
+    
+    // Handler para cancelar cambio de BAL con "Non"
+    let on_bal_confirm_no = {
+        let show_bal_confirm = show_bal_confirm.clone();
+        Callback::from(move |e: MouseEvent| {
+            e.stop_propagation();
+            show_bal_confirm.set(false);
+            log::info!("❌ Usuario canceló el cambio de accès BAL");
+        })
+    };
     
     html! {
         <div class="modal active">
@@ -482,6 +501,44 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     </div>
                 </div>
             </div>
+            
+            // Modal de confirmación BAL personalizado
+            {if *show_bal_confirm {
+                let current_value = props.package.has_mailbox_access;
+                let message = if current_value {
+                    "Voulez-vous DÉSACTIVER l'accès à la boîte aux lettres?"
+                } else {
+                    "Voulez-vous ACTIVER l'accès à la boîte aux lettres?"
+                };
+                
+                html! {
+                    <div class="modal active" style="z-index: 10001;">
+                        <div class="modal-overlay" style="background: rgba(0,0,0,0.7);"></div>
+                        <div class="modal-content" style="max-width: 400px; padding: 30px; text-align: center;">
+                            <h3 style="margin-bottom: 20px; font-size: 18px;">{"📬 Accès boîte aux lettres (BAL)"}</h3>
+                            <p style="margin-bottom: 30px; font-size: 16px; line-height: 1.5;">{message}</p>
+                            <div style="display: flex; gap: 15px; justify-content: center;">
+                                <button 
+                                    class="btn-primary" 
+                                    style="padding: 12px 30px; font-size: 16px; background: #4CAF50; flex: 1;"
+                                    onclick={on_bal_confirm_yes}
+                                >
+                                    {"✓ Oui"}
+                                </button>
+                                <button 
+                                    class="btn-secondary" 
+                                    style="padding: 12px 30px; font-size: 16px; background: #f44336; flex: 1;"
+                                    onclick={on_bal_confirm_no}
+                                >
+                                    {"✗ Non"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            } else {
+                html! {}
+            }}
         </div>
     }
 }
