@@ -82,37 +82,38 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                             formatted, lat, lng
                                         );
                                         
-                                        // Actualizar el paquete en el mapa
+                                        // Actualizar el paquete en el estado de Yew (esto lo agrega al mapa también)
+                                        on_update.emit((package_id.clone(), lat, lng, formatted.clone()));
+                                        log::info!("✅ Paquete {} actualizado en el estado", package_id);
+                                        
+                                        // Intentar actualizar en el mapa si ya estaba ahí (opcional, puede fallar si era problemático)
                                         if update_package_coordinates(&package_id, lat, lng) {
-                                            log::info!("📍 Coordonnées mises à jour sur la carte: {}", package_id);
-                                            
-                                            // Enviar corrección al backend
-                                            let package_id_for_backend = package_id.clone();
-                                            let formatted_for_backend = formatted.clone();
-                                            wasm_bindgen_futures::spawn_local(async move {
-                                                match send_address_correction_to_backend(
-                                                    package_id_for_backend.clone(),
-                                                    formatted_for_backend.clone(),
-                                                    lat,
-                                                    lng,
-                                                    None, // door_code
-                                                    None, // has_mailbox_access
-                                                    None, // driver_notes
-                                                ).await {
-                                                    Ok(_) => {
-                                                        log::info!("✅ Corrección enviada al backend: {}", package_id_for_backend);
-                                                    }
-                                                    Err(e) => {
-                                                        log::error!("❌ Error enviando corrección al backend: {}", e);
-                                                    }
-                                                }
-                                            });
-                                            
-                                            // Actualizar el paquete en el estado de Yew
-                                            on_update.emit((package_id.clone(), lat, lng, formatted));
+                                            log::info!("📍 Coordonnées mises à jour sur la carte existente: {}", package_id);
                                         } else {
-                                            log::error!("❌ Échec de la mise à jour des coordonnées sur la carte");
+                                            log::info!("ℹ️ Paquete no estaba en el mapa (era problemático), se agregará en el próximo render");
                                         }
+                                        
+                                        // Enviar corrección al backend
+                                        let package_id_for_backend = package_id.clone();
+                                        let formatted_for_backend = formatted.clone();
+                                        wasm_bindgen_futures::spawn_local(async move {
+                                            match send_address_correction_to_backend(
+                                                package_id_for_backend.clone(),
+                                                formatted_for_backend.clone(),
+                                                lat,
+                                                lng,
+                                                None, // door_code
+                                                None, // has_mailbox_access
+                                                None, // driver_notes
+                                            ).await {
+                                                Ok(_) => {
+                                                    log::info!("✅ Corrección enviada al backend: {}", package_id_for_backend);
+                                                }
+                                                Err(e) => {
+                                                    log::error!("❌ Error enviando corrección al backend: {}", e);
+                                                }
+                                            }
+                                        });
                                     } else {
                                         log::error!("❌ Géocodage échoué: {}", response.message.clone().unwrap_or_default());
                                         if let Some(win) = window() {
