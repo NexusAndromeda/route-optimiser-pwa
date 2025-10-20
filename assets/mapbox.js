@@ -242,9 +242,11 @@ window.addPackagesToMap = function(packagesJson) {
                         index: index,
                         status: pkg.status,
                         code_statut_article: pkg.code_statut_article || null,
+                        type_livraison: pkg.type_livraison || 'DOMICILE',
                         recipient: pkg.recipient,
                         address: pkg.address,
-                        isSelected: selectedPackageIndex === index
+                        isSelected: selectedPackageIndex === index,
+                        is_problematic: pkg.is_problematic || false
                     }
                 };
             }).filter(feature => feature !== null)
@@ -288,7 +290,11 @@ window.addPackagesToMap = function(packagesJson) {
                 'circle-stroke-color': [
                     'case',
                     ['get', 'isSelected'], '#FF6B35', // Selected: orange border
-                    '#FFFFFF' // Normal: white border
+                    ['get', 'is_problematic'], '#EF4444', // Problemático: rojo pulsante
+                    // Por tipo de entrega:
+                    ['==', ['get', 'type_livraison'], 'RELAIS'], 'rgb(97, 38, 122)', // RELAIS: morado Colis Privé
+                    ['==', ['get', 'type_livraison'], 'RCS'], '#F59E0B', // RCS: dorado/amarillo
+                    '#FFFFFF' // DOMICILE o default: blanco
                 ]
             }
         });

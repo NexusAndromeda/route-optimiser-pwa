@@ -32,9 +32,6 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     log::info!("🔍 DetailsModal - has_mailbox_access: {}", props.package.has_mailbox_access);
     log::info!("🔍 DetailsModal - driver_notes: {:?}", props.package.driver_notes);
     
-    // State para mostrar el popup de confirmación BAL
-    let show_bal_confirm = use_state(|| false);
-    
     let close = props.on_close.clone();
     let close_overlay = props.on_close.clone();
     
@@ -173,12 +170,8 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                 if let Some(win) = window() {
                                     let _ = win.alert_with_message(&format!("✅ Code de porte enregistré:\n{}\n\nLa page va se recharger pour afficher les changements.", trimmed_value_clone));
                                     
-                                    // Borrar cache y recargar la página
-                                    if let Ok(storage) = win.local_storage() {
-                                        if let Some(storage) = storage {
-                                            let _ = storage.clear();
-                                        }
-                                    }
+                                    // Borrar solo cache de paquetes (NO el login) y recargar
+                                    clear_packages_cache_only();
                                     let _ = win.location().reload();
                                 }
                             }
@@ -233,12 +226,8 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                 if let Some(win) = window() {
                                     let _ = win.alert_with_message(&format!("✅ Indications du client enregistré:\n{}\n\nLa page va se recharger pour afficher les changements.", trimmed_value_clone));
                                     
-                                    // Borrar cache y recargar la página
-                                    if let Ok(storage) = win.local_storage() {
-                                        if let Some(storage) = storage {
-                                            let _ = storage.clear();
-                                        }
-                                    }
+                                    // Borrar solo cache de paquetes (NO el login) y recargar
+                                    clear_packages_cache_only();
                                     let _ = win.location().reload();
                                 }
                             }
@@ -293,12 +282,8 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                 if let Some(win) = window() {
                                     let _ = win.alert_with_message(&format!("✅ Notes du chauffeur enregistré:\n{}\n\nLa page va se recharger pour afficher les changements.", trimmed_value_clone));
                                     
-                                    // Borrar cache y recargar la página
-                                    if let Ok(storage) = win.local_storage() {
-                                        if let Some(storage) = storage {
-                                            let _ = storage.clear();
-                                        }
-                                    }
+                                    // Borrar solo cache de paquetes (NO el login) y recargar
+                                    clear_packages_cache_only();
                                     let _ = win.location().reload();
                                 }
                             }
@@ -324,16 +309,6 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     let door_code_4 = props.package.door_code.clone();
     
     let on_edit_bal = {
-        let show_bal_confirm = show_bal_confirm.clone();
-        Callback::from(move |e: MouseEvent| {
-            e.stop_propagation();
-            show_bal_confirm.set(true);
-        })
-    };
-    
-    // Handler para confirmar cambio de BAL con "Oui"
-    let on_bal_confirm_yes = {
-        let show_bal_confirm = show_bal_confirm.clone();
         let package_id = package_id_4.clone();
         let address = address_4.clone();
         let coords = coords_4.clone();
@@ -343,7 +318,6 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
         
         Callback::from(move |e: MouseEvent| {
             e.stop_propagation();
-            show_bal_confirm.set(false);
             
             // Invertir el estado actual
             let new_value = !current_value;
@@ -369,16 +343,10 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                 ).await {
                     Ok(_) => {
                         log::info!("✅ Accès buzón envoyé au backend: {}", new_value);
+                        
+                        // Borrar solo cache de paquetes (NO el login) y recargar
+                        clear_packages_cache_only();
                         if let Some(win) = window() {
-                            let status = if new_value { "ACTIVÉ ✅" } else { "DÉSACTIVÉ ❌" };
-                            let _ = win.alert_with_message(&format!("✅ Accès boîte aux lettres {}!\n\nLa page va se recharger pour afficher les changements.", status));
-                            
-                            // Borrar cache y recargar la página
-                            if let Ok(storage) = win.local_storage() {
-                                if let Some(storage) = storage {
-                                    let _ = storage.clear();
-                                }
-                            }
                             let _ = win.location().reload();
                         }
                     }
@@ -390,16 +358,6 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     }
                 }
             });
-        })
-    };
-    
-    // Handler para cancelar cambio de BAL con "Non"
-    let on_bal_confirm_no = {
-        let show_bal_confirm = show_bal_confirm.clone();
-        Callback::from(move |e: MouseEvent| {
-            e.stop_propagation();
-            show_bal_confirm.set(false);
-            log::info!("❌ Usuario canceló el cambio de accès BAL");
         })
     };
     
@@ -481,13 +439,14 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                         <div class="detail-label">{get_text("mailbox_access")}</div>
                         <div class="detail-value-with-action">
                             <span>{if props.package.has_mailbox_access { "✅ Oui" } else { "❌ Non" }}</span>
-                            <button 
-                                class="btn-icon-edit" 
-                                title={get_text("modify")}
-                                onclick={on_edit_bal}
-                            >
-                                {"✏️"}
-                            </button>
+                            <label class="toggle-switch">
+                                <input 
+                                    type="checkbox" 
+                                    checked={props.package.has_mailbox_access}
+                                    onclick={on_edit_bal}
+                                />
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
                     </div>
 
@@ -534,44 +493,6 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     </div>
                 </div>
             </div>
-            
-            // Modal de confirmación BAL personalizado
-            {if *show_bal_confirm {
-                let current_value = props.package.has_mailbox_access;
-                let message = if current_value {
-                    "Voulez-vous DÉSACTIVER l'accès à la boîte aux lettres?"
-                } else {
-                    "Voulez-vous ACTIVER l'accès à la boîte aux lettres?"
-                };
-                
-                html! {
-                    <div class="modal active" style="z-index: 10001;">
-                        <div class="modal-overlay" style="background: rgba(0,0,0,0.7);"></div>
-                        <div class="modal-content" style="max-width: 400px; padding: 30px; text-align: center;">
-                            <h3 style="margin-bottom: 20px; font-size: 18px;">{"📬 Accès boîte aux lettres (BAL)"}</h3>
-                            <p style="margin-bottom: 30px; font-size: 16px; line-height: 1.5;">{message}</p>
-                            <div style="display: flex; gap: 15px; justify-content: center;">
-                                <button 
-                                    class="btn-primary" 
-                                    style="padding: 12px 30px; font-size: 16px; background: #4CAF50; flex: 1;"
-                                    onclick={on_bal_confirm_yes}
-                                >
-                                    {"✓ Oui"}
-                                </button>
-                                <button 
-                                    class="btn-secondary" 
-                                    style="padding: 12px 30px; font-size: 16px; background: #f44336; flex: 1;"
-                                    onclick={on_bal_confirm_no}
-                                >
-                                    {"✗ Non"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                }
-            } else {
-                html! {}
-            }}
         </div>
     }
 }
@@ -611,6 +532,42 @@ async fn geocode_address(address: String) -> Result<GeocodeResponse, String> {
         serde_json::from_value(data.clone()).map_err(|e| format!("Failed to parse response data: {}", e))
     } else {
         Err("No data in response".to_string())
+    }
+}
+
+/// Borrar SOLO el cache de paquetes, NO el login ni las credenciales guardadas
+fn clear_packages_cache_only() {
+    if let Some(win) = window() {
+        if let Ok(Some(storage)) = win.local_storage() {
+            // Claves de login que NO debemos borrar
+            let keep_keys = vec![
+                "routeOptimizer_loginData",
+                "routeOptimizer_savedCredentials",
+                "routeOptimizer_selectedCompany",
+                "routeOptimizer_language",
+            ];
+            
+            // Obtener todas las claves
+            let mut keys_to_remove = Vec::new();
+            if let Ok(length) = storage.length() {
+                for i in 0..length {
+                    if let Ok(Some(key)) = storage.key(i) {
+                        // Solo remover si NO es una clave de login
+                        if !keep_keys.contains(&key.as_str()) {
+                            keys_to_remove.push(key);
+                        }
+                    }
+                }
+            }
+            
+            // Remover solo las claves de cache de paquetes
+            for key in keys_to_remove {
+                let _ = storage.remove_item(&key);
+                log::info!("🗑️ Cache removido: {}", key);
+            }
+            
+            log::info!("✅ Cache de paquetes limpiado (login preservado)");
+        }
     }
 }
 

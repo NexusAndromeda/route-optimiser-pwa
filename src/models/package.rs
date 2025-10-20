@@ -31,6 +31,10 @@ pub struct Package {
     // Campo para paquetes problemáticos (sin dirección válida)
     #[serde(default)]
     pub is_problematic: bool,
+    
+    // Tipo de entrega (DOMICILE, RELAIS, RCS, etc.)
+    #[serde(default)]
+    pub type_livraison: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
@@ -48,7 +52,7 @@ pub struct GroupPackageInfo {
 
 impl GroupPackageInfo {
     /// Convierte GroupPackageInfo a Package (para mostrar detalles)
-    pub fn to_package(&self, group_address: &str, group_coords: Option<[f64; 2]>, door_code: Option<String>, has_mailbox_access: bool, driver_notes: Option<String>) -> Package {
+    pub fn to_package(&self, group_address: &str, group_coords: Option<[f64; 2]>, door_code: Option<String>, has_mailbox_access: bool, driver_notes: Option<String>, type_livraison: Option<String>) -> Package {
         Package {
             id: self.tracking.clone(),
             recipient: self.customer_name.clone(),
@@ -66,6 +70,7 @@ impl GroupPackageInfo {
             total_packages: None,
             group_packages: None,
             is_problematic: self.is_problematic,
+            type_livraison,
         }
     }
 }

@@ -59,13 +59,24 @@ pub fn package_card(props: &PackageCardProps) -> Html {
     // Obtener el color del número basado en code_statut_article
     let status_color = get_package_status_color(&props.package.code_statut_article);
     
+    // Obtener clase CSS para el tipo de entrega
+    let type_class = props.package.type_livraison.as_ref().map(|t| {
+        match t.as_str() {
+            "RELAIS" => "type-relais",
+            "RCS" => "type-rcs",
+            "DOMICILE" => "type-domicile",
+            _ => "type-domicile"
+        }
+    });
+    
     let card_class = classes!(
         "package-card",
         props.is_selected.then_some("selected"),
         props.animation_class.as_ref(),
         props.reorder_mode.then_some("reorder-mode-active"),
         props.is_reorder_origin.then_some("reorder-origin"),
-        props.package.is_problematic.then_some("problematic")
+        props.package.is_problematic.then_some("problematic"),
+        type_class
     );
     
     html! {
@@ -165,6 +176,7 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                                     let group_door_code = props.package.door_code.clone();
                                                     let group_mailbox_access = props.package.has_mailbox_access;
                                                     let group_driver_notes = props.package.driver_notes.clone();
+                                                    let group_type_livraison = props.package.type_livraison.clone();
                                                     let on_show_package_details = props.on_show_package_details.clone();
                                                     Callback::from(move |e: MouseEvent| {
                                                         e.stop_propagation();
@@ -175,7 +187,8 @@ pub fn package_card(props: &PackageCardProps) -> Html {
                                                                 group_coords,
                                                                 group_door_code.clone(),
                                                                 group_mailbox_access,
-                                                                group_driver_notes.clone()
+                                                                group_driver_notes.clone(),
+                                                                group_type_livraison.clone()
                                                             );
                                                             callback.emit(package);
                                                         }

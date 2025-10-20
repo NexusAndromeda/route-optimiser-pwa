@@ -172,12 +172,15 @@ pub fn app() -> Html {
     
     // Calculate stats
     let total = packages_hook.packages.len();
-    let delivered = packages_hook.packages.iter().filter(|p| {
+    let treated = packages_hook.packages.iter().filter(|p| {
         p.code_statut_article.as_ref()
-            .map(|code| code.starts_with("STATUT_LIVRER_"))
+            .map(|code| {
+                // Contar todos excepto STATUT_CHARGER (paquetes no tratados aún)
+                !code.starts_with("STATUT_CHARGER")
+            })
             .unwrap_or(false)
     }).count();
-    let percentage = if total > 0 { (delivered * 100) / total } else { 0 };
+    let percentage = if total > 0 { (treated * 100) / total } else { 0 };
     
     // Render login screen if not logged in
     if !auth.state.is_logged_in {
@@ -251,7 +254,7 @@ pub fn app() -> Html {
                         packages={(*packages_hook.packages).clone()}
                         selected_index={*packages_hook.selected_index}
                         total={total}
-                        delivered={delivered}
+                        delivered={treated}
                         percentage={percentage}
                         sheet_state={(*sheet.state).to_str()}
                         on_toggle={sheet.toggle.clone()}

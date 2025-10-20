@@ -26,9 +26,9 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                         let cache_age = now.signed_duration_since(cache_time.with_timezone(&chrono::Utc));
                         let cache_age_minutes = cache_age.num_minutes();
                         
-                        // Verificar versión del cache (v2 tiene code_statut_article)
+                        // Verificar versión del cache (v3 tiene estructura jerárquica)
                         let cache_version = cache.version;
-                        let is_valid_version = cache_version >= 2;
+                        let is_valid_version = cache_version >= 3;
                         
                         // Cache valid for configured duration AND correct version
                         if cache_age_minutes < CACHE_DURATION_MINUTES && is_valid_version {
@@ -85,9 +85,39 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
             // Detectar si es la nueva estructura agrupada o la vieja
             let mut all_packages = Vec::new();
             
-            // Nueva estructura: {singles: [...], groups: [...]}
-            if packages_response.get("singles").is_some() || packages_response.get("groups").is_some() {
-                log::info!("📦 Detectada estructura agrupada (nueva)");
+            // Nueva estructura jerárquica: {delivery_types: {...}}
+            if packages_response.get("delivery_types").is_some() {
+                log::info!("📦 Detectada estructura jerárquica por tipo de entrega (v3)");
+                
+                if let Some(delivery_types) = packages_response.get("delivery_types").and_then(|d| d.as_object()) {
+                    for (type_livraison, type_group) in delivery_types {
+                        log::info!("📋 Procesando tipo de entrega: {}", type_livraison);
+                        
+                        // Parsear singles de este tipo
+                        if let Some(singles_array) = type_group.get("singles").and_then(|s| s.as_array()) {
+                            for (index, single) in singles_array.iter().enumerate() {
+                                if let Ok(pkg) = parse_single_package(single, all_packages.len() + index) {
+                                    all_packages.push(pkg);
+                                }
+                            }
+                        }
+                        
+                        // Parsear groups de este tipo
+                        if let Some(groups_array) = type_group.get("groups").and_then(|g| g.as_array()) {
+                            for (index, group) in groups_array.iter().enumerate() {
+                                if let Ok(pkg) = parse_group_package(group, all_packages.len() + index) {
+                                    all_packages.push(pkg);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                log::info!("✅ {} paquetes parseados de tipos de entrega", all_packages.len());
+                
+            // Estructura v2: {singles: [...], groups: [...]}
+            } else if packages_response.get("singles").is_some() || packages_response.get("groups").is_some() {
+                log::info!("📦 Detectada estructura agrupada (v2)");
                 
                 // Parsear singles
                 if let Some(singles_array) = packages_response.get("singles").and_then(|s| s.as_array()) {
@@ -182,6 +212,7 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                                     total_packages: None,
                                     group_packages: None,
                                     is_problematic: false,
+                                    type_livraison: None, // Legacy no tiene type_livraison
                                 })
                             })
                             .collect();
@@ -197,11 +228,11 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                             let cache = PackagesCache {
                                 packages: packages.clone(),
                                 timestamp: chrono::Utc::now().to_rfc3339(),
-                                version: 2, // Version con code_statut_article
+                                version: 3, // Version con estructura jerárquica
                             };
                             if let Ok(cache_json) = serde_json::to_string(&cache) {
                                 let _ = storage.set_item(&cache_key, &cache_json);
-                                log::info!("💾 Paquetes guardados en cache (v2)");
+                                log::info!("💾 Paquetes guardados en cache (v3)");
                             }
                         }
                         
@@ -217,11 +248,11 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                     let cache = PackagesCache {
                         packages: all_packages.clone(),
                         timestamp: chrono::Utc::now().to_rfc3339(),
-                        version: 2, // Version con code_statut_article
+                        version: 3, // Version con estructura jerárquica
                     };
                     if let Ok(cache_json) = serde_json::to_string(&cache) {
                         let _ = storage.set_item(&cache_key, &cache_json);
-                        log::info!("💾 Paquetes guardados en cache (v2)");
+                        log::info!("💾 Paquetes guardados en cache (v3)");
                     }
                 }
                 
@@ -320,6 +351,9 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
         is_problematic: single.get("is_problematic")
             .and_then(|p| p.as_bool())
             .unwrap_or(false),
+        type_livraison: single.get("type_livraison")
+            .and_then(|t| t.as_str())
+            .map(|s| s.to_string()),
     })
 }
 
@@ -397,6 +431,9 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
         total_packages: Some(total_packages),
         group_packages: Some(group_packages_list),
         is_problematic: false,
+        type_livraison: group.get("type_livraison")
+            .and_then(|t| t.as_str())
+            .map(|s| s.to_string()),
     })
 }
 

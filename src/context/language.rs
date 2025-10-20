@@ -102,7 +102,7 @@ impl LanguageContext {
                 
                 // Status
                 texts.insert("pending".to_string(), "En attente".to_string());
-                texts.insert("delivered".to_string(), "Livré".to_string());
+                texts.insert("delivered".to_string(), "Traité".to_string());
                 texts.insert("loading".to_string(), "Chargement...".to_string());
                 texts.insert("packages_loaded".to_string(), "Paquetes obtenidos".to_string());
                 texts.insert("packages_with_coords".to_string(), "Paquetes avec coordonnées".to_string());
@@ -162,7 +162,7 @@ impl LanguageContext {
                 
                 // Status
                 texts.insert("pending".to_string(), "Pendiente".to_string());
-                texts.insert("delivered".to_string(), "Entregado".to_string());
+                texts.insert("delivered".to_string(), "Tratado".to_string());
                 texts.insert("loading".to_string(), "Cargando...".to_string());
                 texts.insert("packages_loaded".to_string(), "Paquetes obtenidos".to_string());
                 texts.insert("packages_with_coords".to_string(), "Paquetes con coordenadas".to_string());
