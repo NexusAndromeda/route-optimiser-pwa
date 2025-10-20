@@ -170,7 +170,15 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                             Ok(_) => {
                                 log::info!("✅ Code de porte envoyé au backend: {}", trimmed_value_clone);
                                 if let Some(win) = window() {
-                                    let _ = win.alert_with_message(&format!("✅ Code de porte enregistré:\n{}", trimmed_value_clone));
+                                    let _ = win.alert_with_message(&format!("✅ Code de porte enregistré:\n{}\n\nLa page va se recharger pour afficher les changements.", trimmed_value_clone));
+                                    
+                                    // Borrar cache y recargar la página
+                                    if let Ok(storage) = win.local_storage() {
+                                        if let Some(storage) = storage {
+                                            let _ = storage.clear();
+                                        }
+                                    }
+                                    let _ = win.location().reload();
                                 }
                             }
                             Err(e) => {
@@ -222,7 +230,15 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                             Ok(_) => {
                                 log::info!("✅ Indications client envoyées au backend: {}", trimmed_value_clone);
                                 if let Some(win) = window() {
-                                    let _ = win.alert_with_message(&format!("✅ Indications du client enregistré:\n{}", trimmed_value_clone));
+                                    let _ = win.alert_with_message(&format!("✅ Indications du client enregistré:\n{}\n\nLa page va se recharger pour afficher les changements.", trimmed_value_clone));
+                                    
+                                    // Borrar cache y recargar la página
+                                    if let Ok(storage) = win.local_storage() {
+                                        if let Some(storage) = storage {
+                                            let _ = storage.clear();
+                                        }
+                                    }
+                                    let _ = win.location().reload();
                                 }
                             }
                             Err(e) => {
@@ -274,7 +290,15 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                             Ok(_) => {
                                 log::info!("✅ Notes chauffeur envoyées au backend: {}", trimmed_value_clone);
                                 if let Some(win) = window() {
-                                    let _ = win.alert_with_message(&format!("✅ Notes du chauffeur enregistré:\n{}", trimmed_value_clone));
+                                    let _ = win.alert_with_message(&format!("✅ Notes du chauffeur enregistré:\n{}\n\nLa page va se recharger pour afficher les changements.", trimmed_value_clone));
+                                    
+                                    // Borrar cache y recargar la página
+                                    if let Ok(storage) = win.local_storage() {
+                                        if let Some(storage) = storage {
+                                            let _ = storage.clear();
+                                        }
+                                    }
+                                    let _ = win.location().reload();
                                 }
                             }
                             Err(e) => {
@@ -346,7 +370,15 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                         log::info!("✅ Accès buzón envoyé au backend: {}", new_value);
                         if let Some(win) = window() {
                             let status = if new_value { "ACTIVÉ ✅" } else { "DÉSACTIVÉ ❌" };
-                            let _ = win.alert_with_message(&format!("✅ Accès boîte aux lettres {}!", status));
+                            let _ = win.alert_with_message(&format!("✅ Accès boîte aux lettres {}!\n\nLa page va se recharger pour afficher les changements.", status));
+                            
+                            // Borrar cache y recargar la página
+                            if let Ok(storage) = win.local_storage() {
+                                if let Some(storage) = storage {
+                                    let _ = storage.clear();
+                                }
+                            }
+                            let _ = win.location().reload();
                         }
                     }
                     Err(e) => {
