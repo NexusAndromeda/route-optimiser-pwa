@@ -44,19 +44,34 @@ pub fn app() -> Html {
         });
     }
     
-    // Update map when packages change - EXACTLY like original
+    // Update map when packages change OR filter changes
     {
         let packages = (*packages_hook.packages).clone();
+        let filter_mode = *packages_hook.filter_mode;
         let map_initialized = map.state.initialized;
         let map_update = map.update_packages.clone();
         
-        use_effect_with(packages.clone(), move |pkgs| {
+        use_effect_with((packages.clone(), filter_mode), move |(pkgs, filter_enabled)| {
             let pkgs_clone = pkgs.clone();
             
-            // Save packages to window immediately (for map load event and other JS functions)
+            // Apply filter
+            let filtered = if *filter_enabled {
+                pkgs_clone.iter()
+                    .filter(|p| {
+                        p.code_statut_article.as_ref()
+                            .map(|code| code == "STATUT_CHARGER")
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect::<Vec<Package>>()
+            } else {
+                pkgs_clone.clone()
+            };
+            
+            // Save filtered packages to window (for map and other JS functions)
             use wasm_bindgen::JsValue;
             if let Some(window) = web_sys::window() {
-                if let Ok(js_packages) = serde_wasm_bindgen::to_value(&pkgs_clone) {
+                if let Ok(js_packages) = serde_wasm_bindgen::to_value(&filtered) {
                     let _ = js_sys::Reflect::set(
                         &window,
                         &JsValue::from_str("currentPackages"),
@@ -67,8 +82,9 @@ pub fn app() -> Html {
             
             // If map is initialized, update packages immediately
             if map_initialized {
+                log::info!("📍 Actualizando mapa con {} paquetes (filtro: {})", filtered.len(), filter_enabled);
                 Timeout::new(100, move || {
-                    map_update.emit(pkgs_clone);
+                    map_update.emit(filtered);
                 }).forget();
             }
             
@@ -170,7 +186,33 @@ pub fn app() -> Html {
         })
     };
     
-    // Calculate stats
+    // Apply filter if enabled
+    let filtered_packages = if *packages_hook.filter_mode {
+        // Filtrar solo STATUT_CHARGER (pendientes)
+        let filtered = packages_hook.packages.iter()
+            .filter(|p| {
+                let matches = p.code_statut_article.as_ref()
+                    .map(|code| code == "STATUT_CHARGER")
+                    .unwrap_or(false);
+                if !matches && p.code_statut_article.is_some() {
+                    log::debug!("🔍 Paquete {} excluido por filtro: code_statut={:?}", 
+                        p.id, p.code_statut_article);
+                }
+                matches
+            })
+            .cloned()
+            .collect::<Vec<Package>>();
+        
+        log::info!("🔍 Filtro activado: {} paquetes de {} son STATUT_CHARGER", 
+            filtered.len(), packages_hook.packages.len());
+        filtered
+    } else {
+        // Mostrar todos
+        log::info!("🔍 Filtro desactivado: mostrando {} paquetes", packages_hook.packages.len());
+        (*packages_hook.packages).clone()
+    };
+    
+    // Calculate stats (usando todos los paquetes, no solo los filtrados)
     let total = packages_hook.packages.len();
     let treated = packages_hook.packages.iter().filter(|p| {
         p.code_statut_article.as_ref()
@@ -251,7 +293,7 @@ pub fn app() -> Html {
                 
                 <div id="bottom-sheet" class={(*sheet.state).to_class()}>
                     <PackageList
-                        packages={(*packages_hook.packages).clone()}
+                        packages={filtered_packages}
                         selected_index={*packages_hook.selected_index}
                         total={total}
                         delivered={treated}
@@ -341,6 +383,8 @@ pub fn app() -> Html {
                             on_logout={on_logout.clone()}
                             reorder_mode={*packages_hook.reorder_mode}
                             on_toggle_reorder={packages_hook.toggle_reorder_mode.clone()}
+                            filter_mode={*packages_hook.filter_mode}
+                            on_toggle_filter={packages_hook.toggle_filter_mode.clone()}
                         />
                     }
                 } else {

@@ -1,6 +1,7 @@
 // Mapbox initialization and helper functions
 let map = null;
 let selectedPackageIndex = null;
+let pulseAnimationId = null;
 
 // Initialize Mapbox map
 window.initMapbox = function(containerId, isDark) {
@@ -271,30 +272,55 @@ window.addPackagesToMap = function(packagesJson) {
                 ],
                 'circle-color': [
                     'case',
-                    ['get', 'isSelected'], '#FFD700', // Selected: gold
-                    // STATUT_LIVRER_* → Verde
+                    // Por tipo de entrega - FONDO (sin cambiar por selección):
+                    ['==', ['get', 'type_livraison'], 'RELAIS'], 'rgb(97, 38, 122)', // RELAIS: morado
+                    ['==', ['get', 'type_livraison'], 'RCS'], '#F59E0B', // RCS: dorado
+                    // DOMICILE - por estado de entrega:
                     ['has', 'code_statut_article'], [
                         'case',
                         ['in', 'STATUT_LIVRER', ['get', 'code_statut_article']], '#10B981', // Verde - Entregado
                         ['in', 'STATUT_NONLIV', ['get', 'code_statut_article']], '#EF4444', // Rojo - No entregado
-                        ['==', ['get', 'code_statut_article'], 'STATUT_RECEPTIONNER'], '#FBBF24', // Amarillo - Recepcionado
+                        ['==', ['get', 'code_statut_article'], 'STATUT_RECEPTIONNER'], '#06B6D4', // Cyan - Recepcionado
+                        ['==', ['get', 'code_statut_article'], 'STATUT_COLLECTE'], '#EC4899', // Magenta - En recogida
                         '#3B82F6' // Azul - STATUT_CHARGER o default
                     ],
                     '#3B82F6' // Default: blue (si no tiene code_statut_article)
                 ],
                 'circle-stroke-width': [
                     'case',
-                    ['get', 'isSelected'], 2, // Selected: thick border
-                    1.5 // Normal: thin border
+                    ['get', 'isSelected'], 3, // Selected: borde más grueso para efecto pulsante
+                    ['get', 'is_problematic'], 1.5, // Problemático: borde visible
+                    0 // Sin borde para el resto
                 ],
                 'circle-stroke-color': [
                     'case',
-                    ['get', 'isSelected'], '#FF6B35', // Selected: orange border
+                    // Selected: borde del mismo color del fondo (para efecto pulsante)
+                    ['get', 'isSelected'], [
+                        'case',
+                        ['==', ['get', 'type_livraison'], 'RELAIS'], 'rgb(97, 38, 122)', // RELAIS: morado
+                        ['==', ['get', 'type_livraison'], 'RCS'], '#F59E0B', // RCS: dorado
+                        ['has', 'code_statut_article'], [
+                            'case',
+                            ['in', 'STATUT_LIVRER', ['get', 'code_statut_article']], '#10B981', // Verde
+                            ['in', 'STATUT_NONLIV', ['get', 'code_statut_article']], '#EF4444', // Rojo
+                            ['==', ['get', 'code_statut_article'], 'STATUT_RECEPTIONNER'], '#06B6D4', // Cyan
+                            ['==', ['get', 'code_statut_article'], 'STATUT_COLLECTE'], '#EC4899', // Magenta
+                            '#3B82F6' // Azul
+                        ],
+                        '#3B82F6' // Default
+                    ],
                     ['get', 'is_problematic'], '#EF4444', // Problemático: rojo pulsante
-                    // Por tipo de entrega:
-                    ['==', ['get', 'type_livraison'], 'RELAIS'], 'rgb(97, 38, 122)', // RELAIS: morado Colis Privé
-                    ['==', ['get', 'type_livraison'], 'RCS'], '#F59E0B', // RCS: dorado/amarillo
-                    '#FFFFFF' // DOMICILE o default: blanco
+                    'transparent' // Sin borde para el resto
+                ],
+                'circle-opacity': [
+                    'case',
+                    ['get', 'isSelected'], 0.9, // Selected: ligeramente transparente para efecto
+                    1 // Default: opaco
+                ],
+                'circle-stroke-opacity': [
+                    'case',
+                    ['get', 'isSelected'], 0.6, // Selected: borde semi-transparente
+                    1 // Default: opaco
                 ]
             }
         });
@@ -368,8 +394,53 @@ window.updateSelectedPackage = function(selectedIndex) {
         // Update the source data
         source.setData(geojsonData);
         console.log(`✅ Package ${selectedIndex} updated as selected`);
+        
+        // Start pulse animation for selected package
+        startPulseAnimation();
     }
 };
+
+// Pulse animation for selected package
+function startPulseAnimation() {
+    // Clear existing animation
+    if (pulseAnimationId) {
+        cancelAnimationFrame(pulseAnimationId);
+    }
+    
+    let phase = 0;
+    
+    function animate() {
+        if (!map || selectedPackageIndex === null) {
+            return;
+        }
+        
+        phase += 0.05; // Speed of animation
+        
+        // Calculate pulsating stroke width (between 2 and 5)
+        const strokeWidth = 3 + Math.sin(phase) * 1.5;
+        
+        // Calculate pulsating opacity (between 0.4 and 0.8)
+        const strokeOpacity = 0.6 + Math.sin(phase) * 0.2;
+        
+        // Update paint properties
+        map.setPaintProperty('packages-circles', 'circle-stroke-width', [
+            'case',
+            ['get', 'isSelected'], strokeWidth, // Selected: pulsating
+            ['get', 'is_problematic'], 1.5, // Problemático: borde visible
+            0 // Sin borde para el resto
+        ]);
+        
+        map.setPaintProperty('packages-circles', 'circle-stroke-opacity', [
+            'case',
+            ['get', 'isSelected'], strokeOpacity, // Selected: pulsating opacity
+            1 // Default: opaco
+        ]);
+        
+        pulseAnimationId = requestAnimationFrame(animate);
+    }
+    
+    animate();
+}
 
 // Center map on package
 window.centerMapOnPackage = function(index) {

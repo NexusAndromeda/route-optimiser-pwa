@@ -21,6 +21,9 @@ pub struct UsePackagesHandle {
     pub reorder_mode: UseStateHandle<bool>, // Modo reordenar activado/desactivado
     pub reorder_origin: UseStateHandle<Option<usize>>, // Primer paquete seleccionado para swap
     
+    // Filter mode state
+    pub filter_mode: UseStateHandle<bool>, // Filtrar solo pendientes (STATUT_CHARGER)
+    
     // Callbacks
     pub refresh: Callback<MouseEvent>,
     pub optimize: Callback<MouseEvent>,
@@ -30,6 +33,7 @@ pub struct UsePackagesHandle {
     pub mark_problematic: Callback<String>, // Marcar paquete como problemático
     pub toggle_group: Callback<String>, // Toggle expand/collapse de grupo
     pub toggle_reorder_mode: Callback<()>, // Toggle modo reordenar
+    pub toggle_filter_mode: Callback<()>, // Toggle filtrar pendientes
 }
 
 #[hook]
@@ -45,6 +49,9 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
     // Reorder mode states
     let reorder_mode = use_state(|| false);
     let reorder_origin = use_state(|| None::<usize>);
+    
+    // Filter mode state
+    let filter_mode = use_state(|| false); // Por defecto: mostrar todos
     
     // Load packages on login
     {
@@ -442,6 +449,22 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         })
     };
     
+    // Toggle filter mode
+    let toggle_filter_mode = {
+        let filter_mode = filter_mode.clone();
+        
+        Callback::from(move |_| {
+            let new_mode = !*filter_mode;
+            filter_mode.set(new_mode);
+            
+            if new_mode {
+                log::info!("🔍 Filtro ACTIVADO - Solo pendientes (STATUT_CHARGER)");
+            } else {
+                log::info!("🔍 Filtro DESACTIVADO - Mostrando todos");
+            }
+        })
+    };
+    
     UsePackagesHandle {
         packages,
         loading,
@@ -451,6 +474,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         expanded_groups,
         reorder_mode,
         reorder_origin,
+        filter_mode,
         refresh,
         optimize,
         select_package,
@@ -459,6 +483,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         mark_problematic,
         toggle_group,
         toggle_reorder_mode,
+        toggle_filter_mode,
     }
 }
 

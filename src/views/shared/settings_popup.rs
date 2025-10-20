@@ -9,6 +9,10 @@ pub struct SettingsPopupProps {
     pub reorder_mode: bool,
     #[prop_or_default]
     pub on_toggle_reorder: Option<Callback<()>>,
+    #[prop_or_default]
+    pub filter_mode: bool,
+    #[prop_or_default]
+    pub on_toggle_filter: Option<Callback<()>>,
 }
 
 #[function_component(SettingsPopup)]
@@ -77,18 +81,40 @@ pub fn settings_popup(props: &SettingsPopupProps) -> Html {
                         </label>
                     </div>
                     
+                    // Filter mode toggle (Filtrer)
+                    <div class="reorder-mode-section">
+                        <span class="reorder-mode-label">{"Filtrer"}</span>
+                        <label class="toggle-switch">
+                            <input
+                                type="checkbox"
+                                checked={props.filter_mode}
+                                onchange={{
+                                    let on_toggle = props.on_toggle_filter.clone();
+                                    Callback::from(move |_| {
+                                        if let Some(toggle) = &on_toggle {
+                                            toggle.emit(());
+                                        }
+                                    })
+                                }}
+                            />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    
                     // Color codes section
                     <div class="color-codes-section">
                         <div class="color-codes-label">{format!("🎨 {}", get_text("color_codes"))}</div>
                         <div class="color-codes-list">
+                            // Tipos de entrega
                             <div class="color-code-item">
-                                <div class="color-indicator yellow"></div>
-                                <span class="color-description">{get_text("ready_to_load")}</span>
+                                <div class="color-indicator relais"></div>
+                                <span class="color-description">{"RELAIS"}</span>
                             </div>
                             <div class="color-code-item">
-                                <div class="color-indicator normal"></div>
-                                <span class="color-description">{get_text("in_transit")}</span>
+                                <div class="color-indicator rcs"></div>
+                                <span class="color-description">{"RCS (Premium)"}</span>
                             </div>
+                            // Estados de entrega
                             <div class="color-code-item">
                                 <div class="color-indicator green"></div>
                                 <span class="color-description">{get_text("delivered_status")}</span>
@@ -96,6 +122,18 @@ pub fn settings_popup(props: &SettingsPopupProps) -> Html {
                             <div class="color-code-item">
                                 <div class="color-indicator red"></div>
                                 <span class="color-description">{get_text("not_delivered")}</span>
+                            </div>
+                            <div class="color-code-item">
+                                <div class="color-indicator blue"></div>
+                                <span class="color-description">{get_text("in_transit")}</span>
+                            </div>
+                            <div class="color-code-item">
+                                <div class="color-indicator cyan"></div>
+                                <span class="color-description">{"Réceptionné"}</span>
+                            </div>
+                            <div class="color-code-item">
+                                <div class="color-indicator magenta"></div>
+                                <span class="color-description">{"En collecte"}</span>
                             </div>
                         </div>
                     </div>

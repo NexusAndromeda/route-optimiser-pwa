@@ -139,6 +139,17 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                 
                 log::info!("✅ {} paquetes parseados (singles + groups)", all_packages.len());
                 
+                // 🔍 DEBUG: Mostrar resumen de code_statut_article recibidos
+                let mut status_counts = std::collections::HashMap::new();
+                for pkg in &all_packages {
+                    let status = pkg.code_statut_article.as_deref().unwrap_or("None");
+                    *status_counts.entry(status).or_insert(0) += 1;
+                }
+                log::info!("📊 Resumen de code_statut_article en FRONTEND:");
+                for (status, count) in status_counts.iter() {
+                    log::info!("   - {}: {} paquetes", status, count);
+                }
+                
             // Estructura vieja: {success: true, packages: [...]}
             } else if let Some(success) = packages_response.get("success").and_then(|s| s.as_bool()) {
                 log::info!("📦 Detectada estructura legacy (vieja)");
@@ -401,6 +412,13 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
         }
     }
     
+    // Heredar code_statut_article del primer paquete del grupo
+    let group_code_statut = if !group_packages_list.is_empty() {
+        group_packages_list[0].code_statut_article.clone()
+    } else {
+        None
+    };
+    
     Ok(Package {
         id: group.get("id")
             .and_then(|i| i.as_str())
@@ -412,7 +430,7 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
             .unwrap_or("Dirección no disponible")
             .to_string(),
         status: "pending".to_string(),
-        code_statut_article: None, // Los grupos no tienen status individual
+        code_statut_article: group_code_statut, // Heredado del primer paquete
         coords: if let (Some(lat), Some(lng)) = (
             group.get("latitude").and_then(|l| l.as_f64()),
             group.get("longitude").and_then(|l| l.as_f64())
