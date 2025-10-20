@@ -300,14 +300,17 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
         if let Some(win) = window() {
             let current_value = has_mailbox_access_4;
             let message = if current_value {
-                "¿Desactivar acceso al buzón? (Oui/Non)"
+                "Accès boîte aux lettres (BAL):\n\nCliquez OK pour DÉSACTIVER l'accès\nCliquez Annuler pour garder l'accès"
             } else {
-                "¿Activar acceso al buzón? (Oui/Non)"
+                "Accès boîte aux lettres (BAL):\n\nCliquez OK pour ACTIVER l'accès\nCliquez Annuler pour ne pas donner accès"
             };
             
-            if let Ok(Some(value)) = win.prompt_with_message(message) {
-                let trimmed_value = value.trim().to_lowercase();
-                let new_value = trimmed_value == "oui" || trimmed_value == "si" || trimmed_value == "yes" || trimmed_value == "1";
+            // confirm() retorna true si el usuario hace clic en OK, false si hace clic en Cancelar
+            if win.confirm_with_message(message).unwrap_or(false) {
+                // Usuario hizo clic en OK → invertir el estado actual
+                let new_value = !current_value;
+                
+                log::info!("📬 Usuario cambió accès BAL: {} → {}", current_value, new_value);
                 
                 // Enviar al backend
                 let package_id = package_id_4.clone();
@@ -330,8 +333,8 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                         Ok(_) => {
                             log::info!("✅ Accès buzón envoyé au backend: {}", new_value);
                             if let Some(win) = window() {
-                                let status = if new_value { "activé" } else { "désactivé" };
-                                let _ = win.alert_with_message(&format!("✅ Accès au buzón {}:\n{}", status, if new_value { "✅ Oui" } else { "❌ Non" }));
+                                let status = if new_value { "ACTIVÉ ✅" } else { "DÉSACTIVÉ ❌" };
+                                let _ = win.alert_with_message(&format!("✅ Accès boîte aux lettres {}!", status));
                             }
                         }
                         Err(e) => {
@@ -342,6 +345,8 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                         }
                     }
                 });
+            } else {
+                log::info!("❌ Usuario canceló el cambio de accès BAL");
             }
         }
     });
