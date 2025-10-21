@@ -481,7 +481,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                                                     id: p.id.clone(),
                                                     latitude: coords[1], // [lng, lat]
                                                     longitude: coords[0],
-                                                    type_livraison: p.type_livraison.clone().unwrap_or_else(|| "DOMICILE".to_string()),
+                                                    type_livraison: Some(p.type_livraison.clone().unwrap_or_else(|| "DOMICILE".to_string())),
                                                 })
                                             })
                                             .collect();

@@ -7,7 +7,8 @@ pub struct PackageLocation {
     pub id: String,
     pub latitude: f64,
     pub longitude: f64,
-    pub type_livraison: String, // "DOMICILE", "RELAIS", "RCS"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub type_livraison: Option<String>, // "RELAIS", "RCS", "DOMICILE"
 }
 
 #[derive(Debug, Serialize, Deserialize)]
