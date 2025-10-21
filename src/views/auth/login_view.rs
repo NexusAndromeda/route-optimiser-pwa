@@ -55,7 +55,7 @@ pub fn login_view(props: &LoginViewProps) -> Html {
             if selected_company.is_none() {
                 web_sys::window()
                     .unwrap()
-                    .alert_with_message("Por favor, selecciona una empresa")
+                    .alert_with_message("Veuillez sélectionner une entreprise")
                     .ok();
                 return;
             }
@@ -67,7 +67,7 @@ pub fn login_view(props: &LoginViewProps) -> Html {
             if username_val.is_empty() || password_val.is_empty() {
                 web_sys::window()
                     .unwrap()
-                    .alert_with_message("Por favor, completa todos los campos")
+                    .alert_with_message("Veuillez remplir tous les champs")
                     .ok();
                 return;
             }
@@ -78,7 +78,7 @@ pub fn login_view(props: &LoginViewProps) -> Html {
     
     let company_text = match &props.selected_company {
         Some(company) => company.name.clone(),
-        None => "Seleccionar empresa".to_string(),
+        None => "Sélectionner l'entreprise".to_string(),
     };
     
     html! {
@@ -89,17 +89,17 @@ pub fn login_view(props: &LoginViewProps) -> Html {
                         <div class="logo-icon">{"📦"}</div>
                     </div>
                     <h1>{"Route Optimizer"}</h1>
-                    <p>{"Optimización de Rutas de Entrega"}</p>
+                    <p>{"Optimisation de Routes de Livraison"}</p>
                 </div>
                 
                 <form class="login-form" onsubmit={on_submit}>
                     <div class="form-group">
-                        <label for="username">{"Usuario"}</label>
+                        <label for="username">{"Utilisateur"}</label>
                         <input
                             type="text"
                             id="username"
                             name="username"
-                            placeholder="Ingresa tu usuario"
+                            placeholder="Entrez votre nom d'utilisateur"
                             value={(*username).clone()}
                             oninput={on_username_change}
                             required=true
@@ -107,12 +107,12 @@ pub fn login_view(props: &LoginViewProps) -> Html {
                     </div>
                     
                     <div class="form-group">
-                        <label for="password">{"Contraseña"}</label>
+                        <label for="password">{"Mot de passe"}</label>
                         <input
                             type="password"
                             id="password"
                             name="password"
-                            placeholder="Ingresa tu contraseña"
+                            placeholder="Entrez votre mot de passe"
                             value={(*password).clone()}
                             oninput={on_password_change}
                             required=true
@@ -120,7 +120,7 @@ pub fn login_view(props: &LoginViewProps) -> Html {
                     </div>
                     
                     <div class="form-group">
-                        <label for="company">{"Empresa"}</label>
+                        <label for="company">{"Entreprise"}</label>
                         <button
                             type="button"
                             class="company-selector"
@@ -132,7 +132,7 @@ pub fn login_view(props: &LoginViewProps) -> Html {
                     </div>
                     
                     <button type="submit" class="btn-login">
-                        <span class="btn-text">{"Iniciar Sesión"}</span>
+                        <span class="btn-text">{"Se connecter"}</span>
                     </button>
                     
                     <div class="login-footer">

@@ -311,6 +311,8 @@ pub fn app() -> Html {
                         on_show_package_details={Some(on_show_package_details)}
                         reorder_mode={*packages_hook.reorder_mode}
                         reorder_origin={*packages_hook.reorder_origin}
+                        on_optimize={Some(packages_hook.optimize_route.clone())}
+                        optimizing={*packages_hook.optimizing}
                     />
                 </div>
             </div>

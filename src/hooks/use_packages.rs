@@ -3,7 +3,14 @@ use web_sys::{window, MouseEvent};
 use std::collections::HashMap;
 use gloo_timers::callback::Timeout;
 use crate::models::{Package, LoginData};
-use crate::services::{fetch_packages, optimize_route, reorder_packages as service_reorder_packages};
+use crate::services::{
+    fetch_packages,
+    optimization_service::{
+        optimize_route as mapbox_optimize_route,
+        PackageLocation, 
+        DepotLocation
+    }
+};
 use crate::utils::{get_local_storage, STORAGE_KEY_PACKAGES_PREFIX};
 use js_sys;
 use wasm_bindgen::JsCast;
@@ -34,6 +41,7 @@ pub struct UsePackagesHandle {
     pub toggle_group: Callback<String>, // Toggle expand/collapse de grupo
     pub toggle_reorder_mode: Callback<()>, // Toggle modo reordenar
     pub toggle_filter_mode: Callback<()>, // Toggle filtrar pendientes
+    pub optimize_route: Callback<MouseEvent>, // Optimizar ruta con Mapbox
 }
 
 #[hook]
@@ -121,55 +129,15 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         })
     };
     
-    // Optimize route
+    // Optimize route (OLD - usando endpoint legacy de Colis Privé)
+    // Este callback será reemplazado por optimize_route que usa Mapbox Optimization API v2
     let optimize = {
         let packages = packages.clone();
-        let optimizing = optimizing.clone();
-        let login_data_ref = login_data.clone();
         
         Callback::from(move |_: MouseEvent| {
-            if let Some(login) = login_data_ref.as_ref() {
-                let packages = packages.clone();
-                let optimizing = optimizing.clone();
-                let username = login.username.clone();
-                let company_code = login.company.code.clone();
-                
-                wasm_bindgen_futures::spawn_local(async move {
-                    optimizing.set(true);
-                    
-                    log::info!("🎯 Iniciando optimización de ruta...");
-                    
-                    match optimize_route(&username, &company_code).await {
-                        Ok(response) => {
-                            if response.success {
-                                log::info!("✅ Ruta optimizada");
-                                let current_packages = (*packages).clone();
-                                let optimized = service_reorder_packages(current_packages, response);
-                                
-                                packages.set(optimized);
-                                optimizing.set(false);
-                                
-                                if let Some(win) = window() {
-                                    let _ = win.alert_with_message("✅ Ruta optimizada exitosamente");
-                                }
-                            } else {
-                                let msg = response.message.unwrap_or_else(|| "Error desconocido".to_string());
-                                log::error!("❌ Error en optimización: {}", msg);
-                                if let Some(win) = window() {
-                                    let _ = win.alert_with_message(&format!("Error: {}", msg));
-                                }
-                                optimizing.set(false);
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("❌ Error llamando API de optimización: {}", e);
-                            if let Some(win) = window() {
-                                let _ = win.alert_with_message(&format!("Error: {}", e));
-                            }
-                            optimizing.set(false);
-                        }
-                    }
-                });
+            log::warn!("⚠️ Optimize callback antiguo llamado - usar optimize_route en su lugar");
+            if let Some(win) = window() {
+                let _ = win.alert_with_message("Por favor, usa el botón 🎯 de optimización");
             }
         })
     };
@@ -465,6 +433,150 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         })
     };
     
+    // Optimize route with Mapbox
+    let optimize_route = {
+        let packages = packages.clone();
+        let optimizing = optimizing.clone();
+        
+        Callback::from(move |_: MouseEvent| {
+            // Get driver location from JavaScript
+            if let Some(window) = web_sys::window() {
+                if let Ok(get_location_fn) = js_sys::Reflect::get(&window, &"getDriverLocation".into()) {
+                    if let Ok(func) = get_location_fn.dyn_into::<js_sys::Function>() {
+                        match func.call0(&window) {
+                            Ok(location_value) => {
+                                if location_value.is_null() || location_value.is_undefined() {
+                                    // No location available
+                                    log::warn!("⚠️ No hay ubicación del chofer");
+                                    if let Some(win) = web_sys::window() {
+                                        let _ = win.alert_with_message("Por favor, activa primero tu ubicación usando el botón 📍 en el mapa");
+                                    }
+                                    return;
+                                }
+                                
+                                // Parse location
+                                let lat = js_sys::Reflect::get(&location_value, &"latitude".into())
+                                    .ok()
+                                    .and_then(|v| v.as_f64());
+                                let lng = js_sys::Reflect::get(&location_value, &"longitude".into())
+                                    .ok()
+                                    .and_then(|v| v.as_f64());
+                                
+                                if let (Some(latitude), Some(longitude)) = (lat, lng) {
+                                    log::info!("✅ Ubicación del chofer: {}, {}", latitude, longitude);
+                                    
+                                    // Start optimization
+                                    let packages = packages.clone();
+                                    let optimizing = optimizing.clone();
+                                    
+                                    wasm_bindgen_futures::spawn_local(async move {
+                                        optimizing.set(true);
+                                        log::info!("🎯 Iniciando optimización de ruta...");
+                                        
+                                        // Extract locations from packages
+                                        let locations: Vec<PackageLocation> = packages.iter()
+                                            .filter_map(|p| {
+                                                let coords = p.coords?;
+                                                Some(PackageLocation {
+                                                    id: p.id.clone(),
+                                                    latitude: coords[1], // [lng, lat]
+                                                    longitude: coords[0],
+                                                    type_livraison: p.type_livraison.clone().unwrap_or_else(|| "DOMICILE".to_string()),
+                                                })
+                                            })
+                                            .collect();
+                                        
+                                        if locations.is_empty() {
+                                            log::error!("❌ No hay paquetes con coordenadas");
+                                            optimizing.set(false);
+                                            if let Some(win) = web_sys::window() {
+                                                let _ = win.alert_with_message("No hay paquetes con coordenadas para optimizar");
+                                            }
+                                            return;
+                                        }
+                                        
+                                        let depot = DepotLocation { latitude, longitude };
+                                        
+                                        log::info!("📍 Optimizando {} ubicaciones desde ({}, {})", 
+                                            locations.len(), latitude, longitude);
+                                        
+                                        // El backend hace todo el polling internamente
+                                        // Solo esperamos la respuesta final
+                                        match mapbox_optimize_route(locations, depot).await {
+                                            Ok(response) => {
+                                                optimizing.set(false);
+                                                
+                                                if response.success {
+                                                    log::info!("✅ Optimización completa");
+                                                    
+                                                    // Reordenar paquetes según el orden optimizado
+                                                    if let Some(optimized_order) = response.optimized_order {
+                                                        let current_packages = (*packages).clone();
+                                                        
+                                                        // Crear mapa ID -> Package
+                                                        let package_map: HashMap<String, Package> = current_packages
+                                                            .into_iter()
+                                                            .map(|p| (p.id.clone(), p))
+                                                            .collect();
+                                                        
+                                                        // Reordenar según el orden optimizado
+                                                        let mut reordered = Vec::new();
+                                                        for id in &optimized_order {
+                                                            if let Some(pkg) = package_map.get(id) {
+                                                                reordered.push(pkg.clone());
+                                                            }
+                                                        }
+                                                        
+                                                        // Agregar paquetes que no estaban en el orden (por si acaso)
+                                                        for (id, pkg) in package_map {
+                                                            if !reordered.iter().any(|p| p.id == id) {
+                                                                reordered.push(pkg);
+                                                            }
+                                                        }
+                                                        
+                                                        log::info!("✅ {} paquetes reordenados", reordered.len());
+                                                        packages.set(reordered);
+                                                        
+                                                        if let Some(win) = web_sys::window() {
+                                                            let _ = win.alert_with_message("✅ Ruta optimizada exitosamente");
+                                                        }
+                                                    } else {
+                                                        log::warn!("⚠️ No se recibió orden optimizado");
+                                                        if let Some(win) = web_sys::window() {
+                                                            let _ = win.alert_with_message("✅ Optimización completa pero sin orden");
+                                                        }
+                                                    }
+                                                } else {
+                                                    log::error!("❌ Error: {:?}", response.message);
+                                                    if let Some(win) = web_sys::window() {
+                                                        let msg = response.message.unwrap_or_else(|| "Error desconocido".to_string());
+                                                        let _ = win.alert_with_message(&format!("Error: {}", msg));
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::error!("❌ Error optimizando: {}", e);
+                                                optimizing.set(false);
+                                                if let Some(win) = web_sys::window() {
+                                                    let _ = win.alert_with_message(&format!("Error: {}", e));
+                                                }
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    log::error!("❌ Error parseando coordenadas");
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("❌ Error obteniendo ubicación: {:?}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        })
+    };
+    
     UsePackagesHandle {
         packages,
         loading,
@@ -484,6 +596,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         toggle_group,
         toggle_reorder_mode,
         toggle_filter_mode,
+        optimize_route,
     }
 }
 
@@ -495,3 +608,4 @@ pub fn clear_packages_cache(company_code: &str, username: &str) {
         log::info!("🗑️ Cache de paquetes eliminado");
     }
 }
+

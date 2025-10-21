@@ -1,103 +1,112 @@
 use gloo_net::http::Request;
-use crate::models::{OptimizationResponse, MapboxOptimizationRequest, OptimizationPackage, Package};
+use serde::{Deserialize, Serialize};
 use crate::utils::BACKEND_URL;
-use super::fetch_packages;
 
-/// Optimize route using Mapbox Optimization API
-pub async fn optimize_route(username: &str, societe: &str) -> Result<OptimizationResponse, String> {
-    // Extract just the username part (without SOCIETE prefix)
-    // username viene como "PCP0010699_C187518", extraemos "C187518"
-    let matricule_only = if let Some(underscore_pos) = username.rfind('_') {
-        &username[underscore_pos + 1..]
-    } else {
-        username
-    };
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PackageLocation {
+    pub id: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub type_livraison: String, // "DOMICILE", "RELAIS", "RCS"
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DepotLocation {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OptimizeRouteRequest {
+    pub locations: Vec<PackageLocation>,
+    pub depot: DepotLocation,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OptimizeRouteResponse {
+    pub success: bool,
+    pub optimization_id: Option<String>,
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optimized_order: Option<Vec<String>>, // IDs de paquetes en orden óptimo
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OptimizationStatus {
+    pub optimization_id: String,
+    pub status: String,
+    pub solution: Option<OptimizationSolution>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OptimizationSolution {
+    pub dropped: DroppedItems,
+    pub routes: Vec<Route>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DroppedItems {
+    pub services: Vec<String>,
+    pub shipments: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Route {
+    pub vehicle: String,
+    pub stops: Vec<Stop>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Stop {
+    pub location: String,
+    pub eta: String,
+    #[serde(rename = "type")]
+    pub stop_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub services: Option<Vec<String>>,
+}
+
+/// Start route optimization
+pub async fn optimize_route(locations: Vec<PackageLocation>, depot: DepotLocation) -> Result<OptimizeRouteResponse, String> {
+    let url = format!("{}/mapbox/optimize", BACKEND_URL);
+    let request_body = OptimizeRouteRequest { locations, depot };
     
-    log::info!("🗺️ Optimizando ruta con Mapbox para: {} en societe: {}", matricule_only, societe);
-    
-    // Primero obtener los paquetes actuales
-    let packages = fetch_packages(username, societe, false).await
-        .map_err(|e| format!("Error obteniendo paquetes: {}", e))?;
-    
-    // Convertir paquetes al formato que espera Mapbox Optimization
-    let mapbox_packages: Vec<OptimizationPackage> = packages.iter().map(|pkg| {
-        // Extraer coordenadas del Package del frontend
-        let (coord_x, coord_y) = if let Some(coords) = pkg.coords {
-            (Some(coords[0]), Some(coords[1])) // [longitude, latitude]
-        } else {
-            (None, None)
-        };
-        
-        OptimizationPackage {
-            id: pkg.id.clone(),
-            reference_colis: pkg.id.clone(), // Usar ID como reference_colis
-            destinataire_nom: pkg.recipient.clone(),
-            destinataire_adresse1: Some(pkg.address.clone()),
-            destinataire_cp: None, // No disponible en Package del frontend
-            destinataire_ville: None, // No disponible en Package del frontend
-            coord_x_destinataire: coord_x,
-            coord_y_destinataire: coord_y,
-            statut: Some(pkg.status.clone()),
-        }
-    }).collect();
-    
-    // Usar el nuevo endpoint de Mapbox Optimization
-    let url = format!("{}/mapbox-optimization/optimize", BACKEND_URL);
-    let request_body = MapboxOptimizationRequest {
-        matricule: matricule_only.to_string(),
-        societe: societe.to_string(),
-        packages: mapbox_packages,
-    };
+    log::info!("🎯 Enviando {} ubicaciones para optimizar", request_body.locations.len());
     
     let response = Request::post(&url)
         .json(&request_body)
         .map_err(|e| format!("Request build error: {}", e))?
         .send()
         .await
-        .map_err(|e| format!("Request error: {}", e))?;
+        .map_err(|e| format!("Network error: {}", e))?;
     
     if !response.ok() {
         return Err(format!("HTTP error: {}", response.status()));
     }
     
     response
-        .json::<OptimizationResponse>()
+        .json::<OptimizeRouteResponse>()
         .await
         .map_err(|e| format!("Parse error: {}", e))
 }
 
-/// Reorder packages based on optimization response
-pub fn reorder_packages(current_packages: Vec<Package>, optimization_response: OptimizationResponse) -> Vec<Package> {
-    if !optimization_response.success {
-        log::warn!("⚠️ Optimización no exitosa");
-        return current_packages;
+/// Get optimization status
+pub async fn get_optimization_status(optimization_id: &str) -> Result<OptimizationStatus, String> {
+    let url = format!("{}/mapbox/optimize/{}", BACKEND_URL, optimization_id);
+    
+    log::info!("🔍 Consultando status de optimización: {}", optimization_id);
+    
+    let response = Request::get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+    
+    if !response.ok() {
+        return Err(format!("HTTP error: {}", response.status()));
     }
     
-    let Some(data) = optimization_response.data else {
-        log::warn!("⚠️ No hay datos de optimización");
-        return current_packages;
-    };
-    
-    let mut optimized_packages = Vec::new();
-    
-    // Mapear paquetes optimizados
-    for opt_pkg in data.optimized_packages {
-        // Buscar el paquete en la lista actual por referencia
-        if let Some(ref_colis) = opt_pkg.reference_colis {
-            if let Some(found) = current_packages.iter().find(|p| p.id == ref_colis) {
-                optimized_packages.push(found.clone());
-            } else {
-                log::warn!("⚠️ No se encontró paquete con ID: {}", ref_colis);
-            }
-        }
-    }
-    
-    if optimized_packages.is_empty() {
-        log::warn!("⚠️ No se pudieron mapear los paquetes optimizados");
-        return current_packages;
-    }
-    
-    log::info!("📦 Paquetes reordenados según optimización: {} paquetes", optimized_packages.len());
-    optimized_packages
+    response
+        .json::<OptimizationStatus>()
+        .await
+        .map_err(|e| format!("Parse error: {}", e))
 }
-

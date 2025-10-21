@@ -31,6 +31,10 @@ pub struct PackageListProps {
     pub reorder_mode: bool,
     #[prop_or_default]
     pub reorder_origin: Option<usize>,
+    #[prop_or_default]
+    pub on_optimize: Option<Callback<MouseEvent>>,
+    #[prop_or_default]
+    pub optimizing: bool,
 }
 
 #[function_component(PackageList)]

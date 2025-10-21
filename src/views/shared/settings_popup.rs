@@ -81,9 +81,9 @@ pub fn settings_popup(props: &SettingsPopupProps) -> Html {
                         </label>
                     </div>
                     
-                    // Filter mode toggle (Filtrer)
+                    // Filter mode toggle
                     <div class="reorder-mode-section">
-                        <span class="reorder-mode-label">{"Filtrer"}</span>
+                        <span class="reorder-mode-label">{get_text("filter")}</span>
                         <label class="toggle-switch">
                             <input
                                 type="checkbox"

@@ -2,6 +2,8 @@
 let map = null;
 let selectedPackageIndex = null;
 let pulseAnimationId = null;
+let geolocateControl = null;
+let currentDriverLocation = null;
 
 // Initialize Mapbox map
 window.initMapbox = function(containerId, isDark) {
@@ -85,13 +87,24 @@ window.initMapbox = function(containerId, isDark) {
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
         
         // Add geolocate control
-        map.addControl(new mapboxgl.GeolocateControl({
+        geolocateControl = new mapboxgl.GeolocateControl({
             positionOptions: {
                 enableHighAccuracy: true
             },
             trackUserLocation: true,
             showUserHeading: true
-        }), 'top-right');
+        });
+        
+        // Listen for geolocation events
+        geolocateControl.on('geolocate', (e) => {
+            currentDriverLocation = {
+                latitude: e.coords.latitude,
+                longitude: e.coords.longitude
+            };
+            console.log('📍 Ubicación del chofer capturada:', currentDriverLocation);
+        });
+        
+        map.addControl(geolocateControl, 'top-right');
         
         // Add packages when map loads
         map.on('load', () => {
@@ -627,6 +640,25 @@ window.removePackageFromMap = function(packageId) {
     
     console.log('🗑️ Package removed from map:', packageId);
     return true;
+};
+
+// Get driver location for optimization
+window.getDriverLocation = function() {
+    if (currentDriverLocation) {
+        console.log('✅ Ubicación del chofer disponible:', currentDriverLocation);
+        return currentDriverLocation;
+    }
+    
+    console.warn('⚠️ No hay ubicación del chofer - debe activar geolocalización primero');
+    return null;
+};
+
+// Trigger geolocate (for programmatic use)
+window.triggerGeolocate = function() {
+    if (geolocateControl && map) {
+        console.log('📍 Activando geolocalización...');
+        geolocateControl.trigger();
+    }
 };
 
 console.log('📍 Mapbox helper functions loaded');
