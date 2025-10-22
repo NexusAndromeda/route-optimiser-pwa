@@ -263,7 +263,7 @@ pub fn app() -> Html {
                 <div class="header-actions">
                     <button 
                         class="btn-optimize" 
-                        onclick={packages_hook.optimize.clone()}
+                        onclick={packages_hook.optimize_route.clone()}
                         disabled={*packages_hook.optimizing}
                     >
                         {if *packages_hook.optimizing { 
