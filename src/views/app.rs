@@ -44,6 +44,20 @@ pub fn app() -> Html {
         });
     }
     
+    // Load optimized route when user logs in
+    {
+        let is_logged_in = auth.state.is_logged_in;
+        let load_optimized = packages_hook.load_optimized_route.clone();
+        
+        use_effect_with(is_logged_in, move |logged_in| {
+            if *logged_in {
+                log::info!("💾 Cargando ruta optimizada desde cache...");
+                load_optimized.emit(());
+            }
+            || ()
+        });
+    }
+    
     // Update map when packages change OR filter changes
     {
         let packages = (*packages_hook.packages).clone();
@@ -163,6 +177,7 @@ pub fn app() -> Html {
             show_settings.set(!*show_settings);
         })
     };
+    
     
     // Enhanced logout that clears package cache
     let on_logout = {

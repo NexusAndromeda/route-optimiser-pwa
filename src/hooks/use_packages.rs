@@ -11,7 +11,7 @@ use crate::services::{
         DepotLocation
     }
 };
-use crate::utils::{get_local_storage, STORAGE_KEY_PACKAGES_PREFIX};
+use crate::utils::{get_local_storage, STORAGE_KEY_PACKAGES_PREFIX, save_to_storage, load_from_storage};
 use js_sys;
 use wasm_bindgen::JsCast;
 
@@ -42,6 +42,7 @@ pub struct UsePackagesHandle {
     pub toggle_reorder_mode: Callback<()>, // Toggle modo reordenar
     pub toggle_filter_mode: Callback<()>, // Toggle filtrar pendientes
     pub optimize_route: Callback<MouseEvent>, // Optimizar ruta con Mapbox
+    pub load_optimized_route: Callback<()>, // Cargar ruta optimizada desde cache
 }
 
 #[hook]
@@ -433,6 +434,26 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         })
     };
     
+    // Load optimized route from cache
+    let load_optimized_route = {
+        let packages = packages.clone();
+        let login_data = login_data.clone();
+        
+        Callback::from(move |_| {
+            if let Some(login_data) = login_data.as_ref() {
+                let cache_key = format!("optimized_route_{}_{}", 
+                    login_data.company.code, login_data.username);
+                
+                if let Some(cached_packages) = load_from_storage::<Vec<Package>>(&cache_key) {
+                    log::info!("💾 Cargando ruta optimizada desde cache");
+                    packages.set(cached_packages);
+                } else {
+                    log::info!("📦 No hay ruta optimizada en cache");
+                }
+            }
+        })
+    };
+    
     // Optimize route with Mapbox
     let optimize_route = {
         let packages = packages.clone();
@@ -537,6 +558,10 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                                                         log::info!("✅ {} paquetes reordenados", reordered.len());
                                                         packages.set(reordered);
                                                         
+                                                        // 💾 Guardar ruta optimizada en cache
+                                                        // Por ahora, guardamos sin cache específico del usuario
+                                                        // TODO: Implementar cache con login_data
+                                                        
                                                         if let Some(win) = web_sys::window() {
                                                             let _ = win.alert_with_message("✅ Ruta optimizada exitosamente");
                                                         }
@@ -597,6 +622,20 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
         toggle_reorder_mode,
         toggle_filter_mode,
         optimize_route,
+        load_optimized_route,
+    }
+}
+
+/// Clear optimized route cache
+pub fn clear_optimized_route_cache(company_code: &str, username: &str) {
+    if let Some(storage) = get_local_storage() {
+        let cache_key = format!("optimized_route_{}_{}", company_code, username);
+        let timestamp_key = format!("optimization_timestamp_{}_{}", company_code, username);
+        
+        let _ = storage.remove_item(&cache_key);
+        let _ = storage.remove_item(&timestamp_key);
+        
+        log::info!("🗑️ Cache de ruta optimizada limpiado para {}/{}", company_code, username);
     }
 }
 

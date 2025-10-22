@@ -2262,15 +2262,13 @@ body {
     }
 }
 
-/* Colores por tipo de entrega - borde sutil */
+/* Colores por tipo de entrega - solo borde izquierdo, sin fondo */
 .package-card.type-relais {
     border-left: 4px solid rgb(97, 38, 122) !important;
-    background: rgba(97, 38, 122, 0.03);
 }
 
 .package-card.type-rcs {
     border-left: 4px solid #F59E0B !important;
-    background: rgba(245, 158, 11, 0.03);
 }
 
 .package-card.type-domicile {
