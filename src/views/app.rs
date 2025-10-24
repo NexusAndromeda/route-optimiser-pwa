@@ -5,7 +5,7 @@ use crate::views::packages::PackageList;
 use crate::components::details_modal::DetailsModal;
 use crate::views::shared::{SettingsPopup, BalModal};
 use crate::context::get_text;
-use crate::models::Package;
+use crate::models::LegacyPackage;
 use gloo_timers::callback::Timeout;
 
 #[function_component(App)]
@@ -19,7 +19,7 @@ pub fn app() -> Html {
     // UI state
     let show_details = use_state(|| false);
     let details_package_index = use_state(|| None::<usize>);
-    let details_package = use_state(|| None::<Package>);
+    let details_package = use_state(|| None::<LegacyPackage>);
     let show_bal_modal = use_state(|| false);
     let show_settings = use_state(|| false);
     
@@ -77,7 +77,7 @@ pub fn app() -> Html {
                             .unwrap_or(false)
                     })
                     .cloned()
-                    .collect::<Vec<Package>>()
+                    .collect::<Vec<LegacyPackage>>()
             } else {
                 pkgs_clone.clone()
             };
@@ -158,7 +158,7 @@ pub fn app() -> Html {
         let show_details = show_details.clone();
         let details_package_index = details_package_index.clone();
         let details_package = details_package.clone();
-        Callback::from(move |package: Package| {
+        Callback::from(move |package: LegacyPackage| {
             details_package.set(Some(package));
             details_package_index.set(None); // Limpiar índice
             show_details.set(true);
@@ -216,7 +216,7 @@ pub fn app() -> Html {
                 matches
             })
             .cloned()
-            .collect::<Vec<Package>>();
+            .collect::<Vec<LegacyPackage>>();
         
         log::info!("🔍 Filtro activado: {} paquetes de {} son STATUT_CHARGER", 
             filtered.len(), packages_hook.packages.len());

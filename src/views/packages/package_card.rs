@@ -1,5 +1,5 @@
 use yew::prelude::*;
-use crate::models::Package;
+use crate::models::LegacyPackage;
 use crate::context::get_text;
 
 /// Mapea el code_statut_article a un color para el número de paquete
@@ -24,7 +24,7 @@ fn get_package_status_color(code_statut_article: &Option<String>) -> &'static st
 #[derive(Properties, PartialEq)]
 pub struct PackageCardProps {
     pub index: usize,
-    pub package: Package,
+    pub package: LegacyPackage,
     pub is_selected: bool,
     pub on_select: Callback<usize>,
     pub on_show_details: Callback<usize>,
@@ -38,7 +38,7 @@ pub struct PackageCardProps {
     #[prop_or_default]
     pub on_toggle_group: Option<Callback<String>>,
     #[prop_or_default]
-    pub on_show_package_details: Option<Callback<Package>>,
+    pub on_show_package_details: Option<Callback<LegacyPackage>>,
     #[prop_or_default]
     pub reorder_mode: bool,
     #[prop_or_default]

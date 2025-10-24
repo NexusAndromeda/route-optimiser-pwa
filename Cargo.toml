@@ -27,6 +27,7 @@ js-sys = "0.3"
 
 # HTTP client
 gloo-net = { version = "0.5", features = ["http"] }
+gloo-storage = "0.2"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

@@ -2,7 +2,7 @@ use yew::prelude::*;
 use gloo_timers::callback::Timeout;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use crate::models::Package;
+use crate::models::LegacyPackage;
 use crate::utils::{init_mapbox, add_packages_to_map, update_selected_package as update_selected_package_ffi, center_map_on_package, scroll_to_selected_package};
 
 #[derive(Clone, PartialEq)]
@@ -13,7 +13,7 @@ pub struct MapState {
 pub struct UseMapHandle {
     pub state: UseStateHandle<MapState>,
     pub initialize_map: Callback<()>,
-    pub update_packages: Callback<Vec<Package>>,
+    pub update_packages: Callback<Vec<LegacyPackage>>,
     pub select_package: Callback<usize>,
     pub reset_map: Callback<()>,
 }
@@ -58,7 +58,7 @@ pub fn use_map() -> UseMapHandle {
     // Update packages on map
     let update_packages = {
         let state = state.clone();
-        Callback::from(move |packages: Vec<Package>| {
+        Callback::from(move |packages: Vec<LegacyPackage>| {
             log::info!("🗺️ use_map: Actualizando paquetes (initialized: {}, count: {})", (*state).initialized, packages.len());
             
             // Save packages to window for JS access

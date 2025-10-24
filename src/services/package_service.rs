@@ -1,9 +1,9 @@
 use gloo_net::http::Request;
-use crate::models::{Package, PackageRequest, PackagesCache};
+use crate::models::{LegacyPackage, PackageRequest, PackagesCache};
 use crate::utils::{BACKEND_URL, CACHE_DURATION_MINUTES, get_local_storage, STORAGE_KEY_PACKAGES_PREFIX};
 
 /// Fetch packages from API or cache
-pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) -> Result<Vec<Package>, String> {
+pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) -> Result<Vec<LegacyPackage>, String> {
     log::info!("📦 Obteniendo paquetes de Colis Privé...");
     
     // Extract matricule from username (format: "COMPANY_CODE_MATRICULE")
@@ -155,11 +155,11 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                 log::info!("📦 Detectada estructura legacy (vieja)");
                 if success {
                     if let Some(packages_array) = packages_response.get("packages").and_then(|p| p.as_array()) {
-                        let packages: Result<Vec<Package>, String> = packages_array
+                        let packages: Result<Vec<LegacyPackage>, String> = packages_array
                             .iter()
                             .enumerate()
                             .map(|(index, pkg)| {
-                                Ok(Package {
+                                Ok(LegacyPackage {
                                     // Priorizar campos principales de Colis Privé
                                     id: pkg.get("reference_colis")
                                         .and_then(|r| r.as_str())
@@ -294,8 +294,8 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
 use crate::models::GroupPackageInfo;
 
 /// Parsea un single package de la nueva estructura
-fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Package, String> {
-    Ok(Package {
+fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<LegacyPackage, String> {
+    Ok(LegacyPackage {
         id: single.get("tracking")
             .and_then(|t| t.as_str())
             .or_else(|| single.get("id").and_then(|i| i.as_str()))
@@ -369,7 +369,7 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
 }
 
 /// Parsea un delivery group de la nueva estructura
-fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Package, String> {
+fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<LegacyPackage, String> {
     let total_packages = group.get("total_packages")
         .and_then(|t| t.as_u64())
         .unwrap_or(0) as usize;
@@ -419,7 +419,7 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
         None
     };
     
-    Ok(Package {
+    Ok(LegacyPackage {
         id: group.get("id")
             .and_then(|i| i.as_str())
             .unwrap_or(&format!("group-{}", index))
