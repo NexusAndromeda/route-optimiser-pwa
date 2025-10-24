@@ -1,5 +1,5 @@
 use yew::prelude::*;
-use crate::models::LegacyPackage;
+use crate::models::Package;
 use crate::context::get_text;
 use web_sys::window;
 use gloo_net::http::Request;
@@ -17,7 +17,7 @@ extern "C" {
 
 #[derive(Properties, PartialEq)]
 pub struct DetailsModalProps {
-    pub package: LegacyPackage,
+    pub package: Package,
     pub on_close: Callback<()>,
     pub on_edit_bal: Callback<()>,
     pub on_update_package: Callback<(String, f64, f64, String)>, // (id, lat, lng, new_address)

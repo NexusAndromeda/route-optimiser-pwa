@@ -2,7 +2,7 @@ use yew::prelude::*;
 use web_sys::{window, MouseEvent};
 use std::collections::HashMap;
 use gloo_timers::callback::Timeout;
-use crate::models::{LegacyPackage, LoginData};
+use crate::models::{Package, LoginData};
 use crate::services::{
     fetch_packages,
     optimization_service::{
@@ -17,7 +17,7 @@ use wasm_bindgen::JsCast;
 
 pub struct UsePackagesHandle {
     // Separate states - exactly like original version
-    pub packages: UseStateHandle<Vec<LegacyPackage>>,
+    pub packages: UseStateHandle<Vec<Package>>,
     pub loading: UseStateHandle<bool>,
     pub optimizing: UseStateHandle<bool>,
     pub selected_index: UseStateHandle<Option<usize>>,
@@ -48,7 +48,7 @@ pub struct UsePackagesHandle {
 #[hook]
 pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
     // Separate states - exactly like original version
-    let packages = use_state(|| Vec::<LegacyPackage>::new());
+    let packages = use_state(|| Vec::<Package>::new());
     let loading = use_state(|| false);
     let optimizing = use_state(|| false);
     let selected_index = use_state(|| None::<usize>);
@@ -444,7 +444,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                 let cache_key = format!("optimized_route_{}_{}", 
                     login_data.company.code, login_data.username);
                 
-                if let Some(cached_packages) = load_from_storage::<Vec<LegacyPackage>>(&cache_key) {
+                if let Some(cached_packages) = load_from_storage::<Vec<Package>>(&cache_key) {
                     log::info!("💾 Cargando ruta optimizada desde cache");
                     packages.set(cached_packages);
                 } else {
@@ -535,7 +535,7 @@ pub fn use_packages(login_data: Option<LoginData>) -> UsePackagesHandle {
                                                         let current_packages = (*packages).clone();
                                                         
                                                         // Crear mapa ID -> Package
-                                                        let package_map: HashMap<String, LegacyPackage> = current_packages
+                                                        let package_map: HashMap<String, Package> = current_packages
                                                             .into_iter()
                                                             .map(|p| (p.id.clone(), p))
                                                             .collect();

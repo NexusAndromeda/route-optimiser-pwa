@@ -1,12 +1,12 @@
 use yew::prelude::*;
-use crate::models::LegacyPackage;
+use crate::models::Package;
 use crate::context::get_text;
 use super::PackageCard;
 use std::collections::HashMap;
 
 #[derive(Properties, PartialEq)]
 pub struct PackageListProps {
-    pub packages: Vec<LegacyPackage>,
+    pub packages: Vec<Package>,
     pub selected_index: Option<usize>,
     pub delivered: usize,
     pub total: usize,
@@ -26,7 +26,7 @@ pub struct PackageListProps {
     #[prop_or_default]
     pub on_toggle_group: Option<Callback<String>>,
     #[prop_or_default]
-    pub on_show_package_details: Option<Callback<LegacyPackage>>,
+    pub on_show_package_details: Option<Callback<Package>>,
     #[prop_or_default]
     pub reorder_mode: bool,
     #[prop_or_default]

@@ -1,10 +1,8 @@
 pub mod auth_service;
 pub mod package_service;
 pub mod optimization_service;
-pub mod session_service;
 
 pub use auth_service::*;
 pub use package_service::*;
 pub use optimization_service::*;
-pub use session_service::*;
 
