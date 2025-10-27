@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct Package {
     pub id: String,
+    pub tracking: Option<String>, // Número de tracking de Colis Privé
     pub recipient: String,
     pub address: String,
     pub status: String,
@@ -55,6 +56,7 @@ impl GroupPackageInfo {
     pub fn to_package(&self, group_address: &str, group_coords: Option<[f64; 2]>, door_code: Option<String>, has_mailbox_access: bool, driver_notes: Option<String>, type_livraison: Option<String>) -> Package {
         Package {
             id: self.tracking.clone(),
+            tracking: Some(self.tracking.clone()),
             recipient: self.customer_name.clone(),
             address: group_address.to_string(),
             status: "pending".to_string(),

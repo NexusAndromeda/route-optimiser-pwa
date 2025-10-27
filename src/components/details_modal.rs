@@ -1,5 +1,5 @@
 use yew::prelude::*;
-use crate::models::Package;
+use crate::models::LegacyPackage as Package;
 use crate::context::get_text;
 use web_sys::window;
 use gloo_net::http::Request;
@@ -36,7 +36,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
     let close_overlay = props.on_close.clone();
     
     // Handler para geocodificación de dirección
-    let package_id = props.package.id.clone();
+    let package_id = props.package.tracking.as_ref().unwrap_or(&props.package.id).to_string();
     let on_street_settings = {
         let package_id = package_id.clone();
         let on_update = props.on_update_package.clone();
@@ -366,7 +366,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
             <div class="modal-overlay" onclick={Callback::from(move |_| close_overlay.emit(()))}></div>
             <div class="modal-content" onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}>
                 <div class="modal-header">
-                    <h2>{format!("Colis #{}", props.package.id)}</h2>
+                    <h2>{format!("Colis {}", props.package.tracking.clone().unwrap_or_else(|| props.package.id.clone()))}</h2>
                     <button class="btn-close" onclick={Callback::from(move |_| close.emit(()))}>
                         {"✕"}
                     </button>

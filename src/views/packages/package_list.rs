@@ -1,5 +1,5 @@
 use yew::prelude::*;
-use crate::models::Package;
+use crate::models::LegacyPackage as Package;
 use crate::context::get_text;
 use super::PackageCard;
 use std::collections::HashMap;

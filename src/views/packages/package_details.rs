@@ -1,5 +1,5 @@
 use yew::prelude::*;
-use crate::models::Package;
+use crate::models::LegacyPackage as Package;
 use crate::context::get_text;
 use web_sys::window;
 use gloo_net::http::Request;

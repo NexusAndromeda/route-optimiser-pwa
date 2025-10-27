@@ -1,8 +1,11 @@
-mod package;
+pub mod package;
 mod auth;
 mod optimization;
+pub mod delivery_session;
 
-pub use package::*;
+// Renombrar el Package viejo para evitar conflictos
+pub use package::{Package as LegacyPackage, *};
 pub use auth::*;
 pub use optimization::*;
+pub use delivery_session::*;
 

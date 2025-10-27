@@ -7,7 +7,7 @@ pub struct LoginViewProps {
     pub on_show_companies: Callback<()>,
     pub selected_company: Option<Company>,
     pub saved_credentials: Option<SavedCredentials>,
-    pub on_login: Callback<(String, String)>,
+    pub on_login: Callback<(String, String, String)>, // (username, password, societe)
     pub on_show_register: Callback<()>,
 }
 
@@ -24,6 +24,12 @@ pub fn login_view(props: &LoginViewProps) -> Html {
         props.saved_credentials.as_ref()
             .map(|c| c.password.clone())
             .unwrap_or_default()
+    });
+    
+    let societe = use_state(|| {
+        props.selected_company.as_ref()
+            .map(|c| c.code.clone())
+            .unwrap_or_else(|| "PCP0010699".to_string()) // Valor por defecto
     });
     
     let on_username_change = {
@@ -45,6 +51,7 @@ pub fn login_view(props: &LoginViewProps) -> Html {
     let on_submit = {
         let username = username.clone();
         let password = password.clone();
+        let societe = societe.clone();
         let on_login = props.on_login.clone();
         let selected_company = props.selected_company.clone();
         
@@ -62,6 +69,7 @@ pub fn login_view(props: &LoginViewProps) -> Html {
             
             let username_val = (*username).clone();
             let password_val = (*password).clone();
+            let societe_val = (*societe).clone();
             
             // Validate fields
             if username_val.is_empty() || password_val.is_empty() {
@@ -72,7 +80,7 @@ pub fn login_view(props: &LoginViewProps) -> Html {
                 return;
             }
             
-            on_login.emit((username_val, password_val));
+            on_login.emit((username_val, password_val, societe_val));
         })
     };
     

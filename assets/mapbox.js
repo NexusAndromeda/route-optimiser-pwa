@@ -116,10 +116,6 @@ window.initMapbox = function(containerId, isDark) {
             console.error('❌ Map error:', e);
         });
         
-        map.on('styledata', () => {
-            console.log('✅ Map style loaded');
-        });
-        
         // Listen for theme changes
         if (window.matchMedia) {
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
@@ -242,14 +238,18 @@ window.addPackagesToMap = function(packagesJson) {
             features: packages.map((pkg, index) => {
                 // Skip packages without valid coordinates
                 if (!pkg.coords || !Array.isArray(pkg.coords) || pkg.coords.length !== 2) {
+                    console.warn('⚠️ Paquete sin coordenadas válidas:', pkg.id, pkg.coords);
                     return null;
                 }
+                
+                // Log coordinates for debugging
+                console.log(`📍 Paquete ${index}: ${pkg.address} - coords originales: [${pkg.coords[0]}, ${pkg.coords[1]}] - convertidas: [${pkg.coords[1]}, ${pkg.coords[0]}]`);
                 
                 return {
                     type: 'Feature',
                     geometry: {
                         type: 'Point',
-                        coordinates: pkg.coords
+                        coordinates: [pkg.coords[1], pkg.coords[0]] // Convertir de [lat, lng] a [lng, lat]
                     },
                     properties: {
                         id: pkg.id,
@@ -462,11 +462,13 @@ window.centerMapOnPackage = function(index) {
     const pkg = packages[index];
     
     if (pkg && pkg.coords && Array.isArray(pkg.coords) && pkg.coords.length === 2) {
-        console.log(`🗺️ Centering map on package ${index}:`, pkg.coords);
+        // Convertir de [lat, lng] a [lng, lat] para Mapbox
+        const center = [pkg.coords[1], pkg.coords[0]];
+        console.log(`🗺️ Centering map on package ${index}:`, pkg.coords, '→', center);
         
         if (map) {
             map.flyTo({
-                center: pkg.coords,
+                center: center,
                 zoom: 15,
                 duration: 1000,
                 essential: true
@@ -479,22 +481,53 @@ window.centerMapOnPackage = function(index) {
 
 // Scroll to selected package in bottom sheet
 window.scrollToSelectedPackage = function(index) {
-    const packageCards = document.querySelectorAll('.package-card');
-    const selectedCard = packageCards[index];
+    console.log(`🔍 scrollToSelectedPackage called with index: ${index}`);
     
-    if (selectedCard) {
+    // First try package-card (current structure uses PackageList)
+    const packageCards = document.querySelectorAll('.package-card');
+    console.log(`🔍 Found ${packageCards.length} package cards in DOM`);
+    
+    const selectedPackage = packageCards[index];
+    
+    if (selectedPackage) {
         console.log(`📜 Scrolling to package ${index} in bottom sheet`);
         
-        selectedCard.scrollIntoView({
+        selectedPackage.scrollIntoView({
             behavior: 'smooth',
             block: 'center'
         });
         
         // Add flash animation
-        selectedCard.style.animation = 'none';
+        selectedPackage.style.animation = 'none';
         setTimeout(() => {
-            selectedCard.style.animation = 'flash 0.8s ease';
+            selectedPackage.style.animation = 'flash 0.8s ease';
         }, 100);
+    } else {
+        console.log(`⚠️ No package card found at index ${index}`);
+        
+        // Fallback to address-card (new structure)
+        const addressCards = document.querySelectorAll('.address-card');
+        console.log(`🔍 Found ${addressCards.length} address cards in DOM`);
+        
+        const selectedAddress = addressCards[index];
+        
+        if (selectedAddress) {
+            console.log(`📜 Scrolling to address ${index} in bottom sheet`);
+            
+            selectedAddress.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+            
+            // Add flash animation
+            selectedAddress.style.animation = 'none';
+            setTimeout(() => {
+                selectedAddress.style.animation = 'flash 0.8s ease';
+            }, 100);
+        } else {
+            console.log(`⚠️ No card found at index ${index}`);
+            console.log(`🔍 Total package cards: ${packageCards.length}, Total address cards: ${addressCards.length}`);
+        }
     }
 };
 

@@ -2,7 +2,7 @@ use yew::prelude::*;
 use gloo_timers::callback::Timeout;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use crate::models::Package;
+use crate::models::LegacyPackage as Package;
 use crate::utils::{init_mapbox, add_packages_to_map, update_selected_package as update_selected_package_ffi, center_map_on_package, scroll_to_selected_package};
 
 #[derive(Clone, PartialEq)]
@@ -42,14 +42,47 @@ pub fn use_map() -> UseMapHandle {
                 
                 // Delay to ensure map container is ready
                 let state = state.clone();
-                Timeout::new(500, move || {
+                Timeout::new(100, move || {
                     let is_dark = is_dark_mode();
                     log::info!("🎨 Modo mapa: {}", if is_dark { "oscuro" } else { "claro" });
-                    init_mapbox("map", is_dark);
                     
-                    let mut current_state = (*state).clone();
-                    current_state.initialized = true;
-                    state.set(current_state);
+                    // Try to initialize map immediately
+                    let try_init = {
+                        let state = state.clone();
+                        move |window_opt: Option<web_sys::Window>| {
+                            if let Some(window) = window_opt {
+                                if let Some(document) = window.document() {
+                                    if let Some(_container) = document.get_element_by_id("map") {
+                                        log::info!("✅ Contenedor del mapa encontrado, inicializando...");
+                                        init_mapbox("map", is_dark);
+                                        
+                                        let mut current_state = (*state).clone();
+                                        current_state.initialized = true;
+                                        state.set(current_state);
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                    };
+                    
+                    // First attempt
+                    if !try_init(web_sys::window()) {
+                        log::warn!("⚠️ Contenedor del mapa no encontrado, reintentando...");
+                        // Retry after another delay
+                        let try_init = try_init.clone();
+                        Timeout::new(200, move || {
+                            if !try_init(web_sys::window()) {
+                                log::error!("❌ Contenedor del mapa aún no disponible después de reintentos");
+                            }
+                        }).forget();
+                    }
                 }).forget();
             }
         })
@@ -60,6 +93,15 @@ pub fn use_map() -> UseMapHandle {
         let state = state.clone();
         Callback::from(move |packages: Vec<Package>| {
             log::info!("🗺️ use_map: Actualizando paquetes (initialized: {}, count: {})", (*state).initialized, packages.len());
+            
+            // Debug: Log package coordinates
+            for (i, pkg) in packages.iter().enumerate() {
+                if let Some(coords) = &pkg.coords {
+                    log::info!("📍 Paquete {}: {} - coords: [{}, {}]", i, pkg.address, coords[0], coords[1]);
+                } else {
+                    log::warn!("⚠️ Paquete {}: {} - SIN COORDENADAS", i, pkg.address);
+                }
+            }
             
             // Save packages to window for JS access
             use wasm_bindgen::JsValue;
@@ -107,8 +149,8 @@ pub fn use_map() -> UseMapHandle {
         })
     };
     
-    // Setup event listener for map package selection
-    use_map_selection_listener(Callback::from(|_| {}));
+    // RESOLVER LOOP DE REGISTROS: No registrar listener aquí, hacerlo en app.rs
+    // use_map_selection_listener se llamará desde app.rs cuando realmente se necesite
     
     // Reset map state
     let reset_map = {
@@ -131,10 +173,12 @@ pub fn use_map() -> UseMapHandle {
 }
 
 /// Setup event listener for package selection from map
+/// MEJORADO: Solo registra el listener una vez al montar el componente
 #[hook]
 pub fn use_map_selection_listener(on_select: Callback<usize>) -> () {
-    use_effect_with(on_select.clone(), move |on_select_cb| {
-        let on_select_cb = on_select_cb.clone();
+    use_effect_with((), move |_| {
+        // Crear callback de clausura una sola vez
+        let on_select_cb = on_select.clone();
         
         let callback = Closure::wrap(Box::new(move |event: JsValue| {
             // Get detail.index from custom event
@@ -153,16 +197,15 @@ pub fn use_map_selection_listener(on_select: Callback<usize>) -> () {
                 "packageSelected",
                 callback.as_ref().unchecked_ref()
             );
-            log::info!("✅ Event listener 'packageSelected' registrado");
+            log::info!("✅ Event listener 'packageSelected' registrado UNA VEZ");
         }
         
+        // Cleanup: solo se ejecuta cuando el componente se desmonta
         move || {
-            if let Some(window) = web_sys::window() {
-                // Removemos el listener anterior
-                log::info!("🗑️ Removiendo event listener anterior");
-            }
+            log::info!("🗑️ Limpiando event listener en cleanup");
             callback.forget();
         }
     });
 }
+
 

@@ -1,18 +1,20 @@
 use yew::prelude::*;
-use crate::hooks::{use_auth, use_packages, use_map, use_sheet, use_map_selection_listener, clear_packages_cache};
+use crate::hooks::{use_auth, use_delivery_session, use_map, use_sheet, use_map_selection_listener, clear_packages_cache};
 use crate::views::auth::{LoginView, RegisterView, CompanySelector};
 use crate::views::packages::PackageList;
 use crate::components::details_modal::DetailsModal;
 use crate::views::shared::{SettingsPopup, BalModal};
 use crate::context::get_text;
-use crate::models::Package;
+use crate::models::LegacyPackage as Package;
+use crate::services::DeliverySessionConverter;
+use crate::utils::scroll_to_selected_package;
 use gloo_timers::callback::Timeout;
 
 #[function_component(App)]
 pub fn app() -> Html {
     // Use custom hooks
     let auth = use_auth();
-    let packages_hook = use_packages(auth.state.login_data.clone());
+    let delivery_session = use_delivery_session();
     let map = use_map();
     let sheet = use_sheet();
     
@@ -23,99 +25,113 @@ pub fn app() -> Html {
     let show_bal_modal = use_state(|| false);
     let show_settings = use_state(|| false);
     
-    // Initialize map when user logs in (only if not already initialized)
+    // Filter mode state (como en main)
+    let filter_mode = use_state(|| false);
+    let selected_index = use_state(|| None::<usize>);
+    let expanded_groups = use_state(|| Vec::<String>::new());
+    
+    // Initialize map when delivery session is available (FIX: solo UNA VEZ)
+    let map_init_attempted = use_state(|| false);
+    
     {
-        let is_logged_in = auth.state.is_logged_in;
         let map_initialized = map.state.initialized;
+        let map_init_attempted = map_init_attempted.clone();
         let map_init = map.initialize_map.clone();
+        let session_available = delivery_session.state.session.is_some();
         
-        use_effect_with(is_logged_in, move |logged_in| {
-            if *logged_in && !map_initialized {
-                log::info!("🗺️ Preparando mapa...");
-                Timeout::new(100, move || {
-                    let map_init = map_init.clone();
-                    // Delay más largo para asegurar que el contenedor esté listo
-                    Timeout::new(500, move || {
-                        map_init.emit(());
-                    }).forget();
-                }).forget();
+        // Monitorear cuando la sesión esté disponible
+        use_effect_with(session_available, move |session_ready| {
+            // Solo inicializar UNA VEZ si hay sesión y el mapa no está inicializado
+            if *session_ready && !*map_init_attempted && !map_initialized {
+                log::info!("🗺️ Inicializando mapa UNA VEZ (session available: {})...", session_ready);
+                map_init_attempted.set(true);
+                
+                // Initialize map immediately
+                map_init.emit(());
             }
             || ()
         });
     }
     
-    // Load optimized route when user logs in
+    // Load optimized route when delivery session is available
     {
-        let is_logged_in = auth.state.is_logged_in;
-        let load_optimized = packages_hook.load_optimized_route.clone();
+        let session_available = delivery_session.state.session.is_some();
+        let refresh_session = delivery_session.refresh_session.clone();
         
-        use_effect_with(is_logged_in, move |logged_in| {
-            if *logged_in {
-                log::info!("💾 Cargando ruta optimizada desde cache...");
-                load_optimized.emit(());
+        use_effect_with(session_available, move |session_ready| {
+            if *session_ready {
+                log::info!("💾 Refrescando sesión desde servidor...");
+                refresh_session.emit(());
             }
             || ()
         });
     }
     
-    // Update map when packages change OR filter changes
+    // Convert DeliverySession to packages and update map (como en main)
     {
-        let packages = (*packages_hook.packages).clone();
-        let filter_mode = *packages_hook.filter_mode;
+        let session = delivery_session.state.session.clone();
+        let filter_mode_state = filter_mode.clone();
         let map_initialized = map.state.initialized;
         let map_update = map.update_packages.clone();
         
-        use_effect_with((packages.clone(), filter_mode), move |(pkgs, filter_enabled)| {
-            let pkgs_clone = pkgs.clone();
-            
-            // Apply filter
-            let filtered = if *filter_enabled {
-                pkgs_clone.iter()
-                    .filter(|p| {
-                        p.code_statut_article.as_ref()
-                            .map(|code| code == "STATUT_CHARGER")
-                            .unwrap_or(false)
-                    })
-                    .cloned()
-                    .collect::<Vec<Package>>()
-            } else {
-                pkgs_clone.clone()
-            };
-            
-            // Save filtered packages to window (for map and other JS functions)
-            use wasm_bindgen::JsValue;
-            if let Some(window) = web_sys::window() {
-                if let Ok(js_packages) = serde_wasm_bindgen::to_value(&filtered) {
-                    let _ = js_sys::Reflect::set(
-                        &window,
-                        &JsValue::from_str("currentPackages"),
-                        &js_packages
-                    );
+        use_effect_with((session.clone(), *filter_mode_state), move |(session_opt, filter_enabled)| {
+            if let Some(session) = session_opt {
+                // Convert DeliverySession to packages
+                let packages = DeliverySessionConverter::convert_to_packages(&session);
+                
+                // Apply filter (como en main)
+                let filtered = DeliverySessionConverter::apply_filters(&packages, *filter_enabled);
+                
+                // Save filtered packages to window (for map and other JS functions)
+                use wasm_bindgen::JsValue;
+                if let Some(window) = web_sys::window() {
+                    if let Ok(js_packages) = serde_wasm_bindgen::to_value(&filtered) {
+                        let _ = js_sys::Reflect::set(
+                            &window,
+                            &JsValue::from_str("currentPackages"),
+                            &js_packages
+                        );
+                    }
                 }
-            }
-            
-            // If map is initialized, update packages immediately
-            if map_initialized {
-                log::info!("📍 Actualizando mapa con {} paquetes (filtro: {})", filtered.len(), filter_enabled);
-                Timeout::new(100, move || {
-                    map_update.emit(filtered);
-                }).forget();
+                
+                // If map is initialized, update packages immediately
+                if map_initialized {
+                    log::info!("📍 Actualizando mapa con {} paquetes (filtrados: {})", packages.len(), filtered.len());
+                    Timeout::new(100, move || {
+                        map_update.emit(filtered);
+                    }).forget();
+                }
             }
             
             || ()
         });
     }
     
-    // Update selected package on map
+    // Open bottom sheet when packages are loaded
     {
-        let selected_index = *packages_hook.selected_index;
+        let session_available = delivery_session.state.session.is_some();
+        let set_half = sheet.set_half.clone();
+        
+        use_effect_with(session_available, move |session_ready| {
+            if *session_ready {
+                log::info!("📱 Abriendo bottom sheet automáticamente...");
+                set_half.emit(());
+            }
+            || ()
+        });
+    }
+    
+    // Update selected package on map (como en main)
+    {
+        let selected_idx = selected_index.clone();
         let map_initialized = map.state.initialized;
         let map_select = map.select_package.clone();
         
-        use_effect_with(selected_index, move |idx| {
+        use_effect_with(selected_idx, move |idx_opt| {
             if map_initialized {
-                if let Some(index) = *idx {
-                    map_select.emit(index);
+                if let Some(idx) = &**idx_opt {
+                    log::info!("📍 Seleccionando paquete en mapa: {}", idx);
+                    map_select.emit(*idx);
                 }
             }
             || ()
@@ -123,52 +139,84 @@ pub fn app() -> Html {
     }
     
     // Listen for package selection from map
-    {
-        let select_package = packages_hook.select_package.clone();
+    let on_map_select = {
+        let selected_idx = selected_index.clone();
         let sheet_state = sheet.state.clone();
         let set_half = sheet.set_half.clone();
         
-        let on_map_select = Callback::from(move |index: usize| {
-            log::info!("🖱️ Paquete seleccionado desde mapa: {}", index);
-            select_package.emit(index);
+        Callback::from(move |package_index: usize| {
+            log::info!("🖱️ Paquete seleccionado desde mapa: {}", package_index);
+            // Solo actualizar selected_index, el use_effect_with se encarga del resto
+            selected_idx.set(Some(package_index));
             
             // Open bottom sheet to half if collapsed
             if matches!(*sheet_state, crate::hooks::SheetState::Collapsed) {
                 set_half.emit(());
             }
-        });
-        
-        use_map_selection_listener(on_map_select);
-    }
+        })
+    };
+    use_map_selection_listener(on_map_select);
     
-    // Show details handler (para singles por índice)
+    // Show details handler (para paquetes individuales por índice)
     let on_show_details = {
         let show_details = show_details.clone();
-        let details_package_index = details_package_index.clone();
         let details_package = details_package.clone();
+        let delivery_session = delivery_session.state.session.clone();
+        let filter_mode_state = filter_mode.clone();
+        
         Callback::from(move |index: usize| {
-            details_package_index.set(Some(index));
-            details_package.set(None); // Limpiar paquete directo
-            show_details.set(true);
+            log::info!("📦 Mostrando detalles del paquete en índice: {}", index);
+            
+            if let Some(session) = &delivery_session {
+                // Convertir DeliverySession a packages
+                let packages = DeliverySessionConverter::convert_to_packages(session);
+                // Aplicar filtros
+                let filtered = DeliverySessionConverter::apply_filters(&packages, *filter_mode_state);
+                
+                if let Some(package) = filtered.get(index) {
+                    log::info!("📦 Paquete encontrado: {} - {}", package.id, package.recipient);
+                    details_package.set(Some(package.clone()));
+                    show_details.set(true);
+                } else {
+                    log::warn!("⚠️ Paquete no encontrado en índice: {}", index);
+                }
+            }
         })
     };
     
-    // Show details handler (para paquetes individuales de grupos)
+    // Show details handler (para paquetes completos)
     let on_show_package_details = {
         let show_details = show_details.clone();
-        let details_package_index = details_package_index.clone();
         let details_package = details_package.clone();
         Callback::from(move |package: Package| {
+            log::info!("📦 Mostrando detalles del paquete: {}", package.id);
             details_package.set(Some(package));
-            details_package_index.set(None); // Limpiar índice
             show_details.set(true);
         })
     };
     
     // Navigate handler
-    let on_navigate = Callback::from(move |index: usize| {
-        log::info!("🧭 Navigate to package {}", index);
+    let on_navigate = Callback::from(move |address_id: String| {
+        log::info!("🧭 Navigate to address {}", address_id);
     });
+    
+    // Toggle group expansion handler
+    let on_toggle_group = {
+        let expanded_groups = expanded_groups.clone();
+        Callback::from(move |group_id: String| {
+            let mut expanded = (*expanded_groups).clone();
+            
+            if let Some(pos) = expanded.iter().position(|id| id == &group_id) {
+                expanded.remove(pos);
+                log::info!("📥 Colapsando grupo {}", group_id);
+            } else {
+                expanded.push(group_id.clone());
+                log::info!("📤 Expandiendo grupo {}", group_id);
+            }
+            
+            expanded_groups.set(expanded);
+        })
+    };
     
     // Toggle settings
     let toggle_settings = {
@@ -179,19 +227,16 @@ pub fn app() -> Html {
     };
     
     
-    // Enhanced logout that clears package cache
+    // Enhanced logout that clears delivery session
     let on_logout = {
         let logout = auth.logout.clone();
-        let login_data = auth.state.login_data.clone();
-        let selected_company = auth.state.selected_company.clone();
+        let clear_session = delivery_session.clear_session.clone();
         let show_settings = show_settings.clone();
         let reset_map = map.reset_map.clone();
         
         Callback::from(move |_| {
-            // Clear packages cache
-            if let (Some(login), Some(company)) = (login_data.as_ref(), selected_company.as_ref()) {
-                clear_packages_cache(&company.code, &login.username);
-            }
+            // Clear delivery session
+            clear_session.emit(());
             
             // Reset map state
             reset_map.emit(());
@@ -201,46 +246,28 @@ pub fn app() -> Html {
         })
     };
     
-    // Apply filter if enabled
-    let filtered_packages = if *packages_hook.filter_mode {
-        // Filtrar solo STATUT_CHARGER (pendientes)
-        let filtered = packages_hook.packages.iter()
-            .filter(|p| {
-                let matches = p.code_statut_article.as_ref()
-                    .map(|code| code == "STATUT_CHARGER")
-                    .unwrap_or(false);
-                if !matches && p.code_statut_article.is_some() {
-                    log::debug!("🔍 Paquete {} excluido por filtro: code_statut={:?}", 
-                        p.id, p.code_statut_article);
-                }
-                matches
-            })
-            .cloned()
-            .collect::<Vec<Package>>();
-        
-        log::info!("🔍 Filtro activado: {} paquetes de {} son STATUT_CHARGER", 
-            filtered.len(), packages_hook.packages.len());
-        filtered
+    // Calculate stats from delivery session (como en main)
+    let (total, treated, percentage) = if let Some(session) = &delivery_session.state.session {
+        let packages = DeliverySessionConverter::convert_to_packages(session);
+        DeliverySessionConverter::get_stats(&packages)
     } else {
-        // Mostrar todos
-        log::info!("🔍 Filtro desactivado: mostrando {} paquetes", packages_hook.packages.len());
-        (*packages_hook.packages).clone()
+        (0, 0, 0)
     };
     
-    // Calculate stats (usando todos los paquetes, no solo los filtrados)
-    let total = packages_hook.packages.len();
-    let treated = packages_hook.packages.iter().filter(|p| {
-        p.code_statut_article.as_ref()
-            .map(|code| {
-                // Contar todos excepto STATUT_CHARGER (paquetes no tratados aún)
-                !code.starts_with("STATUT_CHARGER")
-            })
-            .unwrap_or(false)
-    }).count();
-    let percentage = if total > 0 { (treated * 100) / total } else { 0 };
+    // Get filtered packages for display
+    let filtered_packages = if let Some(session) = &delivery_session.state.session {
+        let packages = DeliverySessionConverter::convert_to_packages(session);
+        DeliverySessionConverter::apply_filters(&packages, *filter_mode)
+    } else {
+        Vec::new()
+    };
     
-    // Render login screen if not logged in
-    if !auth.state.is_logged_in {
+    // Debug: Log current state
+    log::info!("🔍 App render - delivery_session.state.session.is_some(): {}", delivery_session.state.session.is_some());
+    log::info!("🔍 App render - auth.state.is_logged_in: {}", auth.state.is_logged_in);
+    
+    // Render login screen if no delivery session
+    if delivery_session.state.session.is_none() {
         return html! {
             <>
                 if auth.state.show_register {
@@ -254,7 +281,10 @@ pub fn app() -> Html {
                             on_show_companies={auth.show_companies.clone()}
                             selected_company={auth.state.selected_company.clone()}
                             saved_credentials={auth.state.saved_credentials.clone()}
-                            on_login={auth.login.clone()}
+                            on_login={Callback::from(move |(username, password, societe): (String, String, String)| {
+                                // Usar las credenciales que el usuario ingresó
+                                delivery_session.login_and_fetch.emit((username, password, societe));
+                            })}
                             on_show_register={auth.show_register.clone()}
                         />
                         <CompanySelector
@@ -278,10 +308,10 @@ pub fn app() -> Html {
                 <div class="header-actions">
                     <button 
                         class="btn-optimize" 
-                        onclick={packages_hook.optimize_route.clone()}
-                        disabled={*packages_hook.optimizing}
+                        onclick={Callback::from(|_| log::info!("🎯 Optimize route"))}
+                        disabled={delivery_session.state.loading}
                     >
-                        {if *packages_hook.optimizing { 
+                        {if delivery_session.state.loading { 
                             format!("⏳ {}...", get_text("loading")) 
                         } else { 
                             format!("🎯 {}", get_text("optimize")) 
@@ -289,11 +319,11 @@ pub fn app() -> Html {
                     </button>
                     <button 
                         class="btn-refresh" 
-                        onclick={packages_hook.refresh.clone()}
-                        disabled={*packages_hook.loading}
+                        onclick={Callback::from(move |_| delivery_session.fetch_packages.emit(()))}
+                        disabled={delivery_session.state.loading}
                         title={get_text("refresh")}
                     >
-                        {if *packages_hook.loading { "⏳" } else { "🔄" }}
+                        {if delivery_session.state.loading { "⏳" } else { "🔄" }}
                     </button>
                     <button class="btn-settings" onclick={toggle_settings}>
                         {"⚙️"}
@@ -309,41 +339,35 @@ pub fn app() -> Html {
                 <div id="bottom-sheet" class={(*sheet.state).to_class()}>
                     <PackageList
                         packages={filtered_packages}
-                        selected_index={*packages_hook.selected_index}
+                        selected_index={*selected_index}
                         total={total}
                         delivered={treated}
                         percentage={percentage}
                         sheet_state={(*sheet.state).to_str()}
                         on_toggle={sheet.toggle.clone()}
-                        on_select={packages_hook.select_package.clone()}
-                        on_show_details={on_show_details}
-                        on_navigate={on_navigate}
-                        on_reorder={packages_hook.reorder.clone()}
-                        animations={(*packages_hook.animations).clone()}
-                        loading={*packages_hook.loading}
-                        expanded_groups={(*packages_hook.expanded_groups).clone()}
-                        on_toggle_group={Some(packages_hook.toggle_group.clone())}
-                        on_show_package_details={Some(on_show_package_details)}
-                        reorder_mode={*packages_hook.reorder_mode}
-                        reorder_origin={*packages_hook.reorder_origin}
-                        on_optimize={Some(packages_hook.optimize_route.clone())}
-                        optimizing={*packages_hook.optimizing}
+                        on_select={Callback::from(move |index: usize| {
+                            selected_index.set(Some(index));
+                        })}
+                        on_show_details={on_show_details.clone()}
+                        on_navigate={Callback::from(move |index: usize| {
+                            log::info!("🧭 Navegando al paquete: {}", index);
+                        })}
+                        on_reorder={Callback::from(|_| log::info!("🔄 Reorder"))}
+                        animations={std::collections::HashMap::new()}
+                        loading={delivery_session.state.loading}
+                        expanded_groups={(*expanded_groups).clone()}
+                        on_toggle_group={Some(on_toggle_group.clone())}
+                        on_show_package_details={Some(on_show_package_details.clone())}
+                        reorder_mode={false}
+                        reorder_origin={None}
+                        on_optimize={Some(Callback::from(|_| log::info!("🎯 Optimize")))}
                     />
                 </div>
             </div>
             
             {
                 if *show_details {
-                    // Prioridad: paquete directo (de grupo) o por índice (single)
-                    let package_to_show = if let Some(pkg) = (*details_package).clone() {
-                        Some(pkg)
-                    } else if let Some(idx) = *details_package_index {
-                        packages_hook.packages.get(idx).cloned()
-                    } else {
-                        None
-                    };
-                    
-                    if let Some(pkg) = package_to_show {
+                    if let Some(pkg) = (*details_package).clone() {
                         html! {
                             <DetailsModal
                                 package={pkg}
@@ -359,8 +383,8 @@ pub fn app() -> Html {
                                         show_bal_modal.set(true);
                                     }
                                 })}
-                                on_update_package={packages_hook.update_package.clone()}
-                                on_mark_problematic={packages_hook.mark_problematic.clone()}
+                                on_update_package={Callback::from(|_| log::info!("📝 Update package"))}
+                                on_mark_problematic={Callback::from(|_| log::info!("⚠️ Mark problematic"))}
                             />
                         }
                     } else {
@@ -398,10 +422,10 @@ pub fn app() -> Html {
                                 move |_| show_settings.set(false)
                             })}
                             on_logout={on_logout.clone()}
-                            reorder_mode={*packages_hook.reorder_mode}
-                            on_toggle_reorder={packages_hook.toggle_reorder_mode.clone()}
-                            filter_mode={*packages_hook.filter_mode}
-                            on_toggle_filter={packages_hook.toggle_filter_mode.clone()}
+                            reorder_mode={false}
+                            on_toggle_reorder={Callback::from(|_| log::info!("🔄 Toggle reorder"))}
+                            filter_mode={false}
+                            on_toggle_filter={Callback::from(|_| log::info!("🔍 Toggle filter"))}
                         />
                     }
                 } else {

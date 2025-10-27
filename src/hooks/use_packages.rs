@@ -2,9 +2,9 @@ use yew::prelude::*;
 use web_sys::{window, MouseEvent};
 use std::collections::HashMap;
 use gloo_timers::callback::Timeout;
-use crate::models::{Package, LoginData};
+use crate::models::{LegacyPackage as Package, LoginData};
 use crate::services::{
-    fetch_packages,
+    fetch_legacy_packages as fetch_packages,
     optimization_service::{
         optimize_route as mapbox_optimize_route,
         PackageLocation, 

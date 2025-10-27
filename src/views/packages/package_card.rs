@@ -1,14 +1,29 @@
 use yew::prelude::*;
-use crate::models::Package;
+use crate::models::LegacyPackage as Package;
 use crate::context::get_text;
 
 /// Mapea el code_statut_article a un color para el número de paquete
 fn get_package_status_color(code_statut_article: &Option<String>) -> &'static str {
     let color = match code_statut_article.as_deref() {
+        // Estados de recepción/carga
         Some("STATUT_RECEPTIONNER") => "yellow",
         Some("STATUT_CHARGER") => "normal",
+        
+        // Estados de entrega exitosa (verde)
+        Some("STATUT_LIVRER_DOMICILE") => "green",
+        Some("STATUT_LIVRER_TIERS") => "green",
+        Some("STATUT_LIVRER_BAL") => "green",
+        Some("STATUT_LIVRER_LOCKER") => "green",
         Some(s) if s.starts_with("STATUT_LIVRER_") => "green",
+        
+        // Estados de no entrega (rojo)
+        Some("STATUT_NONLIV_NPAI") => "red",
+        Some("STATUT_NONLIV_ABS") => "red",
+        Some("STATUT_NONLIV_REFUS") => "red",
+        Some("STATUT_NONLIV_ERRADRESSE") => "red",
         Some(s) if s.starts_with("STATUT_NONLIV_") => "red",
+        
+        // Estado por defecto
         _ => "normal",
     };
     
@@ -19,6 +34,18 @@ fn get_package_status_color(code_statut_article: &Option<String>) -> &'static st
     }
     
     color
+}
+
+/// Mapea el tipo de entrega a una clase CSS
+fn get_delivery_type_class(type_livraison: &Option<String>) -> Option<&'static str> {
+    type_livraison.as_ref().map(|t| {
+        match t.as_str() {
+            "RELAIS" => "type-relais",
+            "RCS" => "type-rcs", 
+            "DOMICILE" => "type-domicile",
+            _ => "type-domicile"
+        }
+    })
 }
 
 #[derive(Properties, PartialEq)]
@@ -60,14 +87,7 @@ pub fn package_card(props: &PackageCardProps) -> Html {
     let status_color = get_package_status_color(&props.package.code_statut_article);
     
     // Obtener clase CSS para el tipo de entrega
-    let type_class = props.package.type_livraison.as_ref().map(|t| {
-        match t.as_str() {
-            "RELAIS" => "type-relais",
-            "RCS" => "type-rcs",
-            "DOMICILE" => "type-domicile",
-            _ => "type-domicile"
-        }
-    });
+    let type_class = get_delivery_type_class(&props.package.type_livraison);
     
     let card_class = classes!(
         "package-card",

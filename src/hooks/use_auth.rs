@@ -1,6 +1,6 @@
 use yew::prelude::*;
 use web_sys::window;
-use crate::models::{Company, LoginData, LoginResponse, SavedCredentials};
+use crate::models::{Company, LoginData, LoginResponse, SavedCredentials, DriverInfo};
 use crate::services::{load_companies, perform_login, register_company};
 use crate::utils::{save_to_storage, load_from_storage, remove_from_storage, STORAGE_KEY_LOGIN_DATA, STORAGE_KEY_SELECTED_COMPANY, STORAGE_KEY_SAVED_CREDENTIALS};
 
@@ -343,9 +343,18 @@ async fn handle_login_response(
         company: company.clone(),
     };
     
+    // Crear DriverInfo para la nueva estructura
+    let driver_info = DriverInfo {
+        driver_id: username.clone(),
+        name: username.clone(), // Por ahora usamos el username como nombre
+        company_id: company.code.clone(),
+        vehicle_id: Some("DEFAULT_VEHICLE".to_string()), // Hardcoded por ahora
+    };
+    
     // Save to storage
     let _ = save_to_storage(STORAGE_KEY_LOGIN_DATA, &login_data);
     let _ = save_to_storage(STORAGE_KEY_SELECTED_COMPANY, &company);
+    let _ = save_to_storage("driver_info", &driver_info);
     
     // Save credentials for next login (auto-fill)
     let saved_credentials = SavedCredentials {

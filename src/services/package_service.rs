@@ -1,5 +1,5 @@
 use gloo_net::http::Request;
-use crate::models::{Package, PackageRequest, PackagesCache};
+use crate::models::{LegacyPackage as Package, PackageRequest, PackagesCache};
 use crate::utils::{BACKEND_URL, CACHE_DURATION_MINUTES, get_local_storage, STORAGE_KEY_PACKAGES_PREFIX};
 
 /// Fetch packages from API or cache
@@ -166,6 +166,13 @@ pub async fn fetch_packages(username: &str, societe: &str, force_refresh: bool) 
                                         .or_else(|| pkg.get("tracking_number").and_then(|t| t.as_str()))
                                         .unwrap_or(&format!("PKG-{}", index + 1))
                                         .to_string(),
+                                    tracking: Some(
+                                        pkg.get("reference_colis")
+                                            .and_then(|r| r.as_str())
+                                            .or_else(|| pkg.get("tracking_number").and_then(|t| t.as_str()))
+                                            .unwrap_or(&format!("PKG-{}", index + 1))
+                                            .to_string()
+                                    ),
                                     recipient: pkg.get("destinataire_nom")
                                         .and_then(|d| d.as_str())
                                         .or_else(|| pkg.get("recipient_name").and_then(|r| r.as_str()))
@@ -301,6 +308,10 @@ fn parse_single_package(single: &serde_json::Value, index: usize) -> Result<Pack
             .or_else(|| single.get("id").and_then(|i| i.as_str()))
             .unwrap_or(&format!("single-{}", index))
             .to_string(),
+        tracking: single.get("tracking")
+            .and_then(|t| t.as_str())
+            .or_else(|| single.get("id").and_then(|i| i.as_str()))
+            .map(|s| s.to_string()),
         recipient: single.get("customer_name")
             .and_then(|n| n.as_str())
             .unwrap_or("Destinatario desconocido")
@@ -424,6 +435,9 @@ fn parse_group_package(group: &serde_json::Value, index: usize) -> Result<Packag
             .and_then(|i| i.as_str())
             .unwrap_or(&format!("group-{}", index))
             .to_string(),
+        tracking: group.get("id")
+            .and_then(|i| i.as_str())
+            .map(|s| s.to_string()),
         recipient: format!("{} paquetes", total_packages),
         address: group.get("official_label")
             .and_then(|a| a.as_str())
