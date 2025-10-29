@@ -1,13 +1,13 @@
 use yew::prelude::*;
-use crate::hooks::{use_auth, use_delivery_session, use_map, use_sheet, use_map_selection_listener, clear_packages_cache};
+use crate::hooks::{use_auth, use_delivery_session, use_map, use_sheet, use_map_selection_listener};
 use crate::views::auth::{LoginView, RegisterView, CompanySelector};
 use crate::views::packages::PackageList;
 use crate::components::details_modal::DetailsModal;
+use crate::components::scanner::Scanner;
 use crate::views::shared::{SettingsPopup, BalModal};
 use crate::context::get_text;
 use crate::models::LegacyPackage as Package;
 use crate::services::DeliverySessionConverter;
-use crate::utils::scroll_to_selected_package;
 use gloo_timers::callback::Timeout;
 
 #[function_component(App)]
@@ -24,6 +24,7 @@ pub fn app() -> Html {
     let details_package = use_state(|| None::<Package>);
     let show_bal_modal = use_state(|| false);
     let show_settings = use_state(|| false);
+    let show_scanner = use_state(|| false);
     
     // Filter mode state (como en main)
     let filter_mode = use_state(|| false);
@@ -82,6 +83,22 @@ pub fn app() -> Html {
                 // Apply filter (como en main)
                 let filtered = DeliverySessionConverter::apply_filters(&packages, *filter_enabled);
                 
+                // Filter packages for map: only those with valid coordinates (not 0,0)
+                let packages_for_map: Vec<crate::models::package::Package> = filtered.iter()
+                    .filter(|p| {
+                        if let Some(coords) = p.coords {
+                            // Excluir paquetes con coordenadas [0.0, 0.0] - aparecen en África
+                            coords[0] != 0.0 || coords[1] != 0.0
+                        } else {
+                            false // Si no hay coords, no ir al mapa
+                        }
+                    })
+                    .cloned()
+                    .collect();
+                
+                log::info!("📦 Total: {}, Filtrados: {}, Map: {} (excluyendo problemáticos)", 
+                           packages.len(), filtered.len(), packages_for_map.len());
+                
                 // Save filtered packages to window (for map and other JS functions)
                 use wasm_bindgen::JsValue;
                 if let Some(window) = web_sys::window() {
@@ -96,9 +113,9 @@ pub fn app() -> Html {
                 
                 // If map is initialized, update packages immediately
                 if map_initialized {
-                    log::info!("📍 Actualizando mapa con {} paquetes (filtrados: {})", packages.len(), filtered.len());
+                    log::info!("📍 Actualizando mapa con {} paquetes (válidos para mapa: {})", filtered.len(), packages_for_map.len());
                     Timeout::new(100, move || {
-                        map_update.emit(filtered);
+                        map_update.emit(packages_for_map);
                     }).forget();
                 }
             }
@@ -226,6 +243,25 @@ pub fn app() -> Html {
         })
     };
     
+    // Toggle scanner
+    let toggle_scanner = {
+        let show_scanner = show_scanner.clone();
+        Callback::from(move |_: MouseEvent| {
+            show_scanner.set(!*show_scanner);
+        })
+    };
+    
+    // Handle barcode detection
+    let on_barcode_detected = {
+        let show_scanner = show_scanner.clone();
+        Callback::from(move |barcode: String| {
+            log::info!("📷 Código detectado: {}", barcode);
+            // Aquí puedes agregar lógica para buscar el paquete con ese código
+            show_scanner.set(false);
+            // Por ahora solo cerramos el scanner
+        })
+    };
+    
     
     // Enhanced logout that clears delivery session
     let on_logout = {
@@ -233,6 +269,7 @@ pub fn app() -> Html {
         let clear_session = delivery_session.clear_session.clone();
         let show_settings = show_settings.clone();
         let reset_map = map.reset_map.clone();
+        let map_init_attempted = map_init_attempted.clone();
         
         Callback::from(move |_| {
             // Clear delivery session
@@ -240,6 +277,10 @@ pub fn app() -> Html {
             
             // Reset map state
             reset_map.emit(());
+            
+            // Reset map init attempted flag to allow re-initialization on next login
+            map_init_attempted.set(false);
+            log::info!("🔄 map_init_attempted reseteado para permitir reinicialización");
             
             show_settings.set(false);
             logout.emit(());
@@ -307,15 +348,20 @@ pub fn app() -> Html {
                 <h1>{"Route Optimizer"}</h1>
                 <div class="header-actions">
                     <button 
-                        class="btn-optimize" 
+                        class="btn-optimize-mini" 
                         onclick={Callback::from(|_| log::info!("🎯 Optimize route"))}
                         disabled={delivery_session.state.loading}
+                        title={get_text("optimize")}
                     >
-                        {if delivery_session.state.loading { 
-                            format!("⏳ {}...", get_text("loading")) 
-                        } else { 
-                            format!("🎯 {}", get_text("optimize")) 
-                        }}
+                        {"🎯"}
+                    </button>
+                    <button 
+                        class="btn-scanner" 
+                        onclick={toggle_scanner.clone()}
+                        disabled={delivery_session.state.loading}
+                        title="Escáner de código de barras"
+                    >
+                        {"📷"}
                     </button>
                     <button 
                         class="btn-refresh" 
@@ -426,6 +472,23 @@ pub fn app() -> Html {
                             on_toggle_reorder={Callback::from(|_| log::info!("🔄 Toggle reorder"))}
                             filter_mode={false}
                             on_toggle_filter={Callback::from(|_| log::info!("🔍 Toggle filter"))}
+                        />
+                    }
+                } else {
+                    html! {}
+                }
+            }
+            
+            {
+                if *show_scanner {
+                    html! {
+                        <Scanner
+                            show={*show_scanner}
+                            on_close={Callback::from({
+                                let show_scanner = show_scanner.clone();
+                                move |_| show_scanner.set(false)
+                            })}
+                            on_barcode_detected={on_barcode_detected.clone()}
                         />
                     }
                 } else {
