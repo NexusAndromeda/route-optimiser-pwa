@@ -1,3 +1,9 @@
+// ============================================================================
+// MAPBOX FFI - Foreign Function Interface para JavaScript
+// ============================================================================
+// Solo wrappers para funciones JS - Sin estado, sin lógica
+// ============================================================================
+
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -12,10 +18,9 @@ extern "C" {
     pub fn update_selected_package(selected_index: i32);
 }
 
-/// Center map on a specific package index
+/// Helper: Centrar mapa en paquete
 pub fn center_map_on_package(index: usize) {
     if let Some(window) = web_sys::window() {
-        
         let function = js_sys::Function::new_no_args(&format!(
             "if (window.centerMapOnPackage) window.centerMapOnPackage({});",
             index
@@ -24,10 +29,9 @@ pub fn center_map_on_package(index: usize) {
     }
 }
 
-/// Scroll to selected package in the list
+/// Helper: Scroll a paquete seleccionado
 pub fn scroll_to_selected_package(index: usize) {
     if let Some(window) = web_sys::window() {
-        
         let function = js_sys::Function::new_no_args(&format!(
             "if (window.scrollToSelectedPackage) window.scrollToSelectedPackage({});",
             index

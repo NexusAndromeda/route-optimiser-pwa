@@ -1,0 +1,15 @@
+/* ============================================
+   SYNC INDICATOR - Component Styles (BEM)
+   ============================================ */
+.sync-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--color-info-light);
+  border-radius: var(--radius-full);
+  color: var(--color-info-dark);
+}
+.sync-indicator--synced { color: var(--color-success); }
+.sync-indicator--error { color: var(--color-error); background: var(--color-error-light); }

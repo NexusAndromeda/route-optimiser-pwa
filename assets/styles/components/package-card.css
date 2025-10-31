@@ -1,0 +1,459 @@
+/* ============================================
+   PACKAGE CARD - Alineado 100% con Prototipo
+   Versión limpia sin duplicaciones
+   ============================================ */
+
+/* ==================== BASE CARD ==================== */
+
+.package-card {
+  background: var(--bg-surface-variant);
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.package-card:hover {
+  background: var(--bg-surface-container);
+}
+
+.package-card.selected {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+/* Seleccionados con colores específicos por tipo */
+.package-card.type-relais.selected {
+  background: rgb(97, 38, 122) !important;
+  border-color: rgb(97, 38, 122) !important;
+  box-shadow: 0 4px 12px rgba(97, 38, 122, 0.4) !important;
+}
+
+.package-card.type-rcs.selected {
+  background: #F59E0B !important;
+  border-color: #F59E0B !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4) !important;
+}
+
+.package-card.problematic.selected {
+  background: #ef4444 !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4) !important;
+  animation: problematicPulse 2s ease-in-out infinite !important;
+}
+
+/* ==================== ESTADOS ESPECIALES ==================== */
+
+/* Tipos de entrega */
+.package-card.type-relais {
+  border-left: 4px solid rgb(97, 38, 122);
+}
+
+.package-card.type-rcs {
+  border-left: 4px solid var(--color-warning);
+}
+
+/* Paquetes problemáticos */
+.package-card.problematic {
+  border: 2px solid var(--color-error);
+  background: rgba(239, 68, 68, 0.05);
+  animation: problematicPulse 2s ease-in-out infinite;
+}
+
+.package-card.problematic::before {
+  content: "⚠️";
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--color-error);
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 10;
+}
+
+@keyframes problematicPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8);
+    border-color: var(--color-error);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    border-color: #dc2626;
+  }
+}
+
+/* ==================== PACKAGE NUMBER (BADGE) ==================== */
+
+.package-number {
+  width: 32px;
+  height: 32px;
+  background: var(--bg-surface);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+/* Colores según estado */
+.package-number-yellow {
+  background: #fbbf24;
+  color: #1f2937;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.3);
+}
+
+.package-number-green {
+  background: var(--color-success);
+  color: white;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+}
+
+.package-number-red {
+  background: var(--color-error);
+  color: white;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
+}
+
+.package-number-normal {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* Cuando el card está seleccionado */
+.package-card.selected .package-number {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+/* Mantener colores de estado cuando el card está seleccionado */
+.package-card.selected .package-number-yellow {
+  background: #fbbf24 !important;
+  color: #1f2937 !important;
+}
+
+.package-card.selected .package-number-green {
+  background: var(--color-success) !important;
+  color: white !important;
+}
+
+.package-card.selected .package-number-red {
+  background: var(--color-error) !important;
+  color: white !important;
+}
+
+/* ==================== MAIN CONTENT ==================== */
+
+.package-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.package-main .package-info {
+  flex: 1;
+}
+
+.package-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.package-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+}
+
+/* ==================== TRACKING & STATUS (ocultos en card principal) ==================== */
+/* Estos estilos se mantienen por si se necesitan en otros lugares, pero el tracking no se muestra en el card */
+
+/* ==================== RECIPIENT & ADDRESS ==================== */
+
+.package-recipient-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.package-recipient {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0; /* permite que el texto se trunque si es necesario */
+}
+
+.package-address {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Mejor contraste cuando está seleccionado */
+.package-card.selected .package-tracking,
+.package-card.selected .package-recipient {
+  color: white;
+}
+
+.package-card.selected .package-address {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ==================== BOTONES ==================== */
+
+/* Botón de información (detalles) */
+.btn-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-surface-variant);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-info:hover {
+  background: var(--bg-surface-container);
+  transform: scale(1.05);
+}
+
+.package-card.selected .btn-info {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Botón de navegación (Go) - pequeño y VERDE como el prototipo */
+.btn-navigate {
+  padding: 6px 12px;
+  background: var(--color-success);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0; /* no se encoge */
+  white-space: nowrap; /* evita que el texto se corte */
+}
+
+.btn-navigate:hover {
+  background: var(--color-success-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+/* ==================== ANIMATIONS ==================== */
+
+.package-card.moving-up { animation: slideUp 0.3s ease; }
+.package-card.moving-down { animation: slideDown 0.3s ease; }
+.package-card.moved { animation: flash 0.5s ease; }
+
+@keyframes slideUp { 0% { transform: translateY(0); } 50% { transform: translateY(-20px); } 100% { transform: translateY(0); } }
+@keyframes slideDown { 0% { transform: translateY(0); } 50% { transform: translateY(20px); } 100% { transform: translateY(0); } }
+@keyframes flash { 0%, 100% { background: var(--color-primary); } 50% { background: var(--color-success); } }
+
+/* ==================== REORDER MODE ==================== */
+
+.package-card.reorder-mode-active { border: 2px dashed var(--color-primary); cursor: grab; }
+.package-card.reorder-mode-active:active { cursor: grabbing; }
+.package-card.reorder-origin { animation: reorderOriginPulse 1.5s ease-in-out infinite; border: 2px solid var(--color-success); }
+@keyframes reorderOriginPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 50% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } }
+
+/* ==================== RESPONSIVE: DESKTOP ==================== */
+
+@media (min-width: 768px) {
+  .package-card { padding: 12px; }
+  .package-tracking { font-size: 0.875rem; }
+  .package-recipient { font-size: 0.875rem; }
+  .package-address { font-size: 0.75rem; }
+}
+
+/* ==================== EXPAND HANDLE ==================== */
+
+.expand-handle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+  margin-top: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.expand-indicator {
+  width: 40px;
+  height: 3px;
+  background: var(--border-color);
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+
+.expand-handle:hover .expand-indicator {
+  background: var(--color-primary);
+  width: 50px;
+}
+
+.expand-handle.pulse .expand-indicator {
+  animation: handlePulse 2s ease-in-out infinite;
+}
+
+@keyframes handlePulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* ==================== PACKAGES EXPANDED (grupos) ==================== */
+
+.packages-expanded {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+  animation: slideDown 0.3s ease;
+}
+
+.package-item {
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  transition: background 0.2s ease;
+}
+
+.package-item:last-child {
+  margin-bottom: 0;
+}
+
+.package-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Tipos de entrega dentro del paquete */
+.package-item.type-relais {
+  border-left: 3px solid rgb(97, 38, 122);
+}
+
+.package-item.type-rcs {
+  border-left: 3px solid var(--color-warning);
+}
+
+.package-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.package-item .package-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  max-width: 24px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.package-customer {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-weight: 700;
+  flex: 1;
+}
+
+/* Contenido del item (tracking para RELAIS) */
+.package-item-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  flex: 1;
+}
+
+.package-item-content .tracking-label {
+  color: var(--text-secondary);
+}
+
+.package-item-content .tracking-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.btn-package-details {
+  width: 24px;
+  height: 24px;
+  background: var(--bg-surface-container);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-package-details:hover {
+  background: var(--bg-surface-container-hover);
+  transform: scale(1.05);
+}
+
+.package-card.selected .btn-package-details {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.package-card.selected .btn-package-details:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}

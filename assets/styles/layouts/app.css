@@ -1,0 +1,80 @@
+/* ============================================
+   APP LAYOUT - Estructura General de la App
+   ============================================ */
+
+/* Map Container - Full screen behind everything */
+.map-container {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: calc(100vh - var(--header-height));
+  z-index: 1;
+}
+
+.map-container canvas {
+  outline: none;
+}
+
+/* Package Container - Contains bottom sheet */
+.package-container {
+  position: relative;
+  z-index: 50;
+}
+
+/* Mapbox controls customization */
+.mapboxgl-ctrl-group {
+  background: var(--bg-surface) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.mapboxgl-ctrl-group button {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+.mapboxgl-ctrl-group button + button {
+  border-top: 1px solid var(--border-color) !important;
+}
+
+.mapboxgl-ctrl-geolocate {
+  background: var(--bg-surface) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.mapboxgl-ctrl-geolocate button {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+/* Icons of controls - need to invert in dark mode */
+.mapboxgl-ctrl-icon {
+  filter: brightness(0) invert(1);
+}
+
+@media (prefers-color-scheme: light) {
+  .mapboxgl-ctrl-icon {
+    filter: brightness(0);
+  }
+}
+
+.mapboxgl-ctrl-group button:hover,
+.mapboxgl-ctrl-geolocate button:hover {
+  background-color: var(--bg-surface-variant) !important;
+}
+
+.mapboxgl-ctrl-geolocate.mapboxgl-ctrl-active button {
+  background-color: var(--color-primary) !important;
+}
+
+.mapboxgl-ctrl-geolocate.mapboxgl-ctrl-active .mapboxgl-ctrl-icon {
+  filter: brightness(0) invert(1);
+}
+
+/* Mapbox logo and attribution */
+.mapboxgl-ctrl-bottom-left,
+.mapboxgl-ctrl-bottom-right {
+  display: none !important;
+}

@@ -1,0 +1,23 @@
+/* ============================================
+   NOTIFICATION - Component Styles (BEM)
+   ============================================ */
+.notification {
+  position: fixed;
+  right: var(--spacing-lg);
+  top: var(--header-height);
+  background: var(--color-info);
+  color: var(--color-white);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  z-index: var(--z-tooltip);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 220px;
+}
+.notification--success { background: var(--color-success); }
+.notification--error { background: var(--color-error); }
+.notification--warning { background: var(--color-warning); color: var(--color-gray-900); }
+.notification__icon { font-size: var(--font-size-lg); }
+.notification__text { flex: 1; font-size: var(--font-size-sm); }

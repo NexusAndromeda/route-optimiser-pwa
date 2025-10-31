@@ -17,8 +17,35 @@
     <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
     <script data-trunk src="assets/barcode_scanner.js"></script>
     
-    <!-- CSS del prototipo -->
-    <link data-trunk rel="css" href="assets/style.css">
+    <!-- CSS modular - Fundamentos (SIEMPRE PRIMERO) -->
+    <link data-trunk rel="css" href="assets/styles/base/variables.css">
+    <link data-trunk rel="css" href="assets/styles/base/reset.css">
+    <link data-trunk rel="css" href="assets/styles/base/typography.css">
+    
+    <!-- CSS modular - Utilidades -->
+    <link data-trunk rel="css" href="assets/styles/utilities/animations.css">
+    <link data-trunk rel="css" href="assets/styles/utilities/helpers.css">
+    
+    <!-- CSS modular - Componentes (orden alfabético) -->
+    <link data-trunk rel="css" href="assets/styles/components/address-list.css">
+    <link data-trunk rel="css" href="assets/styles/components/buttons.css">
+    <link data-trunk rel="css" href="assets/styles/components/details-modal.css">
+    <link data-trunk rel="css" href="assets/styles/components/draggable-list.css">
+    <link data-trunk rel="css" href="assets/styles/components/header.css">
+    <link data-trunk rel="css" href="assets/styles/components/legacy-compat.css">
+    <link data-trunk rel="css" href="assets/styles/components/login-view.css">
+    <link data-trunk rel="css" href="assets/styles/components/notification.css">
+    <link data-trunk rel="css" href="assets/styles/components/package-card.css">
+    <link data-trunk rel="css" href="assets/styles/components/package-list.css">
+    <link data-trunk rel="css" href="assets/styles/components/progress-dashboard.css">
+    <link data-trunk rel="css" href="assets/styles/components/scanner.css">
+    <link data-trunk rel="css" href="assets/styles/components/settings-popup.css">
+    <link data-trunk rel="css" href="assets/styles/components/sync-indicator.css">
+    
+    <!-- CSS modular - Layouts (SIEMPRE AL FINAL) -->
+    <link data-trunk rel="css" href="assets/styles/layouts/app.css">
+    <link data-trunk rel="css" href="assets/styles/layouts/bottom-sheet.css">
+    <link data-trunk rel="css" href="assets/styles/layouts/responsive.css">
     
     <!-- PWA Manifest -->
     <link data-trunk rel="copy-file" href="assets/manifest.json">

@@ -1,0 +1,9 @@
+/* ============================================
+   RESPONSIVE CSS
+   ============================================ */
+@media (max-width: 900px) {
+  .app { padding: var(--spacing-md); }
+}
+@media (max-width: 640px) {
+  .app { padding: var(--spacing-sm); }
+}

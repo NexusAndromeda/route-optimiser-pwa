@@ -1,0 +1,14 @@
+/* ============================================
+   PACKAGE LIST - Component Styles (BEM)
+   ============================================ */
+.package-list { gap: 0 !important; padding: 8px 16px !important; }
+/* PACKAGE GROUP */
+.package-group { margin-bottom: var(--spacing-md); }
+.package-group__header { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-md); background: var(--color-white); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); cursor: pointer; transition: background var(--transition-fast); }
+.package-group__header:hover { background: var(--color-gray-50); }
+.package-group__icon { color: var(--color-gray-500); transition: transform var(--transition-fast); }
+.package-group--collapsed .package-group__icon { transform: rotate(-90deg); }
+.package-group__title { flex: 1; font-weight: var(--font-weight-semibold); color: var(--color-gray-900); font-size: var(--font-size-md); }
+.package-group__count { font-size: var(--font-size-sm); color: var(--color-gray-600); background: var(--color-gray-100); padding: var(--spacing-xs) var(--spacing-sm); border-radius: var(--radius-full); font-weight: var(--font-weight-medium); }
+.package-group__packages { margin-top: var(--spacing-sm); display: flex; flex-direction: column; gap: var(--spacing-sm); }
+.package-group--collapsed .package-group__packages { display: none; }

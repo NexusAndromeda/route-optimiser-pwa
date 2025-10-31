@@ -1,0 +1,135 @@
+// ============================================================================
+// MONITOR DE ESTADO DE RED
+// ============================================================================
+// Detecta cambios en la conectividad de red (online/offline)
+// para pausar/reanudar sincronización automática
+// ============================================================================
+// ✅ COPIADO EXACTO DEL ORIGINAL (app/src/services/network_monitor.rs)
+
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{window, Event};
+use js_sys;
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum NetworkStatus {
+    Online,
+    Offline,
+    Unknown,
+}
+
+/// Monitor de estado de red con listeners de eventos
+#[derive(Clone)]
+pub struct NetworkMonitor {
+    status: Arc<Mutex<NetworkStatus>>,
+}
+
+impl NetworkMonitor {
+    pub fn new() -> Self {
+        let status = Arc::new(Mutex::new(NetworkStatus::Unknown));
+        
+        // Verificar estado inicial usando js_sys
+        if let Some(window) = window() {
+            // Acceder a navigator.onLine directamente
+            let navigator_obj = js_sys::Reflect::get(&window, &JsValue::from_str("navigator")).ok();
+            
+            if let Some(nav) = navigator_obj {
+                let on_line = js_sys::Reflect::get(&nav, &JsValue::from_str("onLine"))
+                    .ok()
+                    .and_then(|v| v.as_bool());
+                
+                if let Some(is_online) = on_line {
+                    *status.lock().unwrap() = if is_online {
+                        NetworkStatus::Online
+                    } else {
+                        NetworkStatus::Offline
+                    };
+                }
+            }
+        }
+        
+        Self {
+            status,
+        }
+    }
+    
+    /// Iniciar monitoreo de eventos de red
+    pub fn start_monitoring<F>(&mut self, callback: F)
+    where
+        F: Fn(NetworkStatus) + 'static,
+    {
+        let window = match window() {
+            Some(w) => w,
+            None => return,
+        };
+        
+        let status = self.status.clone();
+        let callback_arc = Arc::new(Mutex::new(callback));
+        
+        // Listener para evento "online"
+        let online_closure = Closure::wrap(Box::new({
+            let status = status.clone();
+            let callback = callback_arc.clone();
+            move |_event: Event| {
+                log::info!("🌐 Network: ONLINE");
+                *status.lock().unwrap() = NetworkStatus::Online;
+                callback.lock().unwrap()(NetworkStatus::Online);
+            }
+        }) as Box<dyn FnMut(Event)>);
+        
+        // Listener para evento "offline"
+        let offline_closure = Closure::wrap(Box::new({
+            let status = status.clone();
+            let callback = callback_arc.clone();
+            move |_event: Event| {
+                log::warn!("📴 Network: OFFLINE");
+                *status.lock().unwrap() = NetworkStatus::Offline;
+                callback.lock().unwrap()(NetworkStatus::Offline);
+            }
+        }) as Box<dyn FnMut(Event)>);
+        
+        // Registrar listeners
+        let _ = window.add_event_listener_with_callback(
+            "online",
+            online_closure.as_ref().unchecked_ref(),
+        );
+        
+        let _ = window.add_event_listener_with_callback(
+            "offline",
+            offline_closure.as_ref().unchecked_ref(),
+        );
+        
+        // Mantener closures vivas (se mantienen en el stack de closures)
+        online_closure.forget();
+        offline_closure.forget();
+    }
+    
+    /// Obtener estado actual de red
+    pub fn current_status(&self) -> NetworkStatus {
+        *self.status.lock().unwrap()
+    }
+    
+    /// Verificar si está online
+    pub fn is_online(&self) -> bool {
+        matches!(self.current_status(), NetworkStatus::Online)
+    }
+    
+    /// Verificar si está offline
+    pub fn is_offline(&self) -> bool {
+        matches!(self.current_status(), NetworkStatus::Offline)
+    }
+}
+
+impl Default for NetworkMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for NetworkMonitor {
+    fn drop(&mut self) {
+        // Closures se mantienen vivas hasta que se drop el monitor
+        log::info!("🔌 Network monitor dropped");
+    }
+}

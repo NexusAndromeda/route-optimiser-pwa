@@ -1,0 +1,28 @@
+/* ============================================
+   PROGRESS DASHBOARD - Component Styles (BEM)
+   ============================================ */
+.progress-dashboard {
+  background: var(--color-white);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+}
+.progress-dashboard__bar {
+  width: 100%;
+  height: 24px;
+  background: var(--color-gray-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--spacing-sm);
+}
+.progress-dashboard__bar-fill {
+  background: var(--color-success);
+  height: 100%;
+  transition: width var(--transition-normal);
+}
+.progress-dashboard__text {
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+  text-align: right;
+}

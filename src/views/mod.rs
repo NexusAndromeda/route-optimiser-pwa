@@ -1,7 +1,5 @@
 pub mod app;
-pub mod auth;
-pub mod packages;
-pub mod shared;
+pub mod login;
 
-pub use app::*;
+pub use app::App;
 

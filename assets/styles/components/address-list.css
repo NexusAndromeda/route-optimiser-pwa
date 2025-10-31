@@ -1,0 +1,8 @@
+/* ============================================
+   ADDRESS LIST - Component Styles (BEM)
+   ============================================ */
+.address-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}

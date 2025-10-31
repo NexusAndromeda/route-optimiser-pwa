@@ -1,94 +1,81 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
-pub struct Package {
-    pub id: String,
-    pub tracking: Option<String>, // Número de tracking de Colis Privé
-    pub recipient: String,
-    pub address: String,
-    pub status: String,
-    pub code_statut_article: Option<String>,
-    pub coords: Option<[f64; 2]>, // [longitude, latitude]
-    pub phone: Option<String>,
-    pub phone_fixed: Option<String>,
-    pub instructions: Option<String>,
-    
-    // Campos enriquecidos desde la BD
-    #[serde(default)]
-    pub door_code: Option<String>,
-    #[serde(default)]
-    pub has_mailbox_access: bool,
-    #[serde(default)]
-    pub driver_notes: Option<String>,
-    
-    // Campos para grupos
-    #[serde(default)]
-    pub is_group: bool,
-    #[serde(default)]
-    pub total_packages: Option<usize>,
-    #[serde(default)]
-    pub group_packages: Option<Vec<GroupPackageInfo>>,
-    
-    // Campo para paquetes problemáticos (sin dirección válida)
-    #[serde(default)]
-    pub is_problematic: bool,
-    
-    // Tipo de entrega (DOMICILE, RELAIS, RCS, etc.)
-    #[serde(default)]
-    pub type_livraison: Option<String>,
-}
+// ============================================================================
+// PACKAGE - SIMPLIFICADO (Sin CRDT, sin internal_id)
+// ============================================================================
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
-pub struct GroupPackageInfo {
-    pub id: String,
+/// Paquete individual - ESTRUCTURA SIMPLIFICADA
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Package {
+    // ========== ID ÚNICO ==========
+    /// Número de tracking de Colis Privé (ES EL ID)
     pub tracking: String,
+    
+    /// ID de la dirección asociada
+    pub address_id: String,
+    
+    // ========== LAST-WRITE-WINS ==========
+    pub last_modified_at: i64,
+    
+    // ========== ORDEN Y POSICIÓN ==========
+    /// Orden ORIGINAL (sin optimizar) - posición en la que llegó
+    pub original_order: usize,
+    
+    /// Orden OPTIMIZADO - posición después de optimizar
+    /// None = no optimizado aún
+    pub route_order: Option<usize>,
+    
+    /// Posición visual en la lista (para reordenamiento manual)
+    pub visual_position: usize,
+    
+    // ========== INFO DEL CLIENTE ==========
     pub customer_name: String,
     pub phone_number: Option<String>,
     pub customer_indication: Option<String>,
-    #[serde(default)]
-    pub code_statut_article: Option<String>,
-    #[serde(default)]
+    
+    // ========== ESTADO Y TIPO ==========
+    pub status: String,
+    pub delivery_type: DeliveryType,
     pub is_problematic: bool,
+    pub optimization_priority: u8,
+    
+    // ========== FLAGS DE ESTADO ==========
+    /// ¿Fue modificado por el conductor?
+    pub modified_by_driver: bool,
+    
+    // ========== AGRUPAMIENTO ==========
+    /// Indica si este Package representa un grupo de paquetes (para misma dirección)
+    #[serde(default)]
+    pub is_group: bool,
+    
+    /// Paquetes internos si es un grupo (None si es paquete simple)
+    #[serde(default)]
+    pub group_packages: Option<Vec<Package>>,
 }
 
-impl GroupPackageInfo {
-    /// Convierte GroupPackageInfo a Package (para mostrar detalles)
-    pub fn to_package(&self, group_address: &str, group_coords: Option<[f64; 2]>, door_code: Option<String>, has_mailbox_access: bool, driver_notes: Option<String>, type_livraison: Option<String>) -> Package {
-        Package {
-            id: self.tracking.clone(),
-            tracking: Some(self.tracking.clone()),
-            recipient: self.customer_name.clone(),
-            address: group_address.to_string(),
-            status: "pending".to_string(),
-            code_statut_article: self.code_statut_article.clone(),
-            coords: group_coords,
-            phone: self.phone_number.clone(),
-            phone_fixed: None,
-            instructions: self.customer_indication.clone(),
-            door_code,
-            has_mailbox_access,
-            driver_notes,
-            is_group: false,
-            total_packages: None,
-            group_packages: None,
-            is_problematic: self.is_problematic,
-            type_livraison,
-        }
+impl Package {
+    /// Helper: ¿Está entregado?
+    pub fn is_delivered(&self) -> bool {
+        self.status.contains("LIVRE")
+    }
+    
+    /// Helper: ¿Falló la entrega?
+    pub fn is_failed(&self) -> bool {
+        self.status.contains("NONLIV") || self.status.contains("ECHEC")
+    }
+    
+    /// Helper: ¿Está pendiente?
+    pub fn is_pending(&self) -> bool {
+        !self.is_delivered() && !self.is_failed()
     }
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
-pub struct PackageRequest {
-    pub matricule: String,
-    pub societe: String,
-    pub date: Option<String>,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum DeliveryType {
+    #[serde(rename = "DOMICILE")]
+    Home,
+    #[serde(rename = "RCS")]
+    Rcs,
+    #[serde(rename = "RELAIS")]
+    PickupPoint,
 }
-
-#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
-pub struct PackagesCache {
-    pub packages: Vec<Package>,
-    pub timestamp: String,
-    #[serde(default)]
-    pub version: u32, // Version del cache para invalidar cuando cambia la estructura
-}
-

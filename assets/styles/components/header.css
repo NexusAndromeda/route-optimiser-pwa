@@ -1,0 +1,77 @@
+/* ============================================
+   HEADER - Component Styles (BEM + Legacy)
+   ============================================ */
+
+/* Versión BEM (nueva) */
+.header,
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-height);
+  width: 100%;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 200;
+}
+
+.header h1,
+.app-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary); /* ensure visible over dark header */
+}
+
+.header__logo {
+  font-size: var(--font-size-lg);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.header__actions,
+.header-actions {
+  display: flex;
+  gap: 8px; /* Prototype */
+  align-items: center;
+}
+
+/* Prototype icon buttons */
+.btn-icon-header {
+  width: 44px;
+  height: 44px;
+  background: var(--bg-surface-variant);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+.btn-icon-header:hover {
+  background: var(--bg-surface-container);
+  border-color: var(--color-primary);
+}
+
+/* Extra specificity to override generic button styles */
+.app-header .btn-icon-header,
+.header-actions .btn-icon-header {
+  width: 44px;
+  height: 44px;
+  background: var(--bg-surface-variant) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important; /* squared rounded corners, not pill */
+  box-shadow: none !important;
+  color: var(--text-primary);
+}
+.app-header .btn-icon-header:hover,
+.header-actions .btn-icon-header:hover {
+  background: var(--bg-surface-container) !important;
+  border-color: var(--color-primary) !important;
+}

@@ -1,211 +1,148 @@
-use yew::prelude::*;
-use gloo_timers::callback::Timeout;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use crate::models::LegacyPackage as Package;
-use crate::utils::{init_mapbox, add_packages_to_map, update_selected_package as update_selected_package_ffi, center_map_on_package, scroll_to_selected_package};
+// ============================================================================
+// USE MAP HOOK - Gestión de estado del mapa
+// ============================================================================
+// Hook nativo de Yew - Delega lógica al ViewModel
+// ============================================================================
 
+use yew::prelude::*;
+use crate::viewmodels::{MapViewModel, map_viewmodel::MapPackage};
+
+/// Store local del hook (NO es un Store global)
 #[derive(Clone, PartialEq)]
 pub struct MapState {
     pub initialized: bool,
 }
 
+/// Handle del hook
+#[derive(Clone)]
 pub struct UseMapHandle {
     pub state: UseStateHandle<MapState>,
-    pub initialize_map: Callback<()>,
-    pub update_packages: Callback<Vec<Package>>,
+    pub initialize: Callback<()>,
+    pub update_packages: Callback<Vec<MapPackage>>,
     pub select_package: Callback<usize>,
-    pub reset_map: Callback<()>,
-}
-
-/// Detect dark mode preference
-fn is_dark_mode() -> bool {
-    web_sys::window()
-        .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok())
-        .flatten()
-        .map(|mq| mq.matches())
-        .unwrap_or(false)
+    pub center_on_package: Callback<usize>,
 }
 
 #[hook]
 pub fn use_map() -> UseMapHandle {
-    let state = use_state(|| MapState {
-        initialized: false,
-    });
+    let state = use_state(|| MapState { initialized: false });
     
-    // Initialize map
-    let initialize_map = {
+    // Inicializar mapa
+    let initialize = {
         let state = state.clone();
         Callback::from(move |_| {
             if !(*state).initialized {
-                log::info!("🗺️ Inicializando mapa...");
+                log::info!("🗺️ Hook: Inicializando mapa...");
                 
-                // Delay to ensure map container is ready
-                let state = state.clone();
-                Timeout::new(100, move || {
-                    let is_dark = is_dark_mode();
-                    log::info!("🎨 Modo mapa: {}", if is_dark { "oscuro" } else { "claro" });
+                // Delegar a ViewModel
+                MapViewModel::initialize_map();
+                
+                // Esperar 1.5 segundos para que el mapa cargue completamente
+                let state_clone = state.clone();
+                use gloo_timers::callback::Timeout;
+                Timeout::new(1500, move || {
+                    let mut new_state = (*state_clone).clone();
+                    new_state.initialized = true;
+                    state_clone.set(new_state);
                     
-                    // Try to initialize map immediately
-                    let try_init = {
-                        let state = state.clone();
-                        move |window_opt: Option<web_sys::Window>| {
-                            if let Some(window) = window_opt {
-                                if let Some(document) = window.document() {
-                                    if let Some(_container) = document.get_element_by_id("map") {
-                                        log::info!("✅ Contenedor del mapa encontrado, inicializando...");
-                                        init_mapbox("map", is_dark);
-                                        
-                                        let mut current_state = (*state).clone();
-                                        current_state.initialized = true;
-                                        state.set(current_state);
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
-                            }
-                        }
-                    };
-                    
-                    // First attempt
-                    if !try_init(web_sys::window()) {
-                        log::warn!("⚠️ Contenedor del mapa no encontrado, reintentando...");
-                        // Retry after another delay
-                        let try_init = try_init.clone();
-                        Timeout::new(200, move || {
-                            if !try_init(web_sys::window()) {
-                                log::error!("❌ Contenedor del mapa aún no disponible después de reintentos");
-                            }
-                        }).forget();
-                    }
+                    log::info!("✅ Hook: Mapa marcado como inicializado (después de espera)");
                 }).forget();
             }
         })
     };
     
-    // Update packages on map
+    // Actualizar paquetes
     let update_packages = {
         let state = state.clone();
-        Callback::from(move |packages: Vec<Package>| {
-            log::info!("🗺️ use_map: Actualizando paquetes (initialized: {}, count: {})", (*state).initialized, packages.len());
-            
-            // Debug: Log package coordinates
-            for (i, pkg) in packages.iter().enumerate() {
-                if let Some(coords) = &pkg.coords {
-                    log::info!("📍 Paquete {}: {} - coords: [{}, {}]", i, pkg.address, coords[0], coords[1]);
-                } else {
-                    log::warn!("⚠️ Paquete {}: {} - SIN COORDENADAS", i, pkg.address);
-                }
-            }
-            
-            // Save packages to window for JS access
-            use wasm_bindgen::JsValue;
-            if let Some(window) = web_sys::window() {
-                if let Ok(js_packages) = serde_wasm_bindgen::to_value(&packages) {
-                    let _ = js_sys::Reflect::set(
-                        &window,
-                        &JsValue::from_str("currentPackages"),
-                        &js_packages
-                    );
-                    log::info!("✅ Paquetes guardados en window.currentPackages");
-                }
-            }
-            
-            // If map is initialized, update packages immediately
+        Callback::from(move |packages: Vec<MapPackage>| {
             if (*state).initialized {
-                log::info!("🎯 Mapa inicializado, enviando paquetes al mapa...");
-                Timeout::new(100, move || {
-                    let packages_json = serde_json::to_string(&packages).unwrap_or_default();
-                    log::info!("📤 Llamando add_packages_to_map con {} paquetes", packages.len());
-                    add_packages_to_map(&packages_json);
-                }).forget();
+                log::info!("🗺️ Hook: Actualizando {} paquetes en el mapa", packages.len());
+                
+                // Guardar en window para acceso desde JS
+                if let Some(window) = web_sys::window() {
+                    if let Ok(js_pkg) = serde_wasm_bindgen::to_value(&packages) {
+                        let _ = js_sys::Reflect::set(
+                            &window,
+                            &wasm_bindgen::JsValue::from_str("currentPackages"),
+                            &js_pkg
+                        );
+                    }
+                }
+                
+                // Delegar a ViewModel
+                MapViewModel::update_map_packages(packages);
             } else {
-                log::warn!("⚠️ Mapa no inicializado todavía, esperando...");
+                log::warn!("⚠️ Hook: Mapa no inicializado, no se pueden actualizar paquetes");
             }
         })
     };
     
-    // Select package on map
+    // Seleccionar paquete en el mapa
     let select_package = {
         let state = state.clone();
         Callback::from(move |index: usize| {
             if (*state).initialized {
-                update_selected_package_ffi(index as i32);
+                log::info!("🗺️ Hook: Seleccionando paquete {} desde el mapa", index);
                 
-                // Center map and scroll to package
-                Timeout::new(100, move || {
-                    center_map_on_package(index);
+                // Llamar a funciones JavaScript
+                if let Some(window) = web_sys::window() {
+                    // Actualizar selección en el mapa
+                    let update_fn = js_sys::Function::new_no_args(&format!(
+                        "if (window.updateSelectedPackage) window.updateSelectedPackage({});",
+                        index as i32
+                    ));
+                    let _ = update_fn.call0(&window.into());
                     
-                    Timeout::new(300, move || {
-                        scroll_to_selected_package(index);
+                    // Scroll al card seleccionado con delay de 150ms (más corto para map->sheet)
+                    use gloo_timers::callback::Timeout;
+                    Timeout::new(150, move || {
+                        if let Some(window) = web_sys::window() {
+                            let scroll_fn = js_sys::Function::new_no_args(&format!(
+                                "if (window.scrollToSelectedPackage) window.scrollToSelectedPackage({});",
+                                index
+                            ));
+                            let _ = scroll_fn.call0(&window.into());
+                        }
                     }).forget();
-                }).forget();
+                }
             }
         })
     };
     
-    // RESOLVER LOOP DE REGISTROS: No registrar listener aquí, hacerlo en app.rs
-    // use_map_selection_listener se llamará desde app.rs cuando realmente se necesite
-    
-    // Reset map state
-    let reset_map = {
+    // Centrar mapa en un paquete
+    let center_on_package = {
         let state = state.clone();
-        Callback::from(move |_| {
-            log::info!("🔄 Reseteando estado del mapa");
-            let mut current_state = (*state).clone();
-            current_state.initialized = false;
-            state.set(current_state);
+        Callback::from(move |index: usize| {
+            if (*state).initialized {
+                log::info!("🗺️ Hook: Centrando mapa en paquete {}", index);
+                
+                // PRIMERO: Actualizar selección (inicia pulse animation)
+                if let Some(window) = web_sys::window() {
+                    let update_fn = js_sys::Function::new_no_args(&format!(
+                        "if (window.updateSelectedPackage) window.updateSelectedPackage({});",
+                        index
+                    ));
+                    let _ = update_fn.call0(&window.into());
+                }
+                
+                // DESPUÉS: Centrar el mapa
+                if let Some(window) = web_sys::window() {
+                    let center_fn = js_sys::Function::new_no_args(&format!(
+                        "if (window.centerMapOnPackage) window.centerMapOnPackage({});",
+                        index
+                    ));
+                    let _ = center_fn.call0(&window.into());
+                }
+            }
         })
     };
     
     UseMapHandle {
         state,
-        initialize_map,
+        initialize,
         update_packages,
         select_package,
-        reset_map,
+        center_on_package,
     }
 }
-
-/// Setup event listener for package selection from map
-/// MEJORADO: Solo registra el listener una vez al montar el componente
-#[hook]
-pub fn use_map_selection_listener(on_select: Callback<usize>) -> () {
-    use_effect_with((), move |_| {
-        // Crear callback de clausura una sola vez
-        let on_select_cb = on_select.clone();
-        
-        let callback = Closure::wrap(Box::new(move |event: JsValue| {
-            // Get detail.index from custom event
-            if let Ok(detail) = js_sys::Reflect::get(&event, &JsValue::from_str("detail")) {
-                if let Ok(index_val) = js_sys::Reflect::get(&detail, &JsValue::from_str("index")) {
-                    if let Some(index) = index_val.as_f64() {
-                        log::info!("📍 Evento packageSelected recibido: index {}", index);
-                        on_select_cb.emit(index as usize);
-                    }
-                }
-            }
-        }) as Box<dyn FnMut(_)>);
-        
-        if let Some(window) = web_sys::window() {
-            let _ = window.add_event_listener_with_callback(
-                "packageSelected",
-                callback.as_ref().unchecked_ref()
-            );
-            log::info!("✅ Event listener 'packageSelected' registrado UNA VEZ");
-        }
-        
-        // Cleanup: solo se ejecuta cuando el componente se desmonta
-        move || {
-            log::info!("🗑️ Limpiando event listener en cleanup");
-            callback.forget();
-        }
-    });
-}
-
 

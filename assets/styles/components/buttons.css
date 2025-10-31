@@ -1,0 +1,27 @@
+/* ============================================
+   BUTTONS - Generic styles for legacy classes
+   ============================================ */
+button { font-family: inherit; }
+.btn-optimize-mini,
+.btn-scanner,
+.btn-refresh,
+.btn-settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--color-gray-100);
+  color: var(--color-gray-800);
+  box-shadow: var(--shadow-sm);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.btn-optimize-mini:hover,
+.btn-scanner:hover,
+.btn-refresh:hover,
+.btn-settings:hover { background: var(--color-gray-200); transform: translateY(-1px); }
+.btn-optimize-mini:disabled,
+.btn-scanner:disabled,
+.btn-refresh:disabled,
+.btn-settings:disabled { opacity: .5; cursor: not-allowed; transform: none; }

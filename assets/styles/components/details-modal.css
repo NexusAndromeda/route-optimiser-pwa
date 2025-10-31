@@ -1,0 +1,24 @@
+/* ============================================
+   DETAILS MODAL - Component Styles (BEM)
+   ============================================ */
+.details-modal {
+  background: var(--color-white);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2xl);
+  padding: var(--spacing-2xl);
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-modal);
+  min-width: 360px;
+}
+.details-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+.details-modal__body { margin-bottom: var(--spacing-lg); }
+.details-modal__actions { display: flex; gap: var(--spacing-sm); justify-content: flex-end; }

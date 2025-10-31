@@ -1,11 +1,12 @@
+pub mod session;
 pub mod package;
-mod auth;
-mod optimization;
-pub mod delivery_session;
+pub mod address;
+pub mod sync;
+pub mod company;
 
-// Renombrar el Package viejo para evitar conflictos
-pub use package::{Package as LegacyPackage, *};
-pub use auth::*;
-pub use optimization::*;
-pub use delivery_session::*;
+pub use session::DeliverySession;
+pub use package::Package;
+pub use address::Address;
+pub use sync::{Change, SyncState, SyncRequest, SyncResponse, SyncResult, PendingChangesQueue};
+pub use company::Company;
 
