@@ -201,6 +201,10 @@ window.reinitializeMap = function() {
 
 // Add packages to map as Style Layers
 window.addPackagesToMap = function(packagesJson) {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🗺️ MAPBOX: ADD_PACKAGES_TO_MAP');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     if (!map) {
         console.error('❌ Map not initialized');
         return;
@@ -214,7 +218,7 @@ window.addPackagesToMap = function(packagesJson) {
         } else {
             packages = window.currentPackages || [];
         }
-        console.log('📦 Adding packages to map:', packages.length);
+        console.log(`📦 Total paquetes recibidos: ${packages.length}`);
         
         // Wait for style to load before adding layers
         if (!map.isStyleLoaded()) {
@@ -233,17 +237,23 @@ window.addPackagesToMap = function(packagesJson) {
         }
         
         // Create GeoJSON data from packages
+        let skippedCount = 0;
         const geojsonData = {
             type: 'FeatureCollection',
             features: packages.map((pkg, index) => {
                 // Skip packages without valid coordinates
                 if (!pkg.coords || !Array.isArray(pkg.coords) || pkg.coords.length !== 2) {
-                    console.warn('⚠️ Paquete sin coordenadas válidas:', pkg.id, pkg.coords);
+                    console.warn(`⚠️ Paquete ${index} sin coordenadas válidas: id=${pkg.id}, coords=${JSON.stringify(pkg.coords)}`);
+                    skippedCount++;
                     return null;
                 }
                 
-                // Log coordinates for debugging
-                console.log(`📍 Paquete ${index}: ${pkg.address} - coords originales: [${pkg.coords[0]}, ${pkg.coords[1]}] - convertidas: [${pkg.coords[1]}, ${pkg.coords[0]}]`);
+                const groupIdx = pkg.group_idx !== undefined ? pkg.group_idx : index;
+                
+                // Log primeros 10 para debugging
+                if (index < 10) {
+                    console.log(`📍 [${index}] group_idx=${groupIdx}, id=${pkg.id}, address=${pkg.address}, coords=[${pkg.coords[0]}, ${pkg.coords[1]}]`);
+                }
                 
                 return {
                     type: 'Feature',
@@ -253,18 +263,21 @@ window.addPackagesToMap = function(packagesJson) {
                     },
                     properties: {
                         id: pkg.id,
-                        index: index,
+                        index: index, // Índice en el array filtrado (para visualización)
+                        group_idx: groupIdx, // ⭐ Índice original del grupo
                         status: pkg.status,
                         code_statut_article: pkg.code_statut_article || null,
                         type_livraison: pkg.type_livraison || 'DOMICILE',
                         recipient: pkg.recipient,
                         address: pkg.address,
-                        isSelected: selectedPackageIndex === index,
+                        isSelected: selectedPackageIndex === groupIdx, // ⭐ Comparar con group_idx
                         is_problematic: pkg.is_problematic || false
                     }
                 };
             }).filter(feature => feature !== null)
         };
+        
+        console.log(`✅ Features creados: ${geojsonData.features.length} (saltados: ${skippedCount})`);
         
         // Add source
         map.addSource('packages', {
@@ -339,12 +352,17 @@ window.addPackagesToMap = function(packagesJson) {
         });
         
         // Add labels layer (package numbers)
+        // ⭐ IMPORTANTE: Usar group_idx (índice original del grupo) en lugar de index (índice filtrado)
+        // Esto asegura que el número en el mapa coincida con el índice del grupo en la lista
         map.addLayer({
             id: 'packages-labels',
             type: 'symbol',
             source: 'packages',
             layout: {
-                'text-field': ['to-string', ['+', ['get', 'index'], 1]],
+                'text-field': ['to-string', ['+', 
+                    ['get', 'group_idx'], 
+                    1
+                ]],
                 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
                 'text-size': 11,
                 'text-anchor': 'center'
@@ -358,12 +376,27 @@ window.addPackagesToMap = function(packagesJson) {
         
         // Add click event listener
         map.on('click', 'packages-circles', (e) => {
-            const index = e.features[0].properties.index;
-            console.log('📍 Package clicked on map:', index);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('🖱️ MAPBOX: CLICK EN PUNTO DEL MAPA');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            
+            const props = e.features[0].properties;
+            // ⭐ Usar group_idx (índice original del grupo) en lugar de index (índice filtrado)
+            const groupIdx = props.group_idx !== undefined ? props.group_idx : props.index;
+            
+            console.log(`   📍 Props del punto:`);
+            console.log(`      - id: ${props.id}`);
+            console.log(`      - index (filtrado): ${props.index}`);
+            console.log(`      - group_idx (original): ${props.group_idx}`);
+            console.log(`      - address: ${props.address}`);
+            console.log(`      - recipient: ${props.recipient}`);
+            console.log(`   ✅ groupIdx seleccionado: ${groupIdx}`);
             
             // Trigger custom event that Yew can listen to
-            const event = new CustomEvent('packageSelected', { detail: { index } });
+            const event = new CustomEvent('packageSelected', { detail: { index: groupIdx } });
             window.dispatchEvent(event);
+            console.log(`   📤 Evento 'packageSelected' disparado con groupIdx: ${groupIdx}`);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         });
         
         // Change cursor on hover
@@ -376,6 +409,7 @@ window.addPackagesToMap = function(packagesJson) {
         });
         
         console.log(`✅ ${geojsonData.features.length} packages added as Style Layers`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         
     } catch (error) {
         console.error('❌ Error adding packages to map:', error);
@@ -383,34 +417,60 @@ window.addPackagesToMap = function(packagesJson) {
 };
 
 // Update selected package
-window.updateSelectedPackage = function(selectedIndex) {
+window.updateSelectedPackage = function(groupIdx) {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🗺️ MAPBOX: UPDATE_SELECTED_PACKAGE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`   📍 groupIdx recibido: ${groupIdx}`);
+    
     if (!map || !map.getSource('packages')) {
+        console.warn('   ⚠️  Mapa o source no disponible');
         return;
     }
     
-    selectedPackageIndex = selectedIndex;
+    selectedPackageIndex = groupIdx;
+    console.log(`   ✅ selectedPackageIndex actualizado: ${selectedPackageIndex}`);
     
     // Create new GeoJSON data with updated selection
+    // ⭐ Usar group_idx para la comparación, no index
     const source = map.getSource('packages');
     if (source && source._data) {
+        let updatedCount = 0;
         const geojsonData = {
             type: 'FeatureCollection',
-            features: source._data.features.map(feature => ({
-                ...feature,
-                properties: {
-                    ...feature.properties,
-                    isSelected: feature.properties.index === selectedIndex
+            features: source._data.features.map(feature => {
+                const featureGroupIdx = feature.properties.group_idx !== undefined 
+                    ? feature.properties.group_idx 
+                    : feature.properties.index;
+                const isSelected = featureGroupIdx === groupIdx;
+                
+                if (isSelected) {
+                    updatedCount++;
+                    console.log(`   ✅ Feature seleccionado: index=${feature.properties.index}, group_idx=${featureGroupIdx}, id=${feature.properties.id}`);
                 }
-            }))
+                
+                return {
+                    ...feature,
+                    properties: {
+                        ...feature.properties,
+                        isSelected: isSelected
+                    }
+                };
+            })
         };
         
         // Update the source data
         source.setData(geojsonData);
-        console.log(`✅ Package ${selectedIndex} updated as selected`);
+        console.log(`   ✅ ${updatedCount} feature(s) actualizado(s) como seleccionado(s)`);
         
         // Start pulse animation for selected package
         startPulseAnimation();
+        console.log('   ✅ Animación de pulso iniciada');
+    } else {
+        console.warn('   ⚠️  Source o data no disponible');
     }
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 };
 
 // Pulse animation for selected package
@@ -456,41 +516,84 @@ function startPulseAnimation() {
 }
 
 // Center map on package
-window.centerMapOnPackage = function(index) {
-    // Get package from window (will be set by Yew)
-    const packages = window.currentPackages || [];
-    const pkg = packages[index];
+window.centerMapOnPackage = function(groupIdx) {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🗺️ MAPBOX: CENTER_MAP_ON_PACKAGE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`   📍 groupIdx: ${groupIdx}`);
     
-    if (pkg && pkg.coords && Array.isArray(pkg.coords) && pkg.coords.length === 2) {
-        // Convertir de [lat, lng] a [lng, lat] para Mapbox
-        const center = [pkg.coords[1], pkg.coords[0]];
-        console.log(`🗺️ Centering map on package ${index}:`, pkg.coords, '→', center);
-        
-        if (map) {
-            map.flyTo({
-                center: center,
-                zoom: 15,
-                duration: 1000,
-                essential: true
-            });
-        }
-    } else {
-        console.log(`⚠️ Package ${index} has no valid coords`);
+    if (!map) {
+        console.error('❌ Map not initialized');
+        return;
     }
+    
+    const source = map.getSource('packages');
+    if (!source || !source._data || !source._data.features) {
+        console.error('❌ No package data found');
+        return;
+    }
+    
+    console.log(`   📦 Total features disponibles: ${source._data.features.length}`);
+    
+    // ⭐ Buscar feature por group_idx (índice original del grupo)
+    const feature = source._data.features.find(f => {
+        const featureGroupIdx = f.properties.group_idx !== undefined 
+            ? f.properties.group_idx 
+            : f.properties.index;
+        return featureGroupIdx === groupIdx;
+    });
+    
+    if (feature) {
+        const [lng, lat] = feature.geometry.coordinates;
+        console.log(`   ✅ Feature encontrado:`);
+        console.log(`      - id: ${feature.properties.id}`);
+        console.log(`      - address: ${feature.properties.address}`);
+        console.log(`      - coords: [${lat}, ${lng}]`);
+        console.log(`   🗺️  Centrando mapa en grupo ${groupIdx}...`);
+        
+        map.flyTo({
+            center: [lng, lat],
+            zoom: 16,
+            duration: 1000,
+            essential: true
+        });
+        
+        // Actualizar selección visual
+        updateSelectedPackage(groupIdx);
+        console.log('   ✅ Mapa centrado y selección actualizada');
+    } else {
+        console.warn(`   ⚠️  No feature found for group index ${groupIdx}`);
+        console.log(`   🔍 Buscando en ${source._data.features.length} features...`);
+        source._data.features.slice(0, 5).forEach((f, i) => {
+            const fGroupIdx = f.properties.group_idx !== undefined ? f.properties.group_idx : f.properties.index;
+            console.log(`      [${i}] group_idx=${fGroupIdx}, id=${f.properties.id}`);
+        });
+    }
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 };
 
 // Scroll to selected package in bottom sheet
-window.scrollToSelectedPackage = function(index) {
-    console.log(`🔍 scrollToSelectedPackage called with index: ${index}`);
+window.scrollToSelectedPackage = function(groupIdx) {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📜 MAPBOX: SCROLL_TO_SELECTED_PACKAGE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`   📍 groupIdx: ${groupIdx}`);
     
     // First try package-card (current structure uses PackageList)
     const packageCards = document.querySelectorAll('.package-card');
-    console.log(`🔍 Found ${packageCards.length} package cards in DOM`);
+    console.log(`   📦 package-cards encontrados: ${packageCards.length}`);
     
-    const selectedPackage = packageCards[index];
+    // ⭐ Usar groupIdx directamente (corresponde al índice en la lista de grupos)
+    const selectedPackage = packageCards[groupIdx];
     
     if (selectedPackage) {
-        console.log(`📜 Scrolling to package ${index} in bottom sheet`);
+        console.log(`   ✅ package-card encontrado en índice ${groupIdx}`);
+        console.log(`   📜 Haciendo scroll a grupo ${groupIdx}...`);
+        
+        // Log info del card seleccionado
+        const cardText = selectedPackage.textContent.substring(0, 100).replace(/\s+/g, ' ').trim();
+        console.log(`   📄 Texto del card: "${cardText}..."`);
         
         selectedPackage.scrollIntoView({
             behavior: 'smooth',
@@ -502,17 +605,20 @@ window.scrollToSelectedPackage = function(index) {
         setTimeout(() => {
             selectedPackage.style.animation = 'flash 0.8s ease';
         }, 100);
+        console.log('   ✅ Scroll completado y animación flash iniciada');
     } else {
-        console.log(`⚠️ No package card found at index ${index}`);
+        console.log(`   ⚠️  No package-card encontrado en índice ${groupIdx}`);
+        console.log(`   🔍 Índices disponibles: 0-${packageCards.length - 1}`);
         
         // Fallback to address-card (new structure)
         const addressCards = document.querySelectorAll('.address-card');
-        console.log(`🔍 Found ${addressCards.length} address cards in DOM`);
+        console.log(`   📦 address-cards encontrados: ${addressCards.length}`);
         
-        const selectedAddress = addressCards[index];
+        const selectedAddress = addressCards[groupIdx];
         
         if (selectedAddress) {
-            console.log(`📜 Scrolling to address ${index} in bottom sheet`);
+            console.log(`   ✅ address-card encontrado en índice ${groupIdx}`);
+            console.log(`   📜 Haciendo scroll a address group ${groupIdx}...`);
             
             selectedAddress.scrollIntoView({
                 behavior: 'smooth',
@@ -524,11 +630,29 @@ window.scrollToSelectedPackage = function(index) {
             setTimeout(() => {
                 selectedAddress.style.animation = 'flash 0.8s ease';
             }, 100);
+            console.log('   ✅ Scroll completado y animación flash iniciada');
         } else {
-            console.log(`⚠️ No card found at index ${index}`);
-            console.log(`🔍 Total package cards: ${packageCards.length}, Total address cards: ${addressCards.length}`);
+            console.log(`   ❌ No card found at group index ${groupIdx}`);
+            console.log(`   📊 Resumen:`);
+            console.log(`      - package-cards: ${packageCards.length}`);
+            console.log(`      - address-cards: ${addressCards.length}`);
+            console.log(`      - groupIdx solicitado: ${groupIdx}`);
+            
+            // Log primeros cards para debugging
+            if (packageCards.length > 0) {
+                const firstCard = packageCards[0];
+                const firstText = firstCard.textContent.substring(0, 50).replace(/\s+/g, ' ').trim();
+                console.log(`      - Primer package-card: "${firstText}..."`);
+            }
+            if (addressCards.length > 0) {
+                const firstAddr = addressCards[0];
+                const firstAddrText = firstAddr.textContent.substring(0, 50).replace(/\s+/g, ' ').trim();
+                console.log(`      - Primer address-card: "${firstAddrText}..."`);
+            }
         }
     }
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 };
 
 // Get map instance

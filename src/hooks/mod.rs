@@ -8,5 +8,5 @@ pub use use_session::{use_session, UseSessionHandle};
 pub use use_sync_state::{use_sync_state, UseSyncStateHandle};
 pub use use_auth::{use_auth, UseAuthHandle};
 pub use use_grouped_packages::{group_packages, GroupBy, PackageGroup};
-pub use use_map::{use_map, UseMapHandle};
+pub use use_map::{use_map, UseMapHandle, use_map_selection_listener};
 

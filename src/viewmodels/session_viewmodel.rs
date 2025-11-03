@@ -6,7 +6,9 @@
 // ============================================================================
 
 use crate::services::{ApiClient, OfflineService};
+use crate::services::api_client::OptimizeRouteResponse;
 use crate::models::{session::DeliverySession, sync::Change};
+use wasm_bindgen::JsCast;
 
 /// ViewModel de sesión - SOLO lógica de negocio
 pub struct SessionViewModel {
@@ -190,6 +192,78 @@ impl SessionViewModel {
             let _ = self.offline_service.save_pending_changes(&changes);
         }
     }
+    
+    /// Optimizar ruta usando la localización del chofer desde Mapbox
+    pub async fn optimize_route(&self, session_id: &str) -> Result<DeliverySession, String> {
+        log::info!("🗺️ Iniciando optimización de ruta para sesión: {}", session_id);
+        
+        // 1. Obtener localización del chofer desde Mapbox
+        let driver_location = get_driver_location_from_mapbox()
+            .ok_or_else(|| {
+                "No hay ubicación del chofer disponible. Por favor, activa la geolocalización primero.".to_string()
+            })?;
+        
+        log::info!("📍 Ubicación del chofer obtenida: ({}, {})", 
+                   driver_location.latitude, driver_location.longitude);
+        
+        // 2. Llamar al backend para optimizar
+        let response = self.api_client.optimize_route(
+            session_id,
+            driver_location.latitude,
+            driver_location.longitude,
+        ).await?;
+        
+        if !response.success {
+            return Err("Error optimizando ruta en el backend".to_string());
+        }
+        
+        // 3. Guardar sesión actualizada con el orden optimizado
+        let updated_session = response.session;
+        if let Err(e) = self.offline_service.save_session(&updated_session) {
+            log::error!("❌ Error guardando sesión optimizada: {}", e);
+        }
+        
+        log::info!("✅ Ruta optimizada: {} paradas, tiempo estimado: {} minutos", 
+                   response.total_stops, response.estimated_time_seconds / 60);
+        
+        Ok(updated_session)
+    }
+}
+
+/// Obtener localización del chofer desde Mapbox JavaScript
+fn get_driver_location_from_mapbox() -> Option<DriverLocation> {
+    let window = web_sys::window()?;
+    
+    // Llamar a window.getDriverLocation()
+    let get_driver_location = js_sys::Reflect::get(&window, &wasm_bindgen::JsValue::from_str("getDriverLocation"))
+        .ok()?;
+    
+    let func = get_driver_location.dyn_ref::<js_sys::Function>()?;
+    let result = func.call0(&wasm_bindgen::JsValue::NULL).ok()?;
+    
+    // Si es null, no hay ubicación
+    if result.is_null() {
+        return None;
+    }
+    
+    // Parsear el objeto {latitude, longitude}
+    let latitude = js_sys::Reflect::get(&result, &wasm_bindgen::JsValue::from_str("latitude"))
+        .ok()?
+        .as_f64()?;
+    let longitude = js_sys::Reflect::get(&result, &wasm_bindgen::JsValue::from_str("longitude"))
+        .ok()?
+        .as_f64()?;
+    
+    Some(DriverLocation {
+        latitude,
+        longitude,
+    })
+}
+
+#[derive(Debug)]
+struct DriverLocation {
+    latitude: f64,
+    longitude: f64,
 }
 
 impl Default for SessionViewModel {

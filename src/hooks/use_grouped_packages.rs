@@ -35,13 +35,44 @@ pub fn group_packages(
 
 fn group_by_address(packages: &[Package]) -> Vec<PackageGroup> {
     let mut map: HashMap<String, Vec<Package>> = HashMap::new();
+    
+    // Agrupar por address_id
     for p in packages.iter().cloned() {
         let key = p.address_id.clone();
         map.entry(key).or_default().push(p);
     }
-    map.into_iter()
-        .map(|(title, packages)| PackageGroup { title, count: packages.len(), packages })
-        .collect()
+    
+    // Ordenar paquetes dentro de cada grupo según original_order/route_order
+    for packages in map.values_mut() {
+        packages.sort_by_key(|p| {
+            // Usar route_order si está optimizado, sino original_order (orden del backend)
+            p.route_order.unwrap_or(p.original_order)
+        });
+    }
+    
+    // Convertir a Vec de grupos
+    let mut groups: Vec<PackageGroup> = map
+        .into_iter()
+        .map(|(title, packages)| {
+            PackageGroup { 
+                title, 
+                count: packages.len(), 
+                packages 
+            }
+        })
+        .collect();
+    
+    // ⭐ ORDENAR grupos según original_order/route_order del PRIMER paquete
+    // Esto preserva el orden que el backend envió (basado en el orden del JSON)
+    // Cuando hay múltiples paquetes en la misma dirección, el grupo usa el orden
+    // del primer paquete de esa dirección que apareció en el JSON
+    groups.sort_by_key(|group| {
+        group.packages.first()
+            .map(|p| p.route_order.unwrap_or(p.original_order))
+            .unwrap_or(0)
+    });
+    
+    groups
 }
 
 fn group_by_status(packages: &[Package]) -> Vec<PackageGroup> {

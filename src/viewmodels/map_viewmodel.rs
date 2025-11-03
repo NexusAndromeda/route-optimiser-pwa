@@ -21,6 +21,8 @@ pub struct MapPackage {
     pub code_statut_article: String,
     pub type_livraison: String,
     pub is_problematic: bool,
+    #[serde(rename = "group_idx")]
+    pub group_idx: usize, // ⭐ Índice original del grupo en la lista completa (sin filtrar)
 }
 
 /// ViewModel del mapa - SOLO lógica de negocio
@@ -45,9 +47,16 @@ impl MapViewModel {
         groups: &[PackageGroup],
         session: &DeliverySession,
     ) -> Vec<MapPackage> {
-        let mut map_packages = Vec::new();
+        log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        log::info!("🗺️ PREPARANDO PAQUETES PARA MAPA");
+        log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        log::info!("📊 Total grupos recibidos: {}", groups.len());
         
-        for group in groups {
+        let mut map_packages = Vec::new();
+        let mut skipped_count = 0;
+        
+        // ⭐ Iterar con índice para mantener referencia al group_idx original
+        for (group_idx, group) in groups.iter().enumerate() {
             // Si el grupo tiene más de 1 paquete = UN SOLO PUNTO en el mapa
             if group.count > 1 {
                 // Usar el primer paquete para obtener la dirección y propiedades
@@ -55,7 +64,10 @@ impl MapViewModel {
                     if let Some(address) = session.addresses.get(&first_pkg.address_id) {
                         // Solo grupos con coordenadas válidas
                         if address.latitude == 0.0 && address.longitude == 0.0 {
-                            continue;
+                            log::warn!("⚠️ Grupo {} SKIPPEADO (sin coordenadas válidas): address_id={}, label={}", 
+                                      group_idx, first_pkg.address_id, address.label);
+                            skipped_count += 1;
+                            continue; // ⚠️ Esto crea el desajuste - por eso guardamos group_idx
                         }
                         
                         let type_livraison = match first_pkg.delivery_type {
@@ -64,16 +76,25 @@ impl MapViewModel {
                             crate::models::package::DeliveryType::PickupPoint => "RELAIS",
                         }.to_string();
                         
+                        log::info!("✅ Grupo {} (AGRUPADO): {} paquetes → address_id={}, coords=[{}, {}], group_idx={}", 
+                                  group_idx, group.count, first_pkg.address_id, 
+                                  address.latitude, address.longitude, group_idx);
+                        
                         map_packages.push(MapPackage {
-                            id: first_pkg.address_id.clone(), // ⭐ ID único del grupo = address_id
-                            recipient: format!("{} paquets", group.count), // ⭐ "X paquets" en vez del nombre
+                            id: first_pkg.address_id.clone(),
+                            recipient: format!("{} paquets", group.count),
                             address: address.label.clone(),
-                            coords: [address.latitude, address.longitude], // ⭐ UNA SOLA COORDENADA
+                            coords: [address.latitude, address.longitude],
                             status: first_pkg.status.clone(),
                             code_statut_article: first_pkg.status.clone(),
                             type_livraison,
                             is_problematic: group.packages.iter().any(|p| p.is_problematic),
+                            group_idx, // ⭐ Guardar índice original del grupo
                         });
+                    } else {
+                        log::warn!("⚠️ Grupo {} sin dirección encontrada: address_id={}", 
+                                  group_idx, first_pkg.address_id);
+                        skipped_count += 1;
                     }
                 }
             } else {
@@ -82,7 +103,10 @@ impl MapViewModel {
                     if let Some(address) = session.addresses.get(&pkg.address_id) {
                         // Solo paquetes con coordenadas válidas
                         if address.latitude == 0.0 && address.longitude == 0.0 {
-                            continue;
+                            log::warn!("⚠️ Grupo {} SKIPPEADO (sin coordenadas válidas): tracking={}, label={}", 
+                                      group_idx, pkg.tracking, address.label);
+                            skipped_count += 1;
+                            continue; // ⚠️ Esto crea el desajuste - por eso guardamos group_idx
                         }
                         
                         let type_livraison = match pkg.delivery_type {
@@ -90,6 +114,10 @@ impl MapViewModel {
                             crate::models::package::DeliveryType::Rcs => "RCS",
                             crate::models::package::DeliveryType::PickupPoint => "RELAIS",
                         }.to_string();
+                        
+                        log::info!("✅ Grupo {} (INDIVIDUAL): tracking={}, recipient={}, coords=[{}, {}], group_idx={}", 
+                                  group_idx, pkg.tracking, pkg.customer_name, 
+                                  address.latitude, address.longitude, group_idx);
                         
                         map_packages.push(MapPackage {
                             id: pkg.tracking.clone(),
@@ -100,14 +128,33 @@ impl MapViewModel {
                             code_statut_article: pkg.status.clone(),
                             type_livraison,
                             is_problematic: pkg.is_problematic,
+                            group_idx, // ⭐ Guardar índice original del grupo
                         });
+                    } else {
+                        log::warn!("⚠️ Grupo {} sin dirección encontrada: tracking={}, address_id={}", 
+                                  group_idx, pkg.tracking, pkg.address_id);
+                        skipped_count += 1;
                     }
                 }
             }
         }
         
-        log::info!("📍 Preparados {} puntos para el mapa (de {} grupos)", 
-                   map_packages.len(), groups.len());
+        log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        log::info!("✅ RESUMEN PREPARACIÓN:");
+        log::info!("   📦 Total grupos: {}", groups.len());
+        log::info!("   📍 Puntos en mapa: {}", map_packages.len());
+        log::info!("   ⚠️  Saltados (sin coordenadas/dirección): {}", skipped_count);
+        log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        
+        // Log detallado de los primeros 10 paquetes para debugging
+        for (i, map_pkg) in map_packages.iter().take(10).enumerate() {
+            log::info!("   [{i}] group_idx={}, id={}, address={}", 
+                      map_pkg.group_idx, map_pkg.id, map_pkg.address);
+        }
+        if map_packages.len() > 10 {
+            log::info!("   ... y {} paquetes más", map_packages.len() - 10);
+        }
+        
         map_packages
     }
     

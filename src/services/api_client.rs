@@ -214,6 +214,51 @@ impl ApiClient {
         
         Ok(response_data)
     }
+    
+    /// Optimizar ruta
+    pub async fn optimize_route(
+        &self,
+        session_id: &str,
+        driver_latitude: f64,
+        driver_longitude: f64,
+    ) -> Result<OptimizeRouteResponse, String> {
+        let url = format!("{}/v1/sessions/{}/optimize", self.base_url, session_id);
+        let request = OptimizeRouteRequest {
+            driver_latitude,
+            driver_longitude,
+        };
+        
+        log::info!("🗺️ Optimizando ruta para sesión: {} con ubicación: ({}, {})", 
+                   session_id, driver_latitude, driver_longitude);
+        
+        let response = Request::post(&url)
+            .json(&request)
+            .map_err(|e| format!("Request build error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Request error: {}", e))?;
+        
+        if !response.ok() {
+            let status = response.status();
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("HTTP error {}: {}", status, error_text));
+        }
+        
+        let response_data = response
+            .json::<OptimizeRouteResponse>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))?;
+        
+        if response_data.success {
+            log::info!("✅ Ruta optimizada: {} paradas, tiempo estimado: {} segundos", 
+                       response_data.total_stops, response_data.estimated_time_seconds);
+        } else {
+            log::error!("❌ Error optimizando ruta");
+        }
+        
+        Ok(response_data)
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -257,4 +302,19 @@ pub struct ScanResponse {
     pub found: bool,
     pub route_position: Option<usize>,
     pub message: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct OptimizeRouteRequest {
+    driver_latitude: f64,
+    driver_longitude: f64,
+}
+
+#[derive(serde::Deserialize)]
+pub struct OptimizeRouteResponse {
+    pub success: bool,
+    pub optimized_order: Vec<String>,
+    pub session: DeliverySession,
+    pub total_stops: usize,
+    pub estimated_time_seconds: u32,
 }

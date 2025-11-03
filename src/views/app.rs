@@ -6,7 +6,7 @@
 // ============================================================================
 
 use yew::prelude::*;
-use crate::hooks::{use_session, use_sync_state, use_auth, group_packages, GroupBy, use_map};
+use crate::hooks::{use_session, use_sync_state, use_auth, group_packages, GroupBy, use_map, use_map_selection_listener};
 use crate::components::{SyncIndicator, Scanner, DraggablePackageList, SettingsPopup, PackageList};
 use crate::views::login::LoginView;
 use crate::viewmodels::{SessionViewModel, MapViewModel};
@@ -167,7 +167,25 @@ pub fn app() -> Html {
             session_opt.as_ref().map(|session| {
                 let mut items: Vec<_> = session.packages.values().cloned().collect();
                 items.sort_by_key(|p| p.route_order.unwrap_or(p.original_order));
-                group_packages(items, GroupBy::Address)
+                let groups = group_packages(items, GroupBy::Address);
+                
+                log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                log::info!("📦 AGRUPACIÓN DE PAQUETES");
+                log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                log::info!("   📊 Total paquetes en sesión: {}", session.packages.len());
+                log::info!("   📦 Total grupos creados: {}", groups.len());
+                
+                // Log de los primeros 10 grupos
+                for (idx, group) in groups.iter().take(10).enumerate() {
+                    log::info!("   [{idx}] group_idx={}, count={}, address_id={}", 
+                              idx, group.count, group.title);
+                }
+                if groups.len() > 10 {
+                    log::info!("   ... y {} grupos más", groups.len() - 10);
+                }
+                log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                
+                groups
             })
         }
     );
@@ -206,12 +224,17 @@ pub fn app() -> Html {
                     
                     // Convertir HashMap a Vec
                     let packages_vec: Vec<_> = session.packages.values().cloned().collect();
+                    let packages_count = packages_vec.len();
                     
                     // Preparar grupos
                     let groups = group_packages(packages_vec, GroupBy::Address);
+                    log::info!("📦 Grupos preparados: {} grupos de {} paquetes", 
+                              groups.len(), packages_count);
                     
                     // Preparar paquetes para el mapa (usando ViewModel)
                     let packages_for_map = MapViewModel::prepare_packages_for_map(&groups, &session);
+                    log::info!("🗺️ Paquetes preparados para mapa: {} de {} grupos", 
+                              packages_for_map.len(), groups.len());
                     
                     // Enviar al mapa con delay
                     Timeout::new(200, move || {
@@ -255,52 +278,57 @@ pub fn app() -> Html {
     }
     
     // Escuchar clicks en el mapa (SINCRONIZACIÓN: Mapa → Bottom Sheet)
-    {
+    // Usa el hook dedicado que garantiza registro único (patrón de app-backup)
+    let on_map_select = {
         let map_select = map_handle.select_package.clone();
-        let map_initialized = map_handle.state.initialized;
         let sheet_state = sheet_state.clone();
         let selected_package_index = selected_package_index.clone();
+        let groups_count = if let Some(ref groups) = *groups_memo {
+            groups.len()
+        } else {
+            0
+        };
         
-        use_effect_with(map_initialized, move |_| {
-            if map_initialized {
-                log::info!("🔗 Configurando listener de selección del mapa");
-                
-                // Listener para evento personalizado 'packageSelected' desde el mapa
-                let callback = Closure::wrap(Box::new(move |event: JsValue| {
-                    // Obtener el detail del event personalizado
-                    if let Ok(detail) = Reflect::get(&event, &JsValue::from_str("detail")) {
-                        if let Ok(index_val) = Reflect::get(&detail, &JsValue::from_str("index")) {
-                            if let Some(index) = index_val.as_f64() {
-                                log::info!("📍 Paquete seleccionado en el mapa: {}", index);
-                                
-                                // Abrir bottom sheet si está colapsado
-                                let current_state = (*sheet_state).clone();
-                                if current_state == "collapsed" {
-                                    sheet_state.set("half".to_string());
-                                }
-                                
-                                // Actualizar índice seleccionado
-                                selected_package_index.set(Some(index as usize));
-                                
-                                // Hacer scroll y animación flash
-                                map_select.emit(index as usize);
-                            }
-                        }
-                    }
-                }) as Box<dyn FnMut(_)>);
-                
-                if let Some(window) = web_sys::window() {
-                    let _ = window.add_event_listener_with_callback(
-                        "packageSelected",
-                        callback.as_ref().unchecked_ref()
-                    ).ok();
-                }
-                
-                callback.forget();
+        Callback::from(move |package_index: usize| {
+            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log::info!("🖱️ CLICK EN MAPA RECIBIDO EN APP");
+            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log::info!("   📍 group_idx recibido: {}", package_index);
+            log::info!("   📦 Total grupos disponibles: {}", groups_count);
+            
+            if package_index >= groups_count {
+                log::warn!("⚠️  group_idx {} >= grupos disponibles {}, ignorando", 
+                          package_index, groups_count);
+                return;
             }
-            || ()
-        });
-    }
+            
+            log::info!("   ✅ group_idx válido, actualizando selección...");
+            
+            // Actualizar índice seleccionado
+            selected_package_index.set(Some(package_index));
+            log::info!("   ✅ selected_package_index actualizado: {:?}", Some(package_index));
+            
+            // Abrir bottom sheet si está colapsado (patrón de app-backup)
+            let current_state = (*sheet_state).clone();
+            log::info!("   📱 Estado actual del sheet: {}", current_state);
+            if current_state == "collapsed" {
+                sheet_state.set("half".to_string());
+                log::info!("   📱 Bottom sheet abierto desde colapsado → half");
+            }
+            
+            // Hacer scroll y animación flash (con delay para que el sheet se abra primero)
+            let map_select_clone = map_select.clone();
+            use gloo_timers::callback::Timeout;
+            Timeout::new(300, move || {
+                log::info!("   ⏱️  Delay completado, emitiendo select_package con group_idx: {}", 
+                          package_index);
+                map_select_clone.emit(package_index);
+            }).forget();
+            
+            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        })
+    };
+    use_map_selection_listener(on_map_select);
     
     // Callback cuando se selecciona un paquete en el bottom sheet
     let on_package_selected = {
@@ -308,7 +336,11 @@ pub fn app() -> Html {
         let selected_package_index = selected_package_index.clone();
         
         Callback::from(move |index: usize| {
-            log::info!("📦 Paquete seleccionado en bottom sheet: {}", index);
+            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log::info!("📦 PAQUETE SELECCIONADO EN BOTTOM SHEET");
+            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log::info!("   📍 group_idx: {}", index);
+            log::info!("   🗺️  Centrando mapa en grupo {}...", index);
             
             // Actualizar índice seleccionado
             selected_package_index.set(Some(index));
@@ -337,7 +369,56 @@ pub fn app() -> Html {
                 <div class="header-actions">
                     <button 
                         class="btn-icon-header btn-optimize-mini" 
-                        onclick={Callback::from(|_| log::info!("🎯 Optimiser"))}
+                        onclick={Callback::from({
+                            let session_state = session_handle.state.clone();
+                            move |_| {
+                                let session_state = session_state.clone();
+                                
+                                // Obtener sesión actual
+                                let current_session = {
+                                    let session = (*session_state).clone();
+                                    session.session.clone()
+                                };
+                                
+                                if let Some(session) = current_session {
+                                    let session_id = session.session_id.clone();
+                                    let vm = SessionViewModel::new();
+                                    
+                                    // Marcar como cargando
+                                    let mut new_state = (*session_state).clone();
+                                    new_state.loading = true;
+                                    new_state.error = None;
+                                    session_state.set(new_state);
+                                    
+                                    wasm_bindgen_futures::spawn_local(async move {
+                                        match vm.optimize_route(&session_id).await {
+                                            Ok(updated_session) => {
+                                                log::info!("✅ Optimización completada: {} paquetes en orden optimizado", 
+                                                          updated_session.stats.total_packages);
+                                                
+                                                // Actualizar estado con sesión optimizada
+                                                let mut new_state = (*session_state).clone();
+                                                new_state.session = Some(updated_session);
+                                                new_state.loading = false;
+                                                new_state.error = None;
+                                                session_state.set(new_state);
+                                            }
+                                            Err(e) => {
+                                                log::error!("❌ Error optimizando ruta: {}", e);
+                                                
+                                                // Mostrar error
+                                                let mut new_state = (*session_state).clone();
+                                                new_state.loading = false;
+                                                new_state.error = Some(e);
+                                                session_state.set(new_state);
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    log::warn!("⚠️ No hay sesión activa para optimizar");
+                                }
+                            }
+                        })}
                         disabled={loading}
                         title="Optimiser"
                     >
