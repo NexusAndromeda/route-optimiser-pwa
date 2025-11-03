@@ -104,6 +104,8 @@ pub fn app() -> Html {
         let session_state = session_handle.state.clone();
         let auth_state = auth_handle.state.clone();
         let show_params = show_params.clone();
+        let reset_map = map_handle.reset.clone();
+        
         Callback::from(move |_| {
             log::info!("👋 Logout iniciado");
             
@@ -127,6 +129,9 @@ pub fn app() -> Html {
             new_auth_state.token = None;
             new_auth_state.company_id = None;
             auth_state.set(new_auth_state);
+            
+            // Resetear estado del mapa (patrón de app-backup)
+            reset_map.emit(());
             
             // Cerrar popup de settings
             show_params.set(false);
@@ -198,14 +203,31 @@ pub fn app() -> Html {
     }
     
     // Inicializar mapa cuando se hace login (MVVM)
+    // IMPORTANTE: Se inicializa cuando el componente se monta Y está logueado,
+    // o cuando is_logged_in cambia de false a true
     {
         let map_init = map_handle.initialize.clone();
+        let map_initialized = map_handle.state.initialized.clone();
         let is_logged = is_logged_in;
         
-        use_effect_with(is_logged, move |logged| {
-            if *logged {
-                log::info!("🗺️ Usuario logueado, inicializando mapa...");
-                map_init.emit(());
+        // Efecto que se ejecuta al montar Y cuando cambian las dependencias
+        use_effect_with((is_logged, map_initialized.clone()), move |(logged, initialized)| {
+            log::info!("🔍 use_effect_with ejecutado: is_logged={}, map_initialized={}", logged, initialized);
+            
+            // Solo inicializar si está logueado Y el mapa no está inicializado
+            if *logged && !*initialized {
+                log::info!("🗺️ Usuario logueado y mapa no inicializado, inicializando... (is_logged: {}, initialized: {})", 
+                          logged, initialized);
+                
+                // Pequeño delay para asegurar que el DOM está listo (especialmente después de logout/login)
+                use gloo_timers::callback::Timeout;
+                Timeout::new(200, move || {
+                    log::info!("🗺️ Llamando a initialize después del delay (200ms)...");
+                    map_init.emit(());
+                }).forget();
+            } else {
+                log::debug!("🗺️ Condiciones no cumplidas para inicializar mapa (is_logged: {}, initialized: {})", 
+                           logged, initialized);
             }
             || ()
         });

@@ -19,6 +19,7 @@ pub struct MapState {
 pub struct UseMapHandle {
     pub state: UseStateHandle<MapState>,
     pub initialize: Callback<()>,
+    pub reset: Callback<()>,
     pub update_packages: Callback<Vec<MapPackage>>,
     pub select_package: Callback<usize>,
     pub center_on_package: Callback<usize>,
@@ -32,23 +33,42 @@ pub fn use_map() -> UseMapHandle {
     let initialize = {
         let state = state.clone();
         Callback::from(move |_| {
-            if !(*state).initialized {
-                log::info!("🗺️ Hook: Inicializando mapa...");
-                
-                // Delegar a ViewModel
-                MapViewModel::initialize_map();
-                
-                // Esperar 1.5 segundos para que el mapa cargue completamente
-                let state_clone = state.clone();
-                use gloo_timers::callback::Timeout;
-                Timeout::new(1500, move || {
-                    let mut new_state = (*state_clone).clone();
-                    new_state.initialized = true;
-                    state_clone.set(new_state);
-                    
-                    log::info!("✅ Hook: Mapa marcado como inicializado (después de espera)");
-                }).forget();
+            log::info!("🗺️ Hook: Inicializando mapa... (initialized: {})", (*state).initialized);
+            
+            // Siempre inicializar, aunque ya esté inicializado (para reinicializar después de logout)
+            // initMapbox en JS ya limpia el mapa existente
+            MapViewModel::initialize_map();
+            
+            // Resetear estado primero si ya estaba inicializado
+            if (*state).initialized {
+                let mut new_state = (*state).clone();
+                new_state.initialized = false;
+                state.set(new_state);
+                log::info!("🔄 Estado del mapa reseteado para reinicialización");
             }
+            
+            // Esperar 1.5 segundos para que el mapa cargue completamente
+            let state_clone = state.clone();
+            use gloo_timers::callback::Timeout;
+            Timeout::new(1500, move || {
+                let mut new_state = (*state_clone).clone();
+                new_state.initialized = true;
+                state_clone.set(new_state);
+                
+                log::info!("✅ Hook: Mapa marcado como inicializado (después de espera)");
+            }).forget();
+        })
+    };
+    
+    // Resetear estado del mapa (para logout)
+    let reset = {
+        let state = state.clone();
+        Callback::from(move |_| {
+            log::info!("🔄 Hook: Reseteando estado del mapa");
+            let mut new_state = (*state).clone();
+            new_state.initialized = false;
+            state.set(new_state);
+            log::info!("✅ Estado del mapa reseteado (initialized: false)");
         })
     };
     
@@ -171,6 +191,7 @@ pub fn use_map() -> UseMapHandle {
     UseMapHandle {
         state,
         initialize,
+        reset,
         update_packages,
         select_package,
         center_on_package,
