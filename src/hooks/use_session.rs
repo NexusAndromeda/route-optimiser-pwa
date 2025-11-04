@@ -3,13 +3,14 @@
 // ============================================================================
 // Hook nativo de Yew para manejar estado de sesión
 // Compatible con Rust 1.90 (sin yewdux)
+// Ahora usa Context API para compartir estado entre componentes
 // ============================================================================
 
 use yew::prelude::*;
 use crate::stores::SessionStore;
 use crate::viewmodels::SessionViewModel;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct UseSessionHandle {
     pub state: UseStateHandle<SessionStore>,
     pub login_and_fetch: Callback<(String, String, String)>,
@@ -21,6 +22,17 @@ pub struct UseSessionHandle {
 
 #[hook]
 pub fn use_session() -> UseSessionHandle {
+    // Intentar leer del Context primero (si existe)
+    let context_handle = use_context::<UseSessionHandle>();
+    
+    // Si existe Context, usar ese handle (compartido)
+    if let Some(context) = context_handle {
+        log::debug!("✅ [USE_SESSION] Usando Context compartido");
+        return context;
+    }
+    
+    // Si no existe Context, crear estado local (fallback para compatibilidad)
+    log::debug!("⚠️ [USE_SESSION] No hay Context, creando estado local (fallback)");
     let state = use_state(|| SessionStore::default());
     // Login and fetch
     let login_and_fetch = {

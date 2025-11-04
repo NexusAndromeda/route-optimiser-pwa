@@ -27,32 +27,35 @@ impl SyncViewModel {
     }
     
     /// Sincronizar ahora - necesita sesión y cambios pendientes
+    /// Retorna el resultado y el número de conflictos resueltos (si los hay)
     pub async fn sync_now(
         &self,
         session: &DeliverySession,
         pending_changes: Vec<Change>,
-    ) -> Result<SyncResult, String> {
+    ) -> Result<(SyncResult, Option<usize>), String> {
         log::info!("🔄 Iniciando sincronización manual");
         
         // Ejecutar sincronización
         let result = self.sync_service.sync_session(session, pending_changes).await;
         
-        // Guardar sesión si es exitoso
-        match &result {
+        // Extraer número de conflictos y guardar sesión si es exitoso
+        let conflicts_count = match &result {
             SyncResult::Success { session: updated_session, .. } => {
                 if let Err(e) = self.offline_service.save_session(updated_session) {
                     log::error!("❌ Error guardando sesión: {}", e);
                 }
+                None
             }
-            SyncResult::ConflictResolved { merged_session, .. } => {
+            SyncResult::ConflictResolved { merged_session, conflicts_count, .. } => {
                 if let Err(e) = self.offline_service.save_session(merged_session) {
                     log::error!("❌ Error guardando sesión: {}", e);
                 }
+                Some(*conflicts_count)
             }
-            _ => {}
-        }
+            _ => None,
+        };
         
-        Ok(result)
+        Ok((result, conflicts_count))
     }
     
     /// Agregar cambio pendiente

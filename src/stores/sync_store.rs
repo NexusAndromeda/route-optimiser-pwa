@@ -11,6 +11,8 @@ pub struct SyncStore {
     pub sync_state: SyncState,
     pub last_sync_attempt: Option<i64>,
     pub is_online: bool,
+    /// Último número de conflictos resueltos (para mostrar notificación)
+    pub last_conflicts_resolved: Option<usize>,
 }
 
 impl Default for SyncStore {
@@ -20,6 +22,7 @@ impl Default for SyncStore {
             sync_state: SyncState::Synced,
             last_sync_attempt: None,
             is_online: true,
+            last_conflicts_resolved: None,
         }
     }
 }

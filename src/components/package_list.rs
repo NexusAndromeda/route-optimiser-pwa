@@ -126,7 +126,7 @@ pub fn package_list(props: &PackageListProps) -> Html {
                         <PackageCard 
                             key={address_id.clone()}
                             package={group_package} 
-                            index={group_idx}
+                            index={group_idx} 
                             address={Some(address_label.clone())} 
                             on_info={props.on_info.clone()} 
                             is_selected={is_selected}
@@ -152,26 +152,26 @@ pub fn package_list(props: &PackageListProps) -> Html {
                     let is_selected = (*selected_key) == Some(group_idx);
                     let animation_class = (*animations).get(&group_idx).cloned();
                     
-                    let on_select_card = {
-                        let on_select = on_select.clone();
+                                            let on_select_card = {
+                                                let on_select = on_select.clone();
                         Callback::from(move |_| on_select.emit(group_idx))
-                    };
+                                            };
                     
-                    html!{
-                        <PackageCard 
+                                            html!{
+                                                <PackageCard 
                             key={package.tracking.clone()}
                             package={package.clone()} 
                             index={group_idx} 
-                            address={addr} 
-                            on_info={props.on_info.clone()} 
-                            is_selected={is_selected}
+                                                    address={addr} 
+                                                    on_info={props.on_info.clone()} 
+                                                    is_selected={is_selected}
                             is_expanded={false}
-                            on_select={Some(on_select_card)}
-                            on_navigate={Some(on_navigate.clone())}
+                                                    on_select={Some(on_select_card)}
+                                                    on_navigate={Some(on_navigate.clone())}
                             on_toggle_expand={None::<Callback<usize>>}
                             animation_class={animation_class}
                         />
-                    }
+                                }
                 }
             }) }
         </div>

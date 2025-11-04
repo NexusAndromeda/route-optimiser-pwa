@@ -450,11 +450,11 @@ window.updateSelectedPackage = function(groupIdx) {
                 }
                 
                 return {
-                    ...feature,
-                    properties: {
-                        ...feature.properties,
+                ...feature,
+                properties: {
+                    ...feature.properties,
                         isSelected: isSelected
-                    }
+                }
                 };
             })
         };
@@ -551,12 +551,12 @@ window.centerMapOnPackage = function(groupIdx) {
         console.log(`      - coords: [${lat}, ${lng}]`);
         console.log(`   🗺️  Centrando mapa en grupo ${groupIdx}...`);
         
-        map.flyTo({
+            map.flyTo({
             center: [lng, lat],
             zoom: 16,
-            duration: 1000,
-            essential: true
-        });
+                duration: 1000,
+                essential: true
+            });
         
         // Actualizar selección visual
         updateSelectedPackage(groupIdx);
@@ -648,8 +648,8 @@ window.scrollToSelectedPackage = function(groupIdx) {
                 const firstAddr = addressCards[0];
                 const firstAddrText = firstAddr.textContent.substring(0, 50).replace(/\s+/g, ' ').trim();
                 console.log(`      - Primer address-card: "${firstAddrText}..."`);
-            }
         }
+    }
     }
     
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

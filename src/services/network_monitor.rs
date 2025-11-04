@@ -119,6 +119,40 @@ impl NetworkMonitor {
     pub fn is_offline(&self) -> bool {
         matches!(self.current_status(), NetworkStatus::Offline)
     }
+    
+    /// Registrar callback cuando vuelve la conexión (método simplificado)
+    pub fn on_online<F>(&mut self, callback: F)
+    where
+        F: Fn() + 'static,
+    {
+        let window = match window() {
+            Some(w) => w,
+            None => return,
+        };
+        
+        let callback_arc = Arc::new(Mutex::new(callback));
+        let status = self.status.clone();
+        
+        // Listener para evento "online"
+        let online_closure = Closure::wrap(Box::new({
+            let status = status.clone();
+            let callback = callback_arc.clone();
+            move |_event: Event| {
+                log::info!("🌐 Network: ONLINE - Ejecutando callback");
+                *status.lock().unwrap() = NetworkStatus::Online;
+                callback.lock().unwrap()();
+            }
+        }) as Box<dyn FnMut(Event)>);
+        
+        // Registrar listener
+        let _ = window.add_event_listener_with_callback(
+            "online",
+            online_closure.as_ref().unchecked_ref(),
+        );
+        
+        // Mantener closure vivo
+        online_closure.forget();
+    }
 }
 
 impl Default for NetworkMonitor {

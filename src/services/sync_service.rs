@@ -6,12 +6,15 @@
 // ============================================================================
 
 use gloo_net::http::Request;
+use gloo_timers::callback::Interval;
 use crate::models::session::DeliverySession;
 use crate::models::sync::{Change, SyncRequest, SyncResponse, SyncResult, PendingChangesQueue};
-use crate::services::{OfflineService, ApiClient};
+use crate::services::{OfflineService, ApiClient, NetworkMonitor};
 use crate::utils::constants::BACKEND_URL;
+use wasm_bindgen_futures::spawn_local;
 
 /// Servicio de sincronización inteligente con queue persistente
+#[derive(Clone)]
 pub struct SyncService {
     backend_url: String,
     offline_service: OfflineService,
@@ -206,6 +209,129 @@ impl SyncService {
             .flatten()
             .map(|q| q.len())
             .unwrap_or(0)
+    }
+    
+    /// Procesar queue pendiente automáticamente
+    pub async fn process_pending_queue(&self) -> Result<(), String> {
+        // 1. Cargar queue
+        let mut queue = match self.offline_service.load_pending_changes()? {
+            Some(q) => q,
+            None => {
+                log::info!("📭 No hay cambios pendientes");
+                return Ok(());
+            }
+        };
+        
+        // 2. Verificar backoff exponencial
+        if !queue.should_retry() {
+            let remaining = queue.backoff_remaining();
+            log::info!("⏳ Esperando backoff: {}s restantes", remaining);
+            return Ok(());
+        }
+        
+        // 3. Cargar sesión actual
+        let session = self.offline_service.load_session()?
+            .ok_or_else(|| "No hay sesión local".to_string())?;
+        
+        log::info!("🔄 Procesando queue: {} cambios pendientes (intento {})", 
+            queue.len(), queue.retry_count + 1);
+        
+        // 4. Sincronizar
+        let changes = queue.changes.clone();
+        match self.sync_session(&session, changes).await {
+            SyncResult::Success { .. } | SyncResult::ConflictResolved { .. } => {
+                self.clear_pending_changes();
+                log::info!("✅ Queue procesada exitosamente");
+                Ok(())
+            }
+            SyncResult::Error { message, .. } => {
+                queue.increment_retry();
+                if let Err(e) = self.offline_service.save_queue(&queue) {
+                    log::error!("❌ Error guardando queue actualizada: {}", e);
+                }
+                log::warn!("⚠️ Error en sync, reintentando más tarde: {}", message);
+                Ok(()) // No retornar error, solo loguear
+            }
+            SyncResult::NoChanges => {
+                self.clear_pending_changes();
+                log::info!("✅ No hay cambios que sincronizar");
+                Ok(())
+            }
+        }
+    }
+    
+    /// Iniciar sincronización automática cuando vuelve la conexión
+    pub fn start_auto_sync(&mut self) {
+        let mut network_monitor = NetworkMonitor::new();
+        let sync_service = self.clone();
+        
+        network_monitor.on_online(move || {
+            let sync_service = sync_service.clone();
+            spawn_local(async move {
+                log::info!("🌐 Conexión restaurada - procesando queue automáticamente");
+                if let Err(e) = sync_service.process_pending_queue().await {
+                    log::error!("❌ Error procesando queue automática: {}", e);
+                }
+            });
+        });
+        
+        log::info!("🚀 Auto-sync iniciado - procesará queue cuando vuelva la conexión");
+    }
+    
+    /// Polling inteligente para detectar cambios remotos
+    /// Compara last_sync de sesión local vs remota cada 30 segundos
+    /// El intervalo se mantiene vivo mientras el servicio exista
+    pub fn start_remote_change_detection(&self, session_id: String) {
+        let sync_service = self.clone();
+        let session_id_clone = session_id.clone();
+        let network_monitor = NetworkMonitor::new();
+        
+        // Poll cada 30 segundos (30000 ms)
+        // El intervalo se mantiene vivo automáticamente
+        Interval::new(30_000, move || {
+            // Solo hacer polling si hay conexión
+            if !network_monitor.is_online() {
+                return;
+            }
+            
+            let sync_service = sync_service.clone();
+            let session_id = session_id_clone.clone();
+            
+            spawn_local(async move {
+                // 1. Cargar sesión local
+                if let Ok(Some(local_session)) = sync_service.offline_service.load_session() {
+                    // 2. Obtener sesión remota
+                    let url = format!("{}/api/v1/sessions/{}", sync_service.backend_url, session_id);
+                    
+                    match Request::get(&url).send().await {
+                        Ok(response) => {
+                            if response.ok() {
+                                if let Ok(remote_session) = response.json::<DeliverySession>().await {
+                                    // 3. Comparar timestamps
+                                    if remote_session.last_sync > local_session.last_sync {
+                                        log::info!("📥 Cambios remotos detectados (remote: {}, local: {}), actualizando...", 
+                                                  remote_session.last_sync, local_session.last_sync);
+                                        
+                                        // 4. Actualizar sesión local
+                                        if let Err(e) = sync_service.offline_service.save_session(&remote_session) {
+                                            log::error!("❌ Error guardando sesión remota: {}", e);
+                                        } else {
+                                            log::info!("✅ Sesión local actualizada desde remoto");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            // Offline o error, ignorar silenciosamente
+                            log::debug!("⚠️ No se pudo verificar cambios remotos: {}", e);
+                        }
+                    }
+                }
+            });
+        });
+        
+        log::info!("🔍 Detección remota iniciada para sesión: {} (polling cada 30s)", session_id);
     }
 }
 

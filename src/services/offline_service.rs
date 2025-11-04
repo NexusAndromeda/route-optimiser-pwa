@@ -4,6 +4,7 @@ use web_sys::{window, Storage};
 
 /// Service offline - IndexedDB + Background Sync
 /// ✅ Ahora usa IndexedDB con fallback a localStorage
+#[derive(Clone)]
 pub struct OfflineService {
     use_indexeddb: bool,
 }
@@ -79,12 +80,35 @@ impl OfflineService {
     pub fn load_session(&self) -> Result<Option<DeliverySession>, String> {
         match self.load_storage(SESSION_STORAGE_KEY)? {
             Some(json) => {
-                let session = serde_json::from_str::<DeliverySession>(&json)
-                    .map_err(|e| format!("Error deserializando: {}", e))?;
-                log::info!("📋 Sesión cargada (IndexedDB/localStorage)");
+                log::info!("📋 [STORAGE] Intentando deserializar sesión (tamaño: {} bytes)", json.len());
+                // Intentar parsear el JSON primero para ver si hay errores de sintaxis
+                match serde_json::from_str::<serde_json::Value>(&json) {
+                    Ok(_) => log::info!("✅ [STORAGE] JSON válido"),
+                    Err(e) => {
+                        log::error!("❌ [STORAGE] JSON inválido: {}", e);
+                        return Err(format!("JSON inválido: {}", e));
+                    }
+                }
+                
+                match serde_json::from_str::<DeliverySession>(&json) {
+                    Ok(session) => {
+                        log::info!("✅ [STORAGE] Sesión deserializada exitosamente: {} paquetes", session.stats.total_packages);
                 Ok(Some(session))
             }
-            None => Ok(None),
+                    Err(e) => {
+                        log::error!("❌ [STORAGE] Error deserializando sesión: {}", e);
+                        // Intentar encontrar el campo problemático
+                        if let Some(pos) = e.to_string().find("at line") {
+                            log::error!("❌ [STORAGE] Ubicación del error: {}", &e.to_string()[pos..]);
+                        }
+                        Err(format!("Error deserializando: {}", e))
+                    }
+                }
+            }
+            None => {
+                log::info!("📋 [STORAGE] No hay sesión guardada");
+                Ok(None)
+            }
         }
     }
     

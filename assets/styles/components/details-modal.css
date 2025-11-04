@@ -1,24 +1,222 @@
 /* ============================================
-   DETAILS MODAL - Component Styles (BEM)
+   DETAILS MODAL - UI/UX EXACTA DEL BACKUP
    ============================================ */
-.details-modal {
-  background: var(--color-white);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-2xl);
-  padding: var(--spacing-2xl);
-  position: fixed;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: var(--z-modal);
-  min-width: 360px;
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
 }
-.details-modal__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-lg);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
+
+.modal.active {
+    display: flex;
 }
-.details-modal__body { margin-bottom: var(--spacing-lg); }
-.details-modal__actions { display: flex; gap: var(--spacing-sm); justify-content: flex-end; }
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    position: relative;
+    background: var(--bg-surface);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    z-index: 1001;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.modal-header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.btn-close {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.btn-close:hover {
+    background: var(--bg-surface-variant);
+    transform: scale(1.1);
+}
+
+.modal-body {
+    /* No margin, sections manejan el spacing */
+}
+
+/* Detail Sections */
+.detail-section {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.detail-section:last-child {
+    border-bottom: none;
+}
+
+.detail-section.editable:hover {
+    background: rgba(255, 255, 255, 0.02);
+    margin: 0 -8px;
+    padding: 16px 8px;
+    border-radius: 8px;
+}
+
+.detail-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.detail-value {
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.detail-value-with-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.detail-value-with-action span {
+    flex: 1;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.empty-value {
+    color: var(--text-secondary) !important;
+    font-style: italic;
+}
+
+.phone-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.phone-link:hover {
+    text-decoration: underline;
+}
+
+/* Icon Buttons */
+.btn-icon,
+.btn-icon-edit {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    font-size: 1.125rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.btn-icon:hover,
+.btn-icon-edit:hover {
+    background: var(--bg-surface-variant);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    transform: scale(1.05);
+}
+
+.btn-icon-edit:hover {
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 26px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-surface-variant);
+    border: 1px solid var(--border-color);
+    transition: 0.3s;
+    border-radius: 26px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #fff;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(24px);
+}
+
+.toggle-slider:hover {
+    opacity: 0.8;
+}

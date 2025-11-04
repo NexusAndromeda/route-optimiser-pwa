@@ -12,6 +12,7 @@ pub struct UseSyncStateHandle {
     pub state: UseStateHandle<SyncStore>,
     pub sync_now: Callback<()>,
     pub add_pending_change: Callback<Change>,
+    pub update_conflicts_resolved: Callback<usize>,
 }
 
 #[hook]
@@ -50,9 +51,20 @@ pub fn use_sync_state() -> UseSyncStateHandle {
         })
     };
     
+    // Update conflicts resolved
+    let update_conflicts_resolved = {
+        let state = state.clone();
+        Callback::from(move |count: usize| {
+            let mut new_state = (*state).clone();
+            new_state.last_conflicts_resolved = Some(count);
+            state.set(new_state);
+        })
+    };
+    
     UseSyncStateHandle {
         state,
         sync_now,
         add_pending_change,
+        update_conflicts_resolved,
     }
 }

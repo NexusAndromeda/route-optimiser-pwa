@@ -97,6 +97,9 @@ pub struct PendingChangesQueue {
 }
 
 impl PendingChangesQueue {
+    const MAX_SIZE: usize = 1000; // Límite de cambios pendientes
+    const MAX_AGE_SECONDS: i64 = 86400; // 24 horas
+    
     pub fn new(changes: Vec<Change>) -> Self {
         Self {
             changes,
@@ -119,6 +122,31 @@ impl PendingChangesQueue {
         self.last_retry = Some(chrono::Utc::now().timestamp());
     }
     
+    /// Agregar cambio a la queue con verificación de límites
+    pub fn add_change(&mut self, change: Change) -> Result<(), String> {
+        // Verificar límite
+        if self.changes.len() >= Self::MAX_SIZE {
+            return Err("Queue llena: demasiados cambios pendientes".to_string());
+        }
+        
+        // Limpiar cambios antiguos
+        self.cleanup_old_changes();
+        
+        self.changes.push(change);
+        Ok(())
+    }
+    
+    /// Limpiar cambios antiguos (mayores a MAX_AGE_SECONDS)
+    fn cleanup_old_changes(&mut self) {
+        let now = chrono::Utc::now().timestamp();
+        let max_age = Self::MAX_AGE_SECONDS;
+        
+        self.changes.retain(|change| {
+            let age = now - change.timestamp();
+            age < max_age
+        });
+    }
+    
     /// Determinar si debemos reintentar basado en backoff exponencial
     pub fn should_retry(&self) -> bool {
         if self.retry_count == 0 {
@@ -137,6 +165,26 @@ impl PendingChangesQueue {
         let backoff_seconds = std::cmp::min(30 * (2_i64.pow(self.retry_count as u32)), 300);
         
         time_since_retry >= backoff_seconds
+    }
+    
+    /// Obtener tiempo restante de backoff en segundos
+    pub fn backoff_remaining(&self) -> i64 {
+        if self.retry_count == 0 {
+            return 0;
+        }
+        
+        let last_retry = match self.last_retry {
+            Some(ts) => ts,
+            None => return 0,
+        };
+        
+        let now = chrono::Utc::now().timestamp();
+        let time_since_retry = now - last_retry;
+        
+        // Backoff exponencial: 30s, 60s, 120s, 240s, max 300s (5 min)
+        let backoff_seconds = std::cmp::min(30 * (2_i64.pow(self.retry_count as u32)), 300);
+        
+        std::cmp::max(0, backoff_seconds - time_since_retry)
     }
 }
 

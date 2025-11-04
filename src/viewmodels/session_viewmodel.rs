@@ -31,65 +31,173 @@ impl SessionViewModel {
         password: String,
         societe: String,
     ) -> Result<DeliverySession, String> {
-        log::info!("🔐 Iniciando login y fetch de paquetes...");
+        log::info!("🔐 [VIEWMODEL] Iniciando login_and_fetch para usuario: {} (societe: {})", username, societe);
         
         // 2. Crear sesión (login)
+        log::info!("🔐 [VIEWMODEL] Llamando a api_client.create_session...");
         let create_response = match self.api_client.create_session(&username, &password, &societe).await {
-            Ok(response) => response,
-            Err(e) => return Err(e),
+            Ok(response) => {
+                log::info!("✅ [VIEWMODEL] create_session respuesta recibida: success={}", response.success);
+                response
+            },
+            Err(e) => {
+                log::error!("❌ [VIEWMODEL] Error en create_session: {}", e);
+                return Err(e);
+            }
         };
         
         if !create_response.success {
             let error = create_response.error.unwrap_or_else(|| "Error creando sesión".to_string());
+            log::error!("❌ [VIEWMODEL] create_session falló: {}", error);
             return Err(error);
         }
         
         let session = match create_response.session {
-            Some(s) => s,
-            None => return Err("No se recibió sesión en la respuesta".to_string()),
+            Some(s) => {
+                log::info!("✅ [VIEWMODEL] Sesión recibida: {}", s.session_id);
+                s
+            },
+            None => {
+                log::error!("❌ [VIEWMODEL] No se recibió sesión en la respuesta");
+                return Err("No se recibió sesión en la respuesta".to_string());
+            }
         };
         
-        log::info!("✅ Sesión creada exitosamente: {}", session.session_id);
+        log::info!("✅ [VIEWMODEL] Sesión creada exitosamente: {} ({} paquetes)", 
+            session.session_id, session.stats.total_packages);
         
         // Guardar sesión inicial
+        log::info!("💾 [VIEWMODEL] Guardando sesión en localStorage...");
         if let Err(e) = self.offline_service.save_session(&session) {
-            log::error!("❌ Error guardando sesión: {}", e);
+            log::error!("❌ [VIEWMODEL] Error guardando sesión: {}", e);
+        } else {
+            log::info!("✅ [VIEWMODEL] Sesión guardada en localStorage exitosamente");
         }
         
         // 3. Fetch automático de paquetes
-        log::info!("📦 Obteniendo paquetes automáticamente...");
+        log::info!("📦 [VIEWMODEL] Obteniendo paquetes automáticamente...");
         let fetch_response = match self.api_client.fetch_packages(
             &session.session_id,
             &username,
             &password,
             &societe,
         ).await {
-            Ok(response) => response,
+            Ok(response) => {
+                log::info!("✅ [VIEWMODEL] fetch_packages respuesta recibida: success={}, new_packages={:?}", 
+                    response.success, response.new_packages_count);
+                response
+            },
             Err(e) => {
-                log::error!("❌ Error obteniendo paquetes: {}", e);
+                log::error!("❌ [VIEWMODEL] Error obteniendo paquetes: {}", e);
                 return Err(e);
             }
         };
         
         if !fetch_response.success {
             let error = fetch_response.error.unwrap_or_else(|| "Error obteniendo paquetes".to_string());
+            log::error!("❌ [VIEWMODEL] fetch_packages falló: {}", error);
             return Err(error);
         }
         
         let updated_session = match fetch_response.session {
-            Some(s) => s,
-            None => return Err("No se recibió sesión actualizada".to_string()),
+            Some(s) => {
+                log::info!("✅ [VIEWMODEL] Sesión actualizada recibida: {} ({} paquetes)", 
+                    s.session_id, s.stats.total_packages);
+                s
+            },
+            None => {
+                log::error!("❌ [VIEWMODEL] No se recibió sesión actualizada");
+                return Err("No se recibió sesión actualizada".to_string());
+            }
         };
         
-        log::info!("✅ Paquetes obtenidos: {} nuevos", 
+        log::info!("✅ [VIEWMODEL] Paquetes obtenidos: {} nuevos", 
                    fetch_response.new_packages_count.unwrap_or(0));
         
         // Guardar sesión actualizada
+        log::info!("💾 [VIEWMODEL] Guardando sesión actualizada en localStorage...");
         if let Err(e) = self.offline_service.save_session(&updated_session) {
-            log::error!("❌ Error guardando sesión actualizada: {}", e);
+            log::error!("❌ [VIEWMODEL] Error guardando sesión actualizada: {}", e);
+        } else {
+            log::info!("✅ [VIEWMODEL] Sesión actualizada guardada en localStorage exitosamente");
         }
         
+        log::info!("✅ [VIEWMODEL] login_and_fetch completado exitosamente");
         Ok(updated_session)
+    }
+    
+    /// Login inteligente: verifica sesión local + backend antes de crear nueva
+    /// Si encuentra sesión existente por driver_id + company_id, la recupera y hace sync incremental (solo cambios nuevos)
+    pub async fn login_smart(
+        &self,
+        username: String,
+        password: String,
+        societe: String,
+    ) -> Result<DeliverySession, String> {
+        log::info!("🔐 [LOGIN_SMART] Iniciando login inteligente para usuario: {} (societe: {})", username, societe);
+        
+        // 1. Verificar si existe sesión LOCAL con estos credenciales
+        let local_session_opt = match self.offline_service.load_session() {
+            Ok(Some(session)) => {
+                if session.driver.driver_id == username && session.driver.company_id == societe {
+                    log::info!("✅ [LOGIN_SMART] Sesión local encontrada: {} ({} paquetes)", 
+                        session.session_id, session.stats.total_packages);
+                    Some(session)
+                } else {
+                    log::info!("⚠️ [LOGIN_SMART] Sesión local con credenciales diferentes, ignorando");
+                    None
+                }
+            }
+            Ok(None) => {
+                log::info!("📋 [LOGIN_SMART] No hay sesión local");
+                None
+            }
+            Err(e) => {
+                log::warn!("⚠️ [LOGIN_SMART] Error cargando sesión local: {}", e);
+                None
+            }
+        };
+        
+        // 2. Verificar si existe sesión en BACKEND (por driver_id + company_id)
+        log::info!("🔍 [LOGIN_SMART] Verificando sesión en backend...");
+        match self.api_client.find_session_by_driver(&username, &societe).await {
+            Ok(Some(backend_session)) => {
+                // ✅ Sesión existe en backend - recuperar y hacer sync incremental
+                log::info!("✅ [LOGIN_SMART] Sesión encontrada en backend: {} ({} paquetes)", 
+                    backend_session.session_id, backend_session.stats.total_packages);
+                
+                // Guardar sesión del backend en local (sobrescribe la local si existe)
+                if let Err(e) = self.offline_service.save_session(&backend_session) {
+                    log::warn!("⚠️ [LOGIN_SMART] Error guardando sesión del backend: {}", e);
+                } else {
+                    log::info!("💾 [LOGIN_SMART] Sesión del backend guardada en local");
+                }
+                
+                // Hacer sync incremental (como el botón refrescar) para obtener solo cambios nuevos
+                log::info!("🔄 [LOGIN_SMART] Ejecutando sync incremental (solo cambios nuevos)...");
+                match self.sync_incremental(&backend_session.session_id, &username, &societe, None).await {
+                    Ok(updated_session) => {
+                        log::info!("✅ [LOGIN_SMART] Sync incremental completado: {} paquetes", 
+                            updated_session.stats.total_packages);
+                        Ok(updated_session)
+                    }
+                    Err(e) => {
+                        log::warn!("⚠️ [LOGIN_SMART] Error en sync incremental: {}, usando sesión del backend sin actualizar", e);
+                        // Si falla el sync, usar la sesión del backend igualmente
+                        Ok(backend_session)
+                    }
+                }
+            }
+            Ok(None) => {
+                // No existe en backend - crear nueva sesión
+                log::info!("📋 [LOGIN_SMART] No hay sesión en backend, creando nueva sesión");
+                self.login_and_fetch(username, password, societe).await
+            }
+            Err(e) => {
+                log::warn!("⚠️ [LOGIN_SMART] Error verificando backend: {}, procediendo con login normal", e);
+                self.login_and_fetch(username, password, societe).await
+            }
+        }
     }
     
     /// Fetch manual de paquetes
@@ -225,6 +333,117 @@ impl SessionViewModel {
         
         log::info!("✅ Ruta optimizada: {} paradas, tiempo estimado: {} minutos", 
                    response.total_stops, response.estimated_time_seconds / 60);
+        
+        Ok(updated_session)
+    }
+    
+    /// Actualizar solo campos específicos de dirección
+    pub async fn update_address_fields(
+        &self,
+        session_id: &str,
+        address_id: &str,
+        door_code: Option<String>,
+        has_mailbox_access: Option<bool>,
+        driver_notes: Option<String>,
+    ) -> Result<DeliverySession, String> {
+        log::info!("📝 Actualizando campos de dirección: {} en sesión: {}", address_id, session_id);
+        
+        let response = self.api_client.update_address_fields(
+            session_id,
+            address_id,
+            door_code,
+            has_mailbox_access,
+            driver_notes,
+        ).await?;
+        
+        if !response.success {
+            return Err("Error actualizando campos de dirección".to_string());
+        }
+        
+        let updated_session = response.session;
+        
+        // Guardar sesión actualizada
+        if let Err(e) = self.offline_service.save_session(&updated_session) {
+            log::error!("❌ Error guardando sesión actualizada: {}", e);
+        }
+        
+        log::info!("✅ Campos de dirección actualizados exitosamente");
+        Ok(updated_session)
+    }
+    
+    /// Actualizar dirección completa (para direcciones problemáticas)
+    pub async fn update_address(
+        &self,
+        session_id: &str,
+        address_id: &str,
+        new_label: String,
+    ) -> Result<DeliverySession, String> {
+        log::info!("📍 Actualizando dirección problemática: {} → {}", address_id, new_label);
+        
+        // Validar que dirección no esté vacía
+        if new_label.trim().is_empty() {
+            return Err("La dirección no puede estar vacía".to_string());
+        }
+        
+        // El backend hace geocoding automáticamente, pero necesitamos coordenadas iniciales
+        // Por ahora, enviar coordenadas 0.0 y el backend las actualizará con geocoding
+        let response = self.api_client.update_address(
+            session_id,
+            address_id,
+            new_label.clone(),
+            0.0, // Backend hará geocoding
+            0.0, // Backend hará geocoding
+        ).await?;
+        
+        if !response.success {
+            return Err("Error actualizando dirección".to_string());
+        }
+        
+        let updated_session = response.session;
+        
+        // Guardar sesión actualizada
+        if let Err(e) = self.offline_service.save_session(&updated_session) {
+            log::error!("❌ Error guardando sesión actualizada: {}", e);
+        }
+        
+        log::info!("✅ Dirección actualizada exitosamente: {}", new_label);
+        Ok(updated_session)
+    }
+    
+    /// Sincronización incremental
+    pub async fn sync_incremental(
+        &self,
+        session_id: &str,
+        username: &str,
+        societe: &str,
+        date: Option<&str>,
+    ) -> Result<DeliverySession, String> {
+        log::info!("🔄 Iniciando sincronización incremental para sesión: {}", session_id);
+        
+        let response = self.api_client.sync_incremental(
+            session_id,
+            username,
+            societe,
+            date,
+        ).await?;
+        
+        if !response.success {
+            return Err("Error en sincronización incremental".to_string());
+        }
+        
+        let updated_session = response.session;
+        
+        // Aplicar deltas a sesión local si es necesario
+        // Por ahora, simplemente usar la sesión actualizada del backend
+        // TODO: En el futuro, aplicar deltas de forma más granular
+        
+        // Guardar sesión actualizada
+        if let Err(e) = self.offline_service.save_session(&updated_session) {
+            log::error!("❌ Error guardando sesión actualizada: {}", e);
+        }
+        
+        log::info!("✅ Sincronización incremental completada: {} nuevos, {} actualizados, {} eliminados",
+            response.delta.added.len(), response.delta.updated.len(), response.delta.removed.len());
         
         Ok(updated_session)
     }

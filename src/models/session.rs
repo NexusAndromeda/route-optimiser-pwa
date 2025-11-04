@@ -86,8 +86,85 @@ pub struct DriverInfo {
 
 impl DeliverySession {
     /// Buscar paquete por tracking (acceso directo)
+    /// Incluye logs de debugging y búsqueda alternativa case-insensitive
     pub fn find_by_tracking(&self, tracking: &str) -> Option<&Package> {
-        self.packages.get(tracking)
+        // ═══════════════════════════════════════════════════════════════
+        // BÚSQUEDA EXACTA PRIMERO
+        // ═══════════════════════════════════════════════════════════════
+        if let Some(pkg) = self.packages.get(tracking) {
+            log::debug!("✅ [FIND_TRACKING] Encontrado con búsqueda exacta: '{}'", tracking);
+            return Some(pkg);
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // LOGS DE DEBUGGING CUANDO NO ENCUENTRA
+        // ═══════════════════════════════════════════════════════════════
+        log::warn!("⚠️ [FIND_TRACKING] No encontrado con búsqueda exacta: '{}'", tracking);
+        log::warn!("⚠️ [FIND_TRACKING] Longitud buscada: {}, bytes: {:?}", tracking.len(), tracking.as_bytes());
+        log::warn!("⚠️ [FIND_TRACKING] Total de paquetes en sesión: {}", self.packages.len());
+        
+        // Mostrar comparación visual: primeros y últimos caracteres de trackings disponibles
+        let tracking_start = tracking.chars().take(5).collect::<String>();
+        let tracking_end = tracking.chars().rev().take(5).collect::<String>();
+        log::warn!("🔍 [FIND_TRACKING] Inicio buscado: '{}', Fin buscado: '{}'", tracking_start, tracking_end);
+        
+        // ═══════════════════════════════════════════════════════════════
+        // BÚSQUEDA CASE-INSENSITIVE COMO FALLBACK
+        // ═══════════════════════════════════════════════════════════════
+        let tracking_upper = tracking.to_uppercase();
+        for (key, package) in &self.packages {
+            if key.to_uppercase() == tracking_upper {
+                log::warn!("✅ [FIND_TRACKING] Encontrado con búsqueda case-insensitive: '{}' (original: '{}')", key, tracking);
+                return Some(package);
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // MOSTRAR TRACKINGS SIMILARES (mismos primeros/últimos caracteres)
+        // ═══════════════════════════════════════════════════════════════
+        let similar: Vec<_> = self.packages.keys()
+            .filter(|k| {
+                let k_start = k.chars().take(5).collect::<String>();
+                let k_end = k.chars().rev().take(5).collect::<String>();
+                k_start == tracking_start || k_end == tracking_end || 
+                k.len() == tracking.len() || k.contains(tracking) || tracking.contains(k.as_str())
+            })
+            .take(5)
+            .collect();
+        
+        if !similar.is_empty() {
+            log::warn!("💡 [FIND_TRACKING] Trackings similares encontrados ({}):", similar.len());
+            for (idx, similar_tracking) in similar.iter().enumerate() {
+                log::warn!("  [{}] '{}' (len: {}, bytes: {:?})", 
+                          idx + 1, similar_tracking, similar_tracking.len(), similar_tracking.as_bytes());
+                
+                // Comparación byte-by-byte
+                if similar_tracking.len() == tracking.len() {
+                    let diff_positions: Vec<_> = similar_tracking.as_bytes().iter()
+                        .zip(tracking.as_bytes().iter())
+                        .enumerate()
+                        .filter(|(_, (a, b))| a != b)
+                        .map(|(pos, _)| pos)
+                        .collect();
+                    if !diff_positions.is_empty() {
+                        log::warn!("    → Diferencias en posiciones: {:?}", diff_positions);
+                    }
+                }
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // COMPARACIÓN VISUAL DEL STRING BUSCADO VS DISPONIBLES
+        // ═══════════════════════════════════════════════════════════════
+        if self.packages.len() <= 20 {
+            log::warn!("📋 [FIND_TRACKING] Todos los trackings disponibles:");
+            for (idx, (key, _)) in self.packages.iter().enumerate() {
+                let visual_diff = if key == tracking { "✅ MATCH" } else { "❌" };
+                log::warn!("  [{}] {} '{}' (len: {})", idx + 1, visual_diff, key, key.len());
+            }
+        }
+        
+        None
     }
     
     /// Buscar paquete mutable por tracking

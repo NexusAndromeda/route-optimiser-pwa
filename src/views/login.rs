@@ -102,7 +102,10 @@ pub fn login_view() -> Html {
                 use crate::viewmodels::SessionViewModel;
                 let vm = SessionViewModel::new();
                 
-                match vm.login_and_fetch(username_val.clone(), password_val.clone(), societe_val.clone()).await {
+                log::info!("🔐 [LOGIN] Iniciando login inteligente...");
+                
+                // Usar login_smart en lugar de login_and_fetch
+                match vm.login_smart(username_val.clone(), password_val.clone(), societe_val.clone()).await {
                     Ok(session) => {
                         log::info!("✅ Login exitoso, sesión creada con {} paquetes", session.stats.total_packages);
                         
