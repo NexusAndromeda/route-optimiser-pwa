@@ -16,10 +16,10 @@ NC='\033[0m' # No Color
 
 # Directorio del proyecto
 PROJECT_ROOT="/Users/nexus/projects/route-optimizer"
-APP_DIR="${PROJECT_ROOT}/new/app-new"
+APP_DIR="${PROJECT_ROOT}/app"
 
 # 1. Build del frontend (NUEVA VERSIÓN)
-echo -e "${BLUE}📦 Compilando frontend (app-new)...${NC}"
+echo -e "${BLUE}📦 Compilando frontend (app)...${NC}"
 cd "${APP_DIR}"
 
 # Verificar que estamos en el directorio correcto
