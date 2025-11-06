@@ -162,29 +162,71 @@ impl SessionViewModel {
         log::info!("🔍 [LOGIN_SMART] Verificando sesión en backend...");
         match self.api_client.find_session_by_driver(&username, &societe).await {
             Ok(Some(backend_session)) => {
-                // ✅ Sesión existe en backend - recuperar y hacer sync incremental
+                // ✅ Sesión existe en backend
                 log::info!("✅ [LOGIN_SMART] Sesión encontrada en backend: {} ({} paquetes)", 
                     backend_session.session_id, backend_session.stats.total_packages);
                 
-                // Guardar sesión del backend en local (sobrescribe la local si existe)
-                if let Err(e) = self.offline_service.save_session(&backend_session) {
-                    log::warn!("⚠️ [LOGIN_SMART] Error guardando sesión del backend: {}", e);
-                } else {
-                    log::info!("💾 [LOGIN_SMART] Sesión del backend guardada en local");
-                }
-                
-                // Hacer sync incremental (como el botón refrescar) para obtener solo cambios nuevos
-                log::info!("🔄 [LOGIN_SMART] Ejecutando sync incremental (solo cambios nuevos)...");
-                match self.sync_incremental(&backend_session.session_id, &username, &societe, None).await {
-                    Ok(updated_session) => {
-                        log::info!("✅ [LOGIN_SMART] Sync incremental completado: {} paquetes", 
-                            updated_session.stats.total_packages);
-                        Ok(updated_session)
+                // ⚠️ NUEVO: Primero refrescar token para obtener token nuevo
+                log::info!("🔐 [LOGIN_SMART] Refrescando token...");
+                match self.api_client.refresh_token(
+                    &backend_session.session_id,
+                    &username,
+                    &password,
+                    &societe,
+                ).await {
+                    Ok(response) => {
+                        if response.success {
+                            let session_with_new_token = response.session;
+                            log::info!("✅ [LOGIN_SMART] Token actualizado exitosamente");
+                            
+                            // Guardar sesión con token nuevo en local
+                            if let Err(e) = self.offline_service.save_session(&session_with_new_token) {
+                                log::warn!("⚠️ [LOGIN_SMART] Error guardando sesión con token nuevo: {}", e);
+                            } else {
+                                log::info!("💾 [LOGIN_SMART] Sesión con token nuevo guardada en local");
+                            }
+                            
+                            // Ahora hacer sync incremental con token nuevo
+                            log::info!("🔄 [LOGIN_SMART] Ejecutando sync incremental con token nuevo...");
+                            match self.sync_incremental(&session_with_new_token.session_id, &username, &societe, None).await {
+                                Ok(updated_session) => {
+                                    log::info!("✅ [LOGIN_SMART] Sync incremental completado: {} paquetes", 
+                                        updated_session.stats.total_packages);
+                                    Ok(updated_session)
+                                }
+                                Err(e) => {
+                                    log::warn!("⚠️ [LOGIN_SMART] Error en sync incremental: {}, usando sesión con token nuevo", e);
+                                    Ok(session_with_new_token)
+                                }
+                            }
+                        } else {
+                            log::warn!("⚠️ [LOGIN_SMART] Respuesta de refresh_token no exitosa, usando sesión existente");
+                            // Fallback: usar sesión existente y hacer sync incremental
+                            if let Err(e) = self.offline_service.save_session(&backend_session) {
+                                log::warn!("⚠️ [LOGIN_SMART] Error guardando sesión: {}", e);
+                            }
+                            self.sync_incremental(&backend_session.session_id, &username, &societe, None).await
+                        }
                     }
                     Err(e) => {
-                        log::warn!("⚠️ [LOGIN_SMART] Error en sync incremental: {}, usando sesión del backend sin actualizar", e);
-                        // Si falla el sync, usar la sesión del backend igualmente
-                        Ok(backend_session)
+                        log::warn!("⚠️ [LOGIN_SMART] Error refrescando token: {}, usando sesión existente", e);
+                        // Fallback: usar sesión existente y hacer sync incremental
+                        if let Err(e) = self.offline_service.save_session(&backend_session) {
+                            log::warn!("⚠️ [LOGIN_SMART] Error guardando sesión: {}", e);
+                        } else {
+                            log::info!("💾 [LOGIN_SMART] Sesión del backend guardada en local");
+                        }
+                        match self.sync_incremental(&backend_session.session_id, &username, &societe, None).await {
+                            Ok(updated_session) => {
+                                log::info!("✅ [LOGIN_SMART] Sync incremental completado: {} paquetes", 
+                                    updated_session.stats.total_packages);
+                                Ok(updated_session)
+                            }
+                            Err(e) => {
+                                log::warn!("⚠️ [LOGIN_SMART] Error en sync incremental: {}, usando sesión del backend sin actualizar", e);
+                                Ok(backend_session)
+                            }
+                        }
                     }
                 }
             }
@@ -378,21 +420,14 @@ impl SessionViewModel {
         address_id: &str,
         new_label: String,
     ) -> Result<DeliverySession, String> {
-        log::info!("📍 Actualizando dirección problemática: {} → {}", address_id, new_label);
+        log::info!("📍 Actualizando dirección: {} → {}", address_id, new_label);
         
-        // Validar que dirección no esté vacía
-        if new_label.trim().is_empty() {
-            return Err("La dirección no puede estar vacía".to_string());
-        }
-        
-        // El backend hace geocoding automáticamente, pero necesitamos coordenadas iniciales
-        // Por ahora, enviar coordenadas 0.0 y el backend las actualizará con geocoding
         let response = self.api_client.update_address(
             session_id,
             address_id,
             new_label.clone(),
-            0.0, // Backend hará geocoding
-            0.0, // Backend hará geocoding
+            0.0, // El backend hará geocoding si es necesario
+            0.0,
         ).await?;
         
         if !response.success {
@@ -407,6 +442,57 @@ impl SessionViewModel {
         }
         
         log::info!("✅ Dirección actualizada exitosamente: {}", new_label);
+        Ok(updated_session)
+    }
+    
+    /// Marcar paquete como problemático (coordenadas 0.0, 0.0)
+    pub async fn mark_as_problematic(
+        &self,
+        session_id: &str,
+        address_id: &str,
+    ) -> Result<DeliverySession, String> {
+        log::info!("⚠️ Marcando dirección como problemática: {}", address_id);
+        
+        // Obtener sesión actual para obtener el label original de la dirección
+        let session = self.offline_service.load_session()
+            .map_err(|e| format!("Error cargando sesión: {}", e))?
+            .ok_or_else(|| "Sesión no encontrada".to_string())?;
+        
+        // Verificar que la sesión cargada coincide con el session_id proporcionado
+        if session.session_id != session_id {
+            return Err(format!("Session ID mismatch: expected {}, got {}", session_id, session.session_id));
+        }
+        
+        // Obtener dirección actual para mantener el label original
+        let address = session.addresses.get(address_id)
+            .ok_or_else(|| "Dirección no encontrada".to_string())?;
+        
+        let original_label = address.label.clone();
+        
+        log::info!("📍 Manteniendo dirección original: '{}'", original_label);
+        log::info!("📍 Estableciendo coordenadas a 0.0, 0.0 para marcar como problemática");
+        
+        // Actualizar dirección con coordenadas 0.0, 0.0 (mantener label original)
+        let response = self.api_client.update_address(
+            session_id,
+            address_id,
+            original_label, // Mantener dirección original
+            0.0, // Coordenadas a 0.0, 0.0 para marcar como problemática
+            0.0,
+        ).await?;
+        
+        if !response.success {
+            return Err("Error marcando como problemática".to_string());
+        }
+        
+        let updated_session = response.session;
+        
+        // Guardar sesión actualizada
+        if let Err(e) = self.offline_service.save_session(&updated_session) {
+            log::error!("❌ Error guardando sesión actualizada: {}", e);
+        }
+        
+        log::info!("✅ Dirección marcada como problemática exitosamente");
         Ok(updated_session)
     }
     

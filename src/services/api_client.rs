@@ -109,6 +109,38 @@ impl ApiClient {
         }
     }
     
+    /// Refrescar token SSO de una sesión existente (sin fetch de paquetes)
+    pub async fn refresh_token(
+        &self,
+        session_id: &str,
+        username: &str,
+        password: &str,
+        societe: &str,
+    ) -> Result<GetSessionResponse, String> {
+        let url = format!("{}/v1/sessions/{}/refresh-token", self.base_url, session_id);
+        let request = CreateSessionRequest {
+            username: username.to_string(),
+            password: password.to_string(),
+            societe: societe.to_string(),
+        };
+        
+        log::info!("🔐 Refrescando token para sesión: {}", session_id);
+        
+        let response = Request::post(&url)
+            .json(&request)
+            .map_err(|e| format!("Serialization error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        
+        if response.ok() {
+            response.json::<GetSessionResponse>().await
+                .map_err(|e| format!("Parse error: {}", e))
+        } else {
+            Err(format!("HTTP {}: {}", response.status(), response.status_text()))
+        }
+    }
+    
     /// Obtener sesión por ID
     pub async fn get_session(&self, session_id: &str) -> Result<DeliverySession, String> {
         let url = format!("{}/v1/sessions/{}", self.base_url, session_id);
@@ -513,7 +545,7 @@ pub struct SyncDeltaResult {
 }
 
 #[derive(serde::Deserialize)]
-struct GetSessionResponse {
+pub struct GetSessionResponse {
     pub success: bool,
     pub session: DeliverySession,
 }

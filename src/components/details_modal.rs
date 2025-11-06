@@ -8,6 +8,7 @@
 use yew::prelude::*;
 use crate::models::package::Package;
 use crate::models::address::Address;
+use crate::utils::t;
 use wasm_bindgen::JsCast;
 
 #[derive(Properties, PartialEq)]
@@ -26,12 +27,37 @@ pub struct DetailsModalProps {
     pub on_edit_client_instructions: Option<Callback<String>>,
     #[prop_or_default]
     pub on_edit_driver_notes: Option<Callback<String>>,
+    #[prop_or_default]
+    pub language: String,
+    #[prop_or_default]
+    pub on_mark_problematic: Option<Callback<()>>,
 }
 
 #[function_component(DetailsModal)]
 pub fn details_modal(props: &DetailsModalProps) -> Html {
     let package = &props.package;
     let address = &props.address;
+    let lang = props.language.clone();
+    
+    // Log cuando el componente se renderiza o props cambian
+    {
+        let pkg_tracking = package.tracking.clone();
+        let addr_label = address.label.clone();
+        let addr_id = address.address_id.clone();
+        let is_problematic = package.is_problematic;
+        use_effect_with((pkg_tracking.clone(), addr_label.clone(), is_problematic), move |_| {
+            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log::info!("📋 DETAILS_MODAL RENDERIZADO/ACTUALIZADO");
+            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log::info!("   📦 tracking: {}", pkg_tracking);
+            log::info!("   📍 address_id: {}", addr_id);
+            log::info!("   📝 label: '{}' (len: {}, is_empty: {}, trim_is_empty: {})", 
+                      addr_label, addr_label.len(), addr_label.is_empty(), addr_label.trim().is_empty());
+            log::info!("   ⚠️ is_problematic: {}", is_problematic);
+            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            || ()
+        });
+    }
     
     let close = props.on_close.clone();
     let close_overlay = props.on_close.clone();
@@ -90,10 +116,6 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
         let error_message = error_message.clone();
         Callback::from(move |_| {
             let new_address = (*address_input).clone().trim().to_string();
-            if new_address.is_empty() {
-                error_message.set(Some("La dirección no puede estar vacía".to_string()));
-                return;
-            }
             
             saving_address.set(true);
             error_message.set(None);
@@ -261,7 +283,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
             <div class="modal-overlay" onclick={Callback::from(move |_| close_overlay.emit(()))}></div>
             <div class="modal-content" onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}>
                 <div class="modal-header">
-                    <h2>{format!("Colis {}", package.tracking.clone())}</h2>
+                    <h2>{format!("{} {}", if lang == "ES" { "Paquete" } else { "Colis" }, package.tracking.clone())}</h2>
                     <button class="btn-close" onclick={Callback::from(move |_| close.emit(()))}>
                         {"✕"}
                     </button>
@@ -280,13 +302,13 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                     
                     // Destinataire
                     <div class="detail-section">
-                        <div class="detail-label">{"Destinataire"}</div>
+                        <div class="detail-label">{t("destinataire", &lang)}</div>
                         <div class="detail-value">{&package.customer_name}</div>
                     </div>
 
                     // Adresse
                     <div class="detail-section">
-                        <div class="detail-label">{"Adresse"}</div>
+                        <div class="detail-label">{t("adresse", &lang)}</div>
                         <div class="detail-value-with-action">
                             {if *editing_address {
                                 html! {
@@ -303,12 +325,12 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                                     }
                                                 }
                                             })}
-                                            placeholder="Nouvelle adresse"
+                                            placeholder={t("nouvelle_adresse", &lang)}
                                         />
                                         <button 
                                             class="btn-save" 
                                             onclick={on_save_address.clone()}
-                                            title="Enregistrer"
+                                            title={t("enregistrer", &lang)}
                                             disabled={*saving_address}
                                         >
                                             {if *saving_address { "⏳" } else { "✓" }}
@@ -316,7 +338,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                         <button 
                                             class="btn-cancel" 
                                             onclick={on_cancel_edit_address.clone()}
-                                            title="Annuler"
+                                            title={t("annuler", &lang)}
                                         >
                                             {"✕"}
                                         </button>
@@ -328,7 +350,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                             <span>{&address.label}</span>
                             <button 
                                 class="btn-icon" 
-                                title="Modifier l'adresse"
+                                title={t("modifier", &lang)}
                                 onclick={on_street_settings}
                             >
                                 {"⚙️"}
@@ -341,7 +363,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
 
                     // Téléphone
                     <div class="detail-section">
-                        <div class="detail-label">{"Téléphone"}</div>
+                        <div class="detail-label">{t("telephone", &lang)}</div>
                         <div class="detail-value">
                             {if let Some(phone) = &package.phone_number {
                                 html! {
@@ -350,14 +372,14 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                     </a>
                                 }
                             } else {
-                                html! { <span class="empty-value">{"Non renseigné"}</span> }
+                                html! { <span class="empty-value">{t("non_renseigne", &lang)}</span> }
                             }}
                         </div>
                     </div>
 
                     // Codes de porte
                     <div class="detail-section editable">
-                        <div class="detail-label">{"Codes de porte"}</div>
+                        <div class="detail-label">{t("codes_porte", &lang)}</div>
                         <div class="detail-value-with-action">
                             {if *editing_door_code {
                                 html! {
@@ -374,12 +396,12 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                                     }
                                                 }
                                             })}
-                                            placeholder="Code de porte"
+                                            placeholder={t("code_de_porte", &lang)}
                                         />
                                         <button 
                                             class="btn-save" 
                                             onclick={on_save_door_code.clone()}
-                                            title="Enregistrer"
+                                            title={t("enregistrer", &lang)}
                                             disabled={*saving_door_code}
                                         >
                                             {if *saving_door_code { "⏳" } else { "✓" }}
@@ -387,7 +409,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                         <button 
                                             class="btn-cancel" 
                                             onclick={on_cancel_edit_door_code.clone()}
-                                            title="Annuler"
+                                            title={t("annuler", &lang)}
                                         >
                                             {"✕"}
                                         </button>
@@ -399,11 +421,11 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                             {if let Some(door_code) = &address.door_code {
                                 html! { <span>{door_code}</span> }
                             } else {
-                                html! { <span class="empty-value">{"Non renseigné"}</span> }
+                                html! { <span class="empty-value">{t("non_renseigne", &lang)}</span> }
                             }}
                             <button 
                                 class="btn-icon-edit" 
-                                title="Modifier"
+                                title={t("modifier", &lang)}
                                 onclick={on_edit_door_code}
                             >
                                 {"✏️"}
@@ -416,9 +438,15 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
 
                     // BAL
                     <div class="detail-section editable">
-                        <div class="detail-label">{"Accès BAL"}</div>
+                        <div class="detail-label">{t("acces_bal", &lang)}</div>
                         <div class="detail-value-with-action">
-                            <span>{if has_mailbox_access { "✅ Oui" } else { "❌ Non" }}</span>
+                            <span>
+                                {if has_mailbox_access { 
+                                    format!("✅ {}", t("oui_capital", &lang))
+                                } else { 
+                                    format!("❌ {}", t("non_capital", &lang))
+                                }}
+                            </span>
                             <label class="toggle-switch">
                                 <input 
                                     type="checkbox" 
@@ -438,20 +466,20 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
 
                     // Indications client
                     <div class="detail-section editable">
-                        <div class="detail-label">{"Indications client"}</div>
+                        <div class="detail-label">{t("indications_client", &lang)}</div>
                         <div class="detail-value-with-action">
                             {if let Some(instructions) = &package.customer_indication {
                                 if !instructions.is_empty() {
                                     html! { <span>{format!("\"{}\"", instructions)}</span> }
                                 } else {
-                                    html! { <span class="empty-value">{"Non renseigné"}</span> }
+                                    html! { <span class="empty-value">{t("non_renseigne", &lang)}</span> }
                                 }
                             } else {
-                                html! { <span class="empty-value">{"Non renseigné"}</span> }
+                                html! { <span class="empty-value">{t("non_renseigne", &lang)}</span> }
                             }}
                             <button 
                                 class="btn-icon-edit" 
-                                title="Modifier"
+                                title={t("modifier", &lang)}
                                 onclick={on_edit_client_notes}
                             >
                                 {"✏️"}
@@ -461,7 +489,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
 
                     // Notes chauffeur
                     <div class="detail-section editable">
-                        <div class="detail-label">{"Notes chauffeur"}</div>
+                        <div class="detail-label">{t("notes_chauffeur", &lang)}</div>
                         <div class="detail-value-with-action">
                             {if *editing_driver_notes {
                                 html! {
@@ -477,13 +505,13 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                                     }
                                                 }
                                             })}
-                                            placeholder="Ajouter une note"
+                                            placeholder={t("ajouter_note", &lang)}
                                             rows="3"
                                         />
                                         <button 
                                             class="btn-save" 
                                             onclick={on_save_driver_notes.clone()}
-                                            title="Enregistrer"
+                                            title={t("enregistrer", &lang)}
                                             disabled={*saving_driver_notes}
                                         >
                                             {if *saving_driver_notes { "⏳" } else { "✓" }}
@@ -491,7 +519,7 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                         <button 
                                             class="btn-cancel" 
                                             onclick={on_cancel_edit_driver_notes.clone()}
-                                            title="Annuler"
+                                            title={t("annuler", &lang)}
                                         >
                                             {"✕"}
                                         </button>
@@ -504,14 +532,14 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                 if !notes.is_empty() {
                                     html! { <span>{format!("\"{}\"", notes)}</span> }
                                 } else {
-                                    html! { <span class="empty-value">{"Ajouter une note"}</span> }
+                                    html! { <span class="empty-value">{t("ajouter_note", &lang)}</span> }
                                 }
                             } else {
-                                html! { <span class="empty-value">{"Ajouter une note"}</span> }
+                                html! { <span class="empty-value">{t("ajouter_note", &lang)}</span> }
                             }}
                             <button 
                                 class="btn-icon-edit" 
-                                title="Modifier"
+                                title={t("modifier", &lang)}
                                 onclick={on_edit_driver_notes}
                             >
                                 {"✏️"}
@@ -519,6 +547,35 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                     </>
                                 }
                             }}
+                        </div>
+                    </div>
+                    
+                    // Marcar como problemático
+                    <div class="detail-section">
+                        <div class="detail-row">
+                            <div class="detail-label">{t("marquer_problematique", &lang)}</div>
+                            <div class="detail-value">
+                                {if package.is_problematic {
+                                    html! { <span class="problematic-badge">{t("problematique", &lang)}</span> }
+                                } else {
+                                    html! {
+                                        <button 
+                                            class="btn-problematic"
+                                            onclick={Callback::from({
+                                                let on_mark = props.on_mark_problematic.clone();
+                                                move |_| {
+                                                    if let Some(cb) = &on_mark {
+                                                        cb.emit(());
+                                                    }
+                                                }
+                                            })}
+                                            title={t("marquer_problematique", &lang)}
+                                        >
+                                            {"⚠️ "}{t("marquer_problematique", &lang)}
+                                        </button>
+                                    }
+                                }}
+                            </div>
                         </div>
                     </div>
                 </div>
