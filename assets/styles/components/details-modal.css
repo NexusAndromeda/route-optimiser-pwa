@@ -255,3 +255,35 @@
     font-weight: 500;
     display: inline-block;
 }
+
+/* Edit Input Group */
+.edit-input-group {
+    display: flex;
+    width: 100%;
+}
+
+.edit-input,
+.edit-textarea {
+    flex: 1;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-surface-variant);
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-family: inherit;
+    transition: border-color 0.2s ease;
+}
+
+.edit-input:focus,
+.edit-textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.edit-textarea {
+    resize: vertical;
+    min-height: 80px;
+}

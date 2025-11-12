@@ -29,6 +29,8 @@ if [ ! -f "Trunk.toml" ]; then
 fi
 
 # Compilar con trunk
+echo -e "${BLUE}   → Configurando BACKEND_URL para producción...${NC}"
+export BACKEND_URL="https://api.delivery.nexuslabs.one"
 echo -e "${BLUE}   → Ejecutando trunk build --release...${NC}"
 trunk build --release
 

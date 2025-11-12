@@ -567,12 +567,12 @@ fn app_content() -> Html {
     {
         let session_opt = session_state.session.clone();
         let map_update = map_handle.update_packages.clone();
-        let map_initialized = map_handle.state.initialized;
+        let map_handle_state = map_handle.state.clone();
         let filter_mode_for_map = filter_mode.clone();
         
-        use_effect_with((session_opt.clone(), *filter_mode), move |(session_opt, filter)| {
+        use_effect_with((session_opt.clone(), *filter_mode, map_handle_state.initialized), move |(session_opt, filter, initialized)| {
             if let Some(session) = session_opt {
-                if map_initialized {
+                if *initialized {
                     log::info!("📦 Sesión actualizada, preparando paquetes para el mapa...");
                     
                     // Convertir HashMap a Vec y aplicar filtro si está activado
@@ -1103,8 +1103,12 @@ fn app_content() -> Html {
                         class="btn-icon-header btn-refresh" 
                         onclick={Callback::from({
                             let session_state = session_handle.state.clone();
+                            let map_handle_refresh = map_handle.update_packages.clone();
+                            let filter_mode_refresh = filter_mode.clone();
                             move |_| {
                                 let session_state = session_state.clone();
+                                let map_update = map_handle_refresh.clone();
+                                let filter_mode_for_refresh = filter_mode_refresh.clone();
                                 
                                 // Obtener sesión actual
                                 let current_session = {
@@ -1140,10 +1144,28 @@ fn app_content() -> Html {
                                                 
                                                 // Actualizar estado con sesión actualizada
                                                 let mut new_state = (*session_state).clone();
-                                                new_state.session = Some(updated_session);
+                                                new_state.session = Some(updated_session.clone());
                                                 new_state.loading = false;
                                                 new_state.error = None;
                                                 session_state.set(new_state);
+                                                
+                                                // ⭐ Actualizar mapa explícitamente
+                                                use gloo_timers::callback::Timeout;
+                                                use crate::viewmodels::map_viewmodel::MapViewModel;
+                                                
+                                                // Preparar paquetes para el mapa
+                                                let mut packages_vec: Vec<_> = updated_session.packages.values().cloned().collect();
+                                                if *filter_mode_for_refresh {
+                                                    packages_vec.retain(|p| p.status.starts_with("STATUT_CHARGER"));
+                                                }
+                                                
+                                                let groups = group_packages(packages_vec, GroupBy::Address);
+                                                let packages_for_map = MapViewModel::prepare_packages_for_map(&groups, &updated_session);
+                                                
+                                                Timeout::new(300, move || {
+                                                    log::info!("🗺️ Actualizando mapa después de refresh: {} paquetes", packages_for_map.len());
+                                                    map_update.emit(packages_for_map);
+                                                }).forget();
                                             }
                                             Err(e) => {
                                                 log::error!("❌ Error en sincronización incremental: {}", e);
@@ -1518,10 +1540,12 @@ fn app_content() -> Html {
                                     let session_state = session_state_for_modal.clone();
                                     let address_id = address_id.clone();
                                     let session_id = session_id.clone();
+                                    let details_package_state = details_package.clone();
                                     move |new_code: String| {
                                         let session_state = session_state.clone();
                                         let address_id = address_id.clone();
                                         let session_id = session_id.clone();
+                                        let details_package = details_package_state.clone();
                                         let vm = SessionViewModel::new();
                                         
                                         // Marcar como cargando
@@ -1531,11 +1555,8 @@ fn app_content() -> Html {
                                         session_state.set(new_state);
                                         
                                         wasm_bindgen_futures::spawn_local(async move {
-                                            let door_code = if new_code.trim().is_empty() {
-                                                None
-                                            } else {
-                                                Some(new_code)
-                                            };
+                                            // Enviar Some("") para borrar campo, el backend lo convertirá a None
+                                            let door_code = Some(new_code.trim().to_string());
                                             
                                             match vm.update_address_fields(&session_id, &address_id, door_code, None, None).await {
                                                 Ok(updated_session) => {
@@ -1543,10 +1564,18 @@ fn app_content() -> Html {
                                                     
                                                     // Actualizar estado con sesión actualizada
                                                     let mut new_state = (*session_state).clone();
-                                                    new_state.session = Some(updated_session);
+                                                    new_state.session = Some(updated_session.clone());
                                                     new_state.loading = false;
                                                     new_state.error = None;
                                                     session_state.set(new_state);
+                                                    
+                                                    // ⭐ Actualizar details_package inmediatamente si está abierto
+                                                    if let Some((pkg, old_addr)) = (*details_package).clone() {
+                                                        if let Some(updated_addr) = updated_session.addresses.get(&address_id) {
+                                                            details_package.set(Some((pkg.clone(), updated_addr.clone())));
+                                                            log::info!("✅ details_package actualizado inmediatamente para door_code");
+                                                        }
+                                                    }
                                                 }
                                                 Err(e) => {
                                                     log::error!("❌ Error actualizando código de puerta: {}", e);
@@ -1606,10 +1635,12 @@ fn app_content() -> Html {
                                     let session_state = session_state_for_modal.clone();
                                     let address_id = address_id.clone();
                                     let session_id = session_id.clone();
+                                    let details_package_state = details_package.clone();
                                     move |new_notes: String| {
                                         let session_state = session_state.clone();
                                         let address_id = address_id.clone();
                                         let session_id = session_id.clone();
+                                        let details_package = details_package_state.clone();
                                         let vm = SessionViewModel::new();
                                         
                                         // Marcar como cargando
@@ -1619,11 +1650,8 @@ fn app_content() -> Html {
                                         session_state.set(new_state);
                                         
                                         wasm_bindgen_futures::spawn_local(async move {
-                                            let driver_notes = if new_notes.trim().is_empty() {
-                                                None
-                                            } else {
-                                                Some(new_notes)
-                                            };
+                                            // Enviar Some("") para borrar campo, el backend lo convertirá a None
+                                            let driver_notes = Some(new_notes.trim().to_string());
                                             
                                             match vm.update_address_fields(&session_id, &address_id, None, None, driver_notes).await {
                                                 Ok(updated_session) => {
@@ -1631,10 +1659,18 @@ fn app_content() -> Html {
                                                     
                                                     // Actualizar estado con sesión actualizada
                                                     let mut new_state = (*session_state).clone();
-                                                    new_state.session = Some(updated_session);
+                                                    new_state.session = Some(updated_session.clone());
                                                     new_state.loading = false;
                                                     new_state.error = None;
                                                     session_state.set(new_state);
+                                                    
+                                                    // ⭐ Actualizar details_package inmediatamente si está abierto
+                                                    if let Some((pkg, old_addr)) = (*details_package).clone() {
+                                                        if let Some(updated_addr) = updated_session.addresses.get(&address_id) {
+                                                            details_package.set(Some((pkg.clone(), updated_addr.clone())));
+                                                            log::info!("✅ details_package actualizado inmediatamente para driver_notes");
+                                                        }
+                                                    }
                                                 }
                                                 Err(e) => {
                                                     log::error!("❌ Error actualizando notas chofer: {}", e);

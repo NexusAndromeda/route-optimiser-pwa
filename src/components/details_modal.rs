@@ -95,6 +95,37 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
         });
     }
     
+    // ⭐ Sincronizar estados locales cuando cambian las props address
+    {
+        let door_code_input = door_code_input.clone();
+        let driver_notes_input = driver_notes_input.clone();
+        let address_input = address_input.clone();
+        let editing_door_code = editing_door_code.clone();
+        let editing_driver_notes = editing_driver_notes.clone();
+        let editing_address = editing_address.clone();
+        
+        use_effect_with(
+            (
+                address.door_code.clone(), 
+                address.driver_notes.clone(), 
+                address.label.clone()
+            ),
+            move |(door_code, driver_notes, label)| {
+                // Solo actualizar si no estamos editando
+                if !*editing_door_code {
+                    door_code_input.set(door_code.clone().unwrap_or_default());
+                }
+                if !*editing_driver_notes {
+                    driver_notes_input.set(driver_notes.clone().unwrap_or_default());
+                }
+                if !*editing_address {
+                    address_input.set(label.clone());
+                }
+                || ()
+            }
+        );
+    }
+    
     // Handler para editar dirección
     let on_street_settings = {
         let editing_address = editing_address.clone();
@@ -325,23 +356,22 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                                     }
                                                 }
                                             })}
+                                            onkeydown={Callback::from({
+                                                let on_save = on_save_address.clone();
+                                                let on_cancel = on_cancel_edit_address.clone();
+                                                move |e: KeyboardEvent| {
+                                                    if e.key() == "Enter" {
+                                                        e.prevent_default();
+                                                        on_save.emit(());
+                                                    } else if e.key() == "Escape" {
+                                                        e.prevent_default();
+                                                        on_cancel.emit(());
+                                                    }
+                                                }
+                                            })}
                                             placeholder={t("nouvelle_adresse", &lang)}
+                                            autofocus=true
                                         />
-                                        <button 
-                                            class="btn-save" 
-                                            onclick={on_save_address.clone()}
-                                            title={t("enregistrer", &lang)}
-                                            disabled={*saving_address}
-                                        >
-                                            {if *saving_address { "⏳" } else { "✓" }}
-                                        </button>
-                                        <button 
-                                            class="btn-cancel" 
-                                            onclick={on_cancel_edit_address.clone()}
-                                            title={t("annuler", &lang)}
-                                        >
-                                            {"✕"}
-                                        </button>
                                     </div>
                                 }
                             } else {
@@ -396,23 +426,22 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                                     }
                                                 }
                                             })}
+                                            onkeydown={Callback::from({
+                                                let on_save = on_save_door_code.clone();
+                                                let on_cancel = on_cancel_edit_door_code.clone();
+                                                move |e: KeyboardEvent| {
+                                                    if e.key() == "Enter" {
+                                                        e.prevent_default();
+                                                        on_save.emit(());
+                                                    } else if e.key() == "Escape" {
+                                                        e.prevent_default();
+                                                        on_cancel.emit(());
+                                                    }
+                                                }
+                                            })}
                                             placeholder={t("code_de_porte", &lang)}
+                                            autofocus=true
                                         />
-                                        <button 
-                                            class="btn-save" 
-                                            onclick={on_save_door_code.clone()}
-                                            title={t("enregistrer", &lang)}
-                                            disabled={*saving_door_code}
-                                        >
-                                            {if *saving_door_code { "⏳" } else { "✓" }}
-                                        </button>
-                                        <button 
-                                            class="btn-cancel" 
-                                            onclick={on_cancel_edit_door_code.clone()}
-                                            title={t("annuler", &lang)}
-                                        >
-                                            {"✕"}
-                                        </button>
                                     </div>
                                 }
                             } else {
@@ -456,11 +485,6 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                 />
                                 <span class="toggle-slider"></span>
                             </label>
-                            {if *saving_mailbox {
-                                html! { <span class="saving-indicator">{"⏳"}</span> }
-                            } else {
-                                html! {}
-                            }}
                         </div>
                     </div>
 
@@ -505,24 +529,24 @@ pub fn details_modal(props: &DetailsModalProps) -> Html {
                                                     }
                                                 }
                                             })}
+                                            onkeydown={Callback::from({
+                                                let on_save = on_save_driver_notes.clone();
+                                                let on_cancel = on_cancel_edit_driver_notes.clone();
+                                                move |e: KeyboardEvent| {
+                                                    // En textarea, Ctrl+Enter o Cmd+Enter para guardar
+                                                    if e.key() == "Enter" && (e.ctrl_key() || e.meta_key()) {
+                                                        e.prevent_default();
+                                                        on_save.emit(());
+                                                    } else if e.key() == "Escape" {
+                                                        e.prevent_default();
+                                                        on_cancel.emit(());
+                                                    }
+                                                }
+                                            })}
                                             placeholder={t("ajouter_note", &lang)}
                                             rows="3"
+                                            autofocus=true
                                         />
-                                        <button 
-                                            class="btn-save" 
-                                            onclick={on_save_driver_notes.clone()}
-                                            title={t("enregistrer", &lang)}
-                                            disabled={*saving_driver_notes}
-                                        >
-                                            {if *saving_driver_notes { "⏳" } else { "✓" }}
-                                        </button>
-                                        <button 
-                                            class="btn-cancel" 
-                                            onclick={on_cancel_edit_driver_notes.clone()}
-                                            title={t("annuler", &lang)}
-                                        >
-                                            {"✕"}
-                                        </button>
                                     </div>
                                 }
                             } else {
