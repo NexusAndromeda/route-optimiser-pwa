@@ -130,28 +130,11 @@ fn app_content() -> Html {
                     let mut new_auth_state = (*auth_state).clone();
                     new_auth_state.is_logged_in = true;
                     auth_state.set(new_auth_state);
-                    
-                    // Iniciar detección remota cuando se carga sesión
-                    let sync_service = SyncService::new();
-                    sync_service.start_remote_change_detection(session.session_id.clone());
                 }
             });
 
             // Mantener closure vivo
             on_logged.forget();
-            || ()
-        });
-    }
-    
-    // Iniciar detección remota cuando hay sesión cargada
-    {
-        let session_state = session_handle.state.clone();
-        use_effect_with(session_state.session.clone(), move |session_opt| {
-            if let Some(session) = session_opt {
-                log::info!("🔍 Iniciando detección remota para sesión: {}", session.session_id);
-                let sync_service = SyncService::new();
-                sync_service.start_remote_change_detection(session.session_id.clone());
-            }
             || ()
         });
     }
