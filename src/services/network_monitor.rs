@@ -20,9 +20,11 @@ pub enum NetworkStatus {
 }
 
 /// Monitor de estado de red con listeners de eventos
-#[derive(Clone)]
+/// Mejorado para prevenir memory leaks: previene múltiples registros de listeners
 pub struct NetworkMonitor {
     status: Arc<Mutex<NetworkStatus>>,
+    // Flag para prevenir múltiples registros de listeners
+    monitoring_started: Arc<Mutex<bool>>,
 }
 
 impl NetworkMonitor {
@@ -51,14 +53,26 @@ impl NetworkMonitor {
         
         Self {
             status,
+            monitoring_started: Arc::new(Mutex::new(false)),
         }
     }
     
     /// Iniciar monitoreo de eventos de red
+    /// Previene múltiples registros: solo se registra una vez
     pub fn start_monitoring<F>(&mut self, callback: F)
     where
         F: Fn(NetworkStatus) + 'static,
     {
+        // Verificar si ya se inició el monitoreo
+        {
+            let mut started = self.monitoring_started.lock().unwrap();
+            if *started {
+                log::warn!("⚠️ NetworkMonitor: start_monitoring ya fue llamado, ignorando llamada duplicada");
+                return;
+            }
+            *started = true;
+        }
+        
         let window = match window() {
             Some(w) => w,
             None => return,
@@ -100,9 +114,14 @@ impl NetworkMonitor {
             offline_closure.as_ref().unchecked_ref(),
         );
         
-        // Mantener closures vivas (se mantienen en el stack de closures)
+        // Mantener closures vivos
+        // Nota: En Rust WASM, closure.forget() es necesario para mantener el closure vivo.
+        // Los listeners globales (window) persisten durante toda la vida de la app,
+        // lo cual es el comportamiento deseado.
         online_closure.forget();
         offline_closure.forget();
+        
+        log::info!("✅ NetworkMonitor: listeners registrados (solo una vez)");
     }
     
     /// Obtener estado actual de red
@@ -121,6 +140,9 @@ impl NetworkMonitor {
     }
     
     /// Registrar callback cuando vuelve la conexión (método simplificado)
+    /// Nota: Este método puede llamarse múltiples veces, registrando múltiples listeners.
+    /// Para uso único, considera usar start_monitoring en su lugar.
+    /// Para prevenir acumulación, verifica si ya existe un listener antes de llamar.
     pub fn on_online<F>(&mut self, callback: F)
     where
         F: Fn() + 'static,
@@ -151,6 +173,8 @@ impl NetworkMonitor {
         );
         
         // Mantener closure vivo
+        // Nota: Para este método simplificado, usamos forget() porque normalmente
+        // solo se llama una vez al inicio de la app
         online_closure.forget();
     }
 }

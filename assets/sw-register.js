@@ -3,10 +3,27 @@
 // ============================================
 
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker
-            .register('/sw.js')
-            .then((registration) => {
+    window.addEventListener('load', async () => {
+        // En desarrollo: assets/sw.js, en producción: /sw.js (copiado a raíz por Makefile)
+        const swPath = '/sw.js'; // Deploy copia a raíz
+        const swPathDev = '/assets/sw.js'; // Desarrollo
+        
+        try {
+            // Intentar primero desde la raíz (producción)
+            const registration = await navigator.serviceWorker.register(swPath);
+            handleRegistration(registration);
+        } catch (error1) {
+            // Si falla (desarrollo), intentar desde assets/
+            console.log('🔄 Intentando cargar Service Worker desde assets/...');
+            try {
+                const registration = await navigator.serviceWorker.register(swPathDev);
+                handleRegistration(registration);
+            } catch (error2) {
+                console.error('❌ Error registrando Service Worker:', error2);
+            }
+        }
+        
+        function handleRegistration(registration) {
                 console.log('✅ Service Worker registrado:', registration.scope);
                 
                 // Escuchar actualizaciones
@@ -26,10 +43,7 @@ if ('serviceWorker' in navigator) {
                 setInterval(() => {
                     registration.update();
                 }, 5 * 60 * 1000);
-            })
-            .catch((error) => {
-                console.error('❌ Error registrando Service Worker:', error);
-            });
+        }
         
         // Escuchar mensajes del Service Worker
         navigator.serviceWorker.addEventListener('message', (event) => {

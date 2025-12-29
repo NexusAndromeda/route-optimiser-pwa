@@ -43,7 +43,17 @@ where
             E: serde::de::Error,
         {
             // Convertir bool a Option<String>: true → Some("true"), false → None
-            Ok(if value { Some("true".to_string()) } else { None })
+            // IMPORTANTE: Solo loguear si es true para evitar spam de logs
+            let result = if value { 
+                Some("true".to_string()) 
+            } else { 
+                None 
+            };
+            // Solo loguear si es true para evitar spam
+            if value {
+                log::info!("📬 [DESERIALIZE] Convertido has_mailbox_access: {} → mailbox_access: {:?}", value, result);
+            }
+            Ok(result)
         }
 
         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>

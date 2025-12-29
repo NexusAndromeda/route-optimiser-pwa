@@ -5,12 +5,10 @@
 const CACHE_VERSION = 'v3';
 const CACHE_NAME = `delivery-app-${CACHE_VERSION}`;
 
-// Assets a cachear (generados por Trunk)
+// Assets a cachear (solo los esenciales - el resto se cachea bajo demanda)
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
-    '/style.css',
-    '/manifest.json',
 ];
 
 // ============================================
@@ -23,7 +21,15 @@ self.addEventListener('install', (event) => {
         caches.open(CACHE_NAME)
             .then((cache) => {
                 console.log('[SW] Caching app shell');
-                return cache.addAll(ASSETS_TO_CACHE);
+                // Cachear recursos uno por uno para evitar que un fallo detenga la instalación
+                return Promise.allSettled(
+                    ASSETS_TO_CACHE.map(url => 
+                        cache.add(url).catch(err => {
+                            console.warn(`[SW] Failed to cache ${url}:`, err);
+                            return null; // Continuar aunque falle
+                        })
+                    )
+                );
             })
             .then(() => {
                 console.log('[SW] Installation complete');
@@ -31,6 +37,8 @@ self.addEventListener('install', (event) => {
             })
             .catch((error) => {
                 console.error('[SW] Installation failed:', error);
+                // Aún así, activar el SW para que funcione con recursos en red
+                return self.skipWaiting();
             })
     );
 });

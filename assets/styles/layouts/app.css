@@ -8,10 +8,12 @@
   top: var(--header-height);
   left: 0;
   right: 0;
-  bottom: 0;
+  /* En móvil: dejar espacio para el bottom sheet - se actualiza dinámicamente con CSS variable */
+  bottom: var(--bottom-sheet-height);
   width: 100%;
-  height: calc(100vh - var(--header-height));
+  height: calc(100vh - var(--header-height) - var(--bottom-sheet-height));
   z-index: 1;
+  transition: bottom 0.3s ease, height 0.3s ease; /* Transición suave cuando cambia el bottom sheet */
 }
 
 .map-container canvas {
@@ -73,8 +75,26 @@
   filter: brightness(0) invert(1);
 }
 
-/* Mapbox logo and attribution */
+/* Mapbox logo and attribution - Visible en todas las resoluciones */
+/* El logo está dentro del área del mapa que tiene bottom: 80px en móvil, así que es visible */
 .mapboxgl-ctrl-bottom-left,
 .mapboxgl-ctrl-bottom-right {
-  display: none !important;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.mapboxgl-ctrl-bottom-left a,
+.mapboxgl-ctrl-bottom-right a {
+  pointer-events: auto;
+}
+
+/* ===== RESPONSIVE: DESKTOP ===== */
+@media (min-width: 768px) {
+  /* El mapa ocupa el resto del espacio */
+  .map-container {
+    left: var(--sidebar-width);
+    /* En desktop no necesitamos bottom porque el sidebar está a la izquierda */
+    bottom: 0;
+    height: calc(100vh - var(--header-height));
+  }
 }

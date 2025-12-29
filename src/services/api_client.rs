@@ -349,7 +349,9 @@ impl ApiClient {
             driver_notes,
         };
         
-        log::info!("📝 Actualizando campos de dirección: {} en sesión: {}", address_id, session_id);
+        log::info!("📝 [API] Actualizando campos de dirección: {} en sesión: {}", address_id, session_id);
+        log::info!("📬 [API] Payload - door_code={:?}, has_mailbox_access={:?}, driver_notes={:?}",
+                   request.door_code.is_some(), request.has_mailbox_access, request.driver_notes.is_some());
         
         let response = Request::put(&url)
             .json(&request)
@@ -359,8 +361,18 @@ impl ApiClient {
             .map_err(|e| format!("Network error: {}", e))?;
         
         if response.ok() {
-            response.json::<UpdateAddressFieldsResponse>().await
-                .map_err(|e| format!("Parse error: {}", e))
+            let parsed_response = response.json::<UpdateAddressFieldsResponse>().await
+                .map_err(|e| format!("Parse error: {}", e))?;
+            
+            // Verificar que la dirección se actualizó correctamente
+            if let Some(addr) = parsed_response.session.addresses.get(address_id) {
+                log::info!("📬 [API] Respuesta recibida - mailbox_access={:?}, door_code={:?}, driver_notes={:?}",
+                          addr.mailbox_access, addr.door_code.is_some(), addr.driver_notes.is_some());
+            } else {
+                log::warn!("⚠️ [API] Dirección no encontrada en respuesta del servidor: {}", address_id);
+            }
+            
+            Ok(parsed_response)
         } else {
             Err(format!("HTTP {}: {}", response.status(), response.status_text()))
         }

@@ -55,6 +55,14 @@ impl SessionViewModel {
         let session = match create_response.session {
             Some(s) => {
                 log::info!("✅ [VIEWMODEL] Sesión recibida: {}", s.session_id);
+                
+                // Log de direcciones con mailbox_access después de crear sesión
+                for (addr_id, addr) in &s.addresses {
+                    if addr.mailbox_access.is_some() {
+                        log::info!("📬 [VIEWMODEL] Dirección {} tiene mailbox_access={:?} al crear sesión", addr_id, addr.mailbox_access);
+                    }
+                }
+                
                 s
             },
             None => {
@@ -103,6 +111,14 @@ impl SessionViewModel {
             Some(s) => {
                 log::info!("✅ [VIEWMODEL] Sesión actualizada recibida: {} ({} paquetes)", 
                     s.session_id, s.stats.total_packages);
+                
+                // Log de direcciones con mailbox_access
+                for (addr_id, addr) in &s.addresses {
+                    if addr.mailbox_access.is_some() {
+                        log::info!("📬 [VIEWMODEL] Dirección {} tiene mailbox_access={:?}", addr_id, addr.mailbox_access);
+                    }
+                }
+                
                 s
             },
             None => {
@@ -388,7 +404,9 @@ impl SessionViewModel {
         has_mailbox_access: Option<bool>,
         driver_notes: Option<String>,
     ) -> Result<DeliverySession, String> {
-        log::info!("📝 Actualizando campos de dirección: {} en sesión: {}", address_id, session_id);
+        log::info!("📝 [VIEWMODEL] Actualizando campos de dirección: {} en sesión: {}", address_id, session_id);
+        log::info!("📬 [VIEWMODEL] Valores a actualizar - door_code={:?}, has_mailbox_access={:?}, driver_notes={:?}", 
+                   door_code.is_some(), has_mailbox_access, driver_notes.is_some());
         
         let response = self.api_client.update_address_fields(
             session_id,
@@ -399,17 +417,28 @@ impl SessionViewModel {
         ).await?;
         
         if !response.success {
+            log::error!("❌ [VIEWMODEL] La respuesta del API indicó success=false");
             return Err("Error actualizando campos de dirección".to_string());
         }
         
         let updated_session = response.session;
         
-        // Guardar sesión actualizada
-        if let Err(e) = self.offline_service.save_session(&updated_session) {
-            log::error!("❌ Error guardando sesión actualizada: {}", e);
+        // Verificar que la dirección se actualizó correctamente en la sesión
+        if let Some(addr) = updated_session.addresses.get(address_id) {
+            log::info!("📬 [VIEWMODEL] Dirección después de actualizar - mailbox_access={:?}, door_code={:?}, driver_notes={:?}",
+                      addr.mailbox_access, addr.door_code.is_some(), addr.driver_notes.is_some());
+        } else {
+            log::warn!("⚠️ [VIEWMODEL] Dirección no encontrada en sesión actualizada: {}", address_id);
         }
         
-        log::info!("✅ Campos de dirección actualizados exitosamente");
+        // Guardar sesión actualizada
+        if let Err(e) = self.offline_service.save_session(&updated_session) {
+            log::error!("❌ [VIEWMODEL] Error guardando sesión actualizada: {}", e);
+        } else {
+            log::info!("💾 [VIEWMODEL] Sesión actualizada guardada en storage local");
+        }
+        
+        log::info!("✅ [VIEWMODEL] Campos de dirección actualizados exitosamente");
         Ok(updated_session)
     }
     
@@ -519,6 +548,13 @@ impl SessionViewModel {
         
         let updated_session = response.session;
         
+        // Log de direcciones con mailbox_access después de sync
+        for (addr_id, addr) in &updated_session.addresses {
+            if addr.mailbox_access.is_some() {
+                log::info!("📬 [SYNC] Dirección {} tiene mailbox_access={:?} después de sync", addr_id, addr.mailbox_access);
+            }
+        }
+        
         // Aplicar deltas a sesión local si es necesario
         // Por ahora, simplemente usar la sesión actualizada del backend
         // TODO: En el futuro, aplicar deltas de forma más granular
@@ -526,6 +562,8 @@ impl SessionViewModel {
         // Guardar sesión actualizada
         if let Err(e) = self.offline_service.save_session(&updated_session) {
             log::error!("❌ Error guardando sesión actualizada: {}", e);
+        } else {
+            log::info!("💾 [SYNC] Sesión actualizada guardada en storage local");
         }
         
         log::info!("✅ Sincronización incremental completada: {} nuevos, {} actualizados, {} eliminados",

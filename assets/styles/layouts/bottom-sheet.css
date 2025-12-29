@@ -43,12 +43,18 @@
   z-index: 99;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s ease;
+  /* Ocultar completamente cuando no está activo para evitar blur residual */
+  visibility: hidden;
+  /* Transición solo cuando se activa, no cuando se desactiva */
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
 }
 
 .backdrop.active {
   opacity: 1;
   pointer-events: all;
+  visibility: visible;
+  /* Cuando se activa, hacer visible inmediatamente y luego fade in */
+  transition: opacity 0.3s ease, visibility 0s linear 0s;
 }
 
 /* Drag Handle Container - Siempre visible, no hace scroll */

@@ -1,28 +1,755 @@
 // ============================================================================
-// APP VIEW - COMPONENTE PRINCIPAL
-// ============================================================================
-// ✅ HTML/CSS EXACTO DEL ORIGINAL preservado
-// Usa hooks nativos de Yew en lugar de Yewdux (compatibilidad Rust 1.90)
+// APP VIEW - Vista principal de la aplicación (convertida de Yew a Rust puro)
 // ============================================================================
 
-use yew::prelude::*;
-use crate::hooks::{use_session, use_sync_state, use_auth, group_packages, GroupBy, use_map, use_map_selection_listener, SessionContextProvider, PackageGroup};
-use crate::components::{SyncIndicator, Scanner, DraggablePackageList, SettingsPopup, PackageList, DetailsModal};
-use crate::views::login::LoginView;
-use crate::viewmodels::{SessionViewModel, MapViewModel};
-use crate::models::{package::Package, address::Address};
-use crate::services::{SyncService, OfflineService};
-use crate::utils::t;
-use wasm_bindgen::{JsCast, JsValue};
-use js_sys::Reflect;
+use wasm_bindgen::prelude::*;
+use web_sys::{Element, console};
 use wasm_bindgen::closure::Closure;
+use wasm_bindgen::JsCast;
+use js_sys;
+use std::rc::Rc;
+use std::collections::HashMap;
 use gloo_timers::callback::Timeout;
-use web_sys::HtmlInputElement;
+use crate::dom::{ElementBuilder, append_child, set_attribute, set_class_name, get_element_by_id};
+use crate::state::app_state::AppState;
+use crate::views::{
+    render_login,
+    render_package_list,
+    group_packages_by_address,
+    PackageGroup,
+    render_details_modal,
+    render_sync_indicator,
+    render_settings_popup,
+    render_scanner,
+    render_bottom_sheet,
+    render_tracking_modal,
+};
+use crate::viewmodels::map_viewmodel::MapViewModel;
+use crate::models::package::Package;
+use crate::utils::mapbox_ffi;
+use serde_json;
 
-// ============================================================================
-// HELPER FUNCTION: Encontrar group_idx por tracking
-// ============================================================================
-/// Busca el índice del grupo (group_idx) que contiene el paquete con el tracking dado
+/// Renderizar vista principal de la aplicación
+pub fn render_app(state: &AppState) -> Result<Element, JsValue> {
+    console::log_1(&JsValue::from_str("🎬 [APP] render_app() llamado"));
+    
+    let is_logged_in = state.auth.get_logged_in();
+    let msg = format!("🔐 [APP] Usuario logged in: {}", is_logged_in);
+    console::log_1(&JsValue::from_str(&msg));
+    
+    // Container principal
+    let app_container = ElementBuilder::new("div")?
+        .class("app-container")
+        .build();
+    
+    if is_logged_in {
+        if let Some(session) = state.session.get_session() {
+            console::log_1(&JsValue::from_str("✅ [APP] Sesión disponible, renderizando main app"));
+            // Renderizar app principal
+            let main_app = render_main_app_view(state, &session)?;
+            append_child(&app_container, &main_app)?;
+                            } else {
+            console::log_1(&JsValue::from_str("⏳ [APP] Sesión no disponible, mostrando mensaje de carga"));
+            // Sesión no disponible
+            let message = ElementBuilder::new("div")?
+                .text("Cargando sesión...")
+                .build();
+            append_child(&app_container, &message)?;
+                            }
+                        } else {
+        console::log_1(&JsValue::from_str("🔑 [APP] Usuario no logueado, renderizando login"));
+        // Renderizar login
+        let login_view = render_login(state)?;
+        append_child(&app_container, &login_view)?;
+        console::log_1(&JsValue::from_str("✅ [APP] Login renderizado"));
+    }
+    
+    Ok(app_container)
+}
+
+/// Renderizar vista principal cuando hay sesión
+fn render_main_app_view(
+    state: &AppState,
+    session: &crate::models::session::DeliverySession,
+) -> Result<Element, JsValue> {
+    // Container principal
+    let main_app = ElementBuilder::new("div")?
+        .class("main-app")
+        .build();
+    
+    // Header
+    let header = create_header(state, Some(session))?;
+    append_child(&main_app, &header)?;
+    
+    // Content area (con padding-top para el header fijo)
+    let content = ElementBuilder::new("div")?
+        .class("app-content")
+        .attr("style", &format!("padding-top: {}px;", get_header_height()))?
+        .build();
+    
+    // Mapa (condicional)
+    let map_enabled = *state.map_enabled.borrow();
+    if map_enabled {
+        let map_container = create_map_container(state, session)?;
+        append_child(&content, &map_container)?;
+    }
+    
+    // Bottom Sheet (reemplaza package list simple)
+    // Calcular grupos de paquetes (usar memo si existe, sino calcular)
+    let groups = {
+        let filter_mode = *state.filter_mode.borrow();
+        let mut groups_memo_ref = state.groups_memo.borrow_mut();
+        
+        if let Some(ref memo_groups) = *groups_memo_ref {
+            // Usar grupos memoizados
+            if filter_mode {
+                // Aplicar filtro a los grupos memoizados
+                let mut filtered_groups = Vec::new();
+                for group in memo_groups.iter() {
+                    let filtered_packages: Vec<_> = group.packages.iter()
+                        .filter(|p| p.status.starts_with("STATUT_CHARGER"))
+                        .cloned()
+                        .collect();
+                    
+                    if !filtered_packages.is_empty() {
+                        filtered_groups.push(PackageGroup {
+                            title: group.title.clone(),
+                            count: filtered_packages.len(),
+                            packages: filtered_packages,
+                        });
+                    }
+                }
+                filtered_groups
+            } else {
+                memo_groups.clone()
+            }
+        } else {
+            // Calcular grupos (no están memoizados)
+            let mut packages: Vec<Package> = session.packages.values().cloned().collect();
+            
+            // Aplicar filtro si está activo
+            if filter_mode {
+                packages.retain(|p| p.status.starts_with("STATUT_CHARGER"));
+                log::info!("🔍 [APP] Filtro activo: {} paquetes después de filtrar", packages.len());
+            }
+            
+            let computed_groups = group_packages_by_address(packages);
+            
+            // Guardar en memo (solo si no hay filtro activo, para reutilizar)
+            if !filter_mode {
+                *groups_memo_ref = Some(computed_groups.clone());
+                log::info!("💾 [APP] Grupos memoizados para reutilización");
+            }
+            
+            computed_groups
+        }
+    };
+    
+    // Registrar listener para eventos del mapa (packageSelected)
+    setup_map_selection_listener(state.clone(), groups.len());
+    
+    // Callbacks para bottom sheet
+    let on_toggle_sheet = {
+        let state_clone = state.clone();
+        Rc::new(move || {
+            let current_state = state_clone.sheet_state.borrow().clone();
+            let next_state = if current_state == "collapsed" {
+                "half".to_string()
+            } else if current_state == "half" {
+                "full".to_string()
+            } else {
+                "collapsed".to_string()
+            };
+            state_clone.set_sheet_state(next_state);
+        })
+    };
+    
+    let on_close_sheet = {
+        let state_clone = state.clone();
+        Rc::new(move || {
+            state_clone.set_sheet_state("collapsed".to_string());
+        })
+    };
+    
+    let on_package_selected = {
+        let state_clone = state.clone();
+        let groups_clone = groups.clone();
+        let session_id = session.session_id.clone();
+        Rc::new(move |index: usize| {
+            log::info!("📦 [APP] Paquete seleccionado en bottom sheet: index={}", index);
+            
+            let edit_mode = *state_clone.edit_mode.borrow();
+            
+            // Si está en modo edición, manejar reordenamiento
+            if edit_mode {
+                let edit_origin = *state_clone.edit_origin_idx.borrow();
+                
+                if let Some(origin_idx) = edit_origin {
+                    // Ya tenemos origen, este es el destino - ejecutar reordenamiento
+                    if origin_idx != index {
+                        log::info!("🔄 Reordenando desde bottom sheet: origen {} → destino {}", origin_idx, index);
+                        
+                        // Reordenar grupos
+                        let mut groups_reordered = groups_clone.clone();
+                        if origin_idx < groups_reordered.len() && index < groups_reordered.len() {
+                            let group_to_move = groups_reordered.remove(origin_idx);
+                            let dest_idx = if index > origin_idx { index - 1 } else { index };
+                            groups_reordered.insert(dest_idx.min(groups_reordered.len()), group_to_move);
+                            
+                            // Actualizar route_order de todos los paquetes
+                            let mut new_order = 0;
+                            let mut trackings_order: Vec<(String, usize)> = Vec::new();
+                            for group in &groups_reordered {
+                                for pkg in &group.packages {
+                                    trackings_order.push((pkg.tracking.clone(), new_order));
+                                }
+                                new_order += 1;
+                            }
+                            
+                            // Obtener sesión actual para actualizarla
+                            if let Some(mut updated_session) = state_clone.session.get_session() {
+                                // Guardar posiciones anteriores ANTES de actualizar
+                                let mut old_positions: Vec<(String, usize)> = Vec::new();
+                                for (tracking, _) in &trackings_order {
+                                    if let Some(pkg) = updated_session.packages.get(tracking) {
+                                        let old_pos = pkg.route_order.unwrap_or(pkg.original_order);
+                                        old_positions.push((tracking.clone(), old_pos));
+                                    }
+                                }
+                                
+                                // Actualizar route_order
+                                for (tracking, order) in &trackings_order {
+                                    if let Some(pkg) = updated_session.packages.get_mut(tracking) {
+                                        pkg.route_order = Some(*order);
+                                    }
+                                }
+                                
+                                // Guardar sesión actualizada
+                                state_clone.session.set_session(Some(updated_session.clone()));
+                                
+                                // Crear cambios de sincronización
+                                let trackings_order_for_sync = trackings_order.clone();
+                                let old_positions_for_sync = old_positions.clone();
+                                let updated_session_for_sync = updated_session.clone();
+                                let state_for_sync = state_clone.clone();
+                                
+                                wasm_bindgen_futures::spawn_local(async move {
+                                    use crate::services::SyncService;
+                                    use crate::models::sync::Change;
+                                    use chrono::Utc;
+                                    
+                                    let sync_service = SyncService::new();
+                                    
+                                    let mut changes = Vec::new();
+                                    for (tracking, new_pos) in trackings_order_for_sync {
+                                        // Buscar la posición anterior
+                                        let old_pos = old_positions_for_sync.iter()
+                                            .find(|(t, _)| t == &tracking)
+                                            .map(|(_, pos)| *pos)
+                                            .unwrap_or(origin_idx);
+                                        
+                                        changes.push(Change::OrderChanged {
+                                            package_internal_id: tracking.clone(),
+                                            old_position: old_pos,
+                                            new_position: new_pos,
+                                            timestamp: Utc::now().timestamp(),
+                                        });
+                                    }
+                                    
+                                    // Sincronizar los cambios
+                                    match sync_service.sync_session(&updated_session_for_sync, changes).await {
+                                        crate::models::sync::SyncResult::Success { session: synced_session, .. } => {
+                                            log::info!("✅ Cambios sincronizados exitosamente");
+                                            state_for_sync.session.set_session(Some(synced_session));
+                                        }
+                                        crate::models::sync::SyncResult::Error { pending_changes, .. } => {
+                                            log::warn!("⚠️ Error sincronizando, cambios guardados para reintentar: {} pendientes", pending_changes.len());
+                                        }
+                                        _ => {}
+                                    }
+                                    
+                                    // Invalidar grupos memo y actualizar package list y mapa
+                                    state_for_sync.invalidate_groups_memo();
+                                    crate::rerender_app_with_type(crate::state::app_state::UpdateType::Incremental(crate::state::app_state::IncrementalUpdate::PackageList));
+                                    crate::rerender_app_with_type(crate::state::app_state::UpdateType::Incremental(crate::state::app_state::IncrementalUpdate::MapPackages));
+                                });
+                                
+                                log::info!("✅ Reordenamiento completado y sincronizado");
+                            }
+                        }
+                        
+                        // Limpiar origen
+                        *state_clone.edit_origin_idx.borrow_mut() = None;
+                    } else {
+                        // Mismo índice, cancelar
+                        *state_clone.edit_origin_idx.borrow_mut() = None;
+                    }
+                } else {
+                    // Primer click - establecer como origen
+                    *state_clone.edit_origin_idx.borrow_mut() = Some(index);
+                    state_clone.set_selected_package_index(Some(index));
+                    log::info!("📍 Origen establecido: {}", index);
+                }
+            } else {
+                // Modo normal
+                state_clone.set_selected_package_index(Some(index));
+                
+                // Sincronizar con mapa
+                crate::utils::mapbox_ffi::update_selected_package(index as i32);
+                
+                // Centrar mapa en el paquete
+                crate::utils::mapbox_ffi::center_map_on_package(index);
+                
+                // Hacer scroll al card (con delay para que el mapa se centre primero)
+                use gloo_timers::callback::Timeout;
+                Timeout::new(300, move || {
+                    crate::utils::mapbox_ffi::scroll_to_selected_package(index);
+                }).forget();
+            }
+        })
+    };
+    
+    let bottom_sheet = render_bottom_sheet(
+        state,
+        session,
+        &groups,
+        on_toggle_sheet,
+        on_close_sheet,
+        on_package_selected,
+    )?;
+    
+    append_child(&content, &bottom_sheet)?;
+    
+    append_child(&main_app, &content)?;
+    
+    // Details modal - renderizar solo si hay details_package y show_details es true (como en Yew)
+    let show_details = *state.show_details.borrow();
+    if show_details {
+        let details_package_opt = state.details_package.borrow().clone();
+        if let Some((pkg, addr)) = details_package_opt.as_ref() {
+            let on_close_details = {
+                let state_clone = state.clone();
+                Rc::new(move || {
+                    let state_for_restore = state_clone.clone();
+                    web_sys::console::log_1(&wasm_bindgen::JsValue::from_str("🔄 [SCROLL] Cerrando modal de detalles, programando restauración de scroll"));
+                    state_clone.set_show_details(false);
+                    // Restaurar posición de scroll después de cerrar el modal
+                    // Usar delay más largo para asegurar que el modal se haya cerrado completamente
+                    // Y limpiar la posición guardada después de restaurar
+                    use gloo_timers::callback::Timeout;
+                    Timeout::new(200, move || {
+                        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str("⏰ [SCROLL] Timeout completado, restaurando scroll ahora (y limpiando posición guardada)"));
+                        state_for_restore.restore_package_list_scroll_position(true); // true = limpiar después de restaurar
+                    }).forget();
+                })
+            };
+            
+            // Callbacks de edición
+            let session_clone = session.clone();
+            let state_clone = state.clone();
+            let pkg_clone = pkg.clone();
+            let addr_id = addr.address_id.clone();
+            let session_id = session.session_id.clone();
+            
+            let on_edit_address = {
+                let session_clone = session_clone.clone();
+                let state_clone = state_clone.clone();
+                let addr_id = addr_id.clone();
+                let session_id = session_id.clone();
+                Some(Rc::new(move |new_label: String| {
+                    let session_clone = session_clone.clone();
+                    let state_clone = state_clone.clone();
+                    let addr_id = addr_id.clone();
+                    let session_id = session_id.clone();
+                    let new_label = new_label.clone();
+                    
+                    state_clone.session.set_loading(true);
+                    
+                    wasm_bindgen_futures::spawn_local(async move {
+                        use crate::viewmodels::session_viewmodel::SessionViewModel;
+                        let vm = SessionViewModel::new();
+                        match vm.update_address(&session_id, &addr_id, new_label).await {
+                            Ok(updated_session) => {
+                                state_clone.session.set_session(Some(updated_session.clone()));
+                                
+                                // Actualizar details_package si está abierto
+                                let pkg_opt = {
+                                    let borrow = state_clone.details_package.borrow();
+                                    borrow.clone()
+                                }; // El borrow se libera aquí explícitamente
+                                if let Some((pkg, _)) = pkg_opt {
+                                    if let Some(updated_addr) = updated_session.addresses.get(&addr_id) {
+                                        *state_clone.details_package.borrow_mut() = Some((pkg, updated_addr.clone()));
+                                    }
+                                }
+                                
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                            Err(e) => {
+                                log::error!("❌ Error actualizando dirección: {}", e);
+                                *state_clone.edit_error_message.borrow_mut() = Some(e);
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                        }
+                    });
+                }) as Rc<dyn Fn(String)>)
+            };
+            
+            let on_edit_door_code = {
+                let session_clone = session_clone.clone();
+                let state_clone = state_clone.clone();
+                let addr_id = addr_id.clone();
+                let session_id = session_id.clone();
+                Some(Rc::new(move |new_code: String| {
+                    let session_clone = session_clone.clone();
+                    let state_clone = state_clone.clone();
+                    let addr_id = addr_id.clone();
+                    let session_id = session_id.clone();
+                    let door_code = Some(new_code.trim().to_string());
+                    
+                    state_clone.session.set_loading(true);
+                    
+                    wasm_bindgen_futures::spawn_local(async move {
+                        use crate::viewmodels::session_viewmodel::SessionViewModel;
+                        let vm = SessionViewModel::new();
+                        match vm.update_address_fields(&session_id, &addr_id, door_code, None, None).await {
+                            Ok(updated_session) => {
+                                state_clone.session.set_session(Some(updated_session.clone()));
+                                
+                                // Actualizar details_package
+                                let pkg_opt = {
+                                    let borrow = state_clone.details_package.borrow();
+                                    borrow.clone()
+                                }; // El borrow se libera aquí explícitamente
+                                if let Some((pkg, _)) = pkg_opt {
+                                    if let Some(updated_addr) = updated_session.addresses.get(&addr_id) {
+                                        *state_clone.details_package.borrow_mut() = Some((pkg, updated_addr.clone()));
+                                    }
+                                }
+                                
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                            Err(e) => {
+                                log::error!("❌ Error actualizando código de puerta: {}", e);
+                                *state_clone.edit_error_message.borrow_mut() = Some(e);
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                        }
+                    });
+                }) as Rc<dyn Fn(String)>)
+            };
+            
+            let on_edit_mailbox = {
+                let session_clone = session_clone.clone();
+                let state_clone = state_clone.clone();
+                let addr_id = addr_id.clone();
+                let session_id = session_id.clone();
+                Some(Rc::new(move |new_value: bool| {
+                    let session_clone = session_clone.clone();
+                    let state_clone = state_clone.clone();
+                    let addr_id = addr_id.clone();
+                    let session_id = session_id.clone();
+                    
+                    // Marcar como guardando
+                    *state_clone.saving_mailbox.borrow_mut() = true;
+                    state_clone.session.set_loading(true);
+                    
+                    wasm_bindgen_futures::spawn_local(async move {
+                        use crate::viewmodels::session_viewmodel::SessionViewModel;
+                        log::info!("📬 [MAILBOX] Iniciando actualización de mailbox: address_id={}, nuevo_valor={}", addr_id, new_value);
+                        
+                        let vm = SessionViewModel::new();
+                        match vm.update_address_fields(&session_id, &addr_id, None, Some(new_value), None).await {
+                            Ok(updated_session) => {
+                                log::info!("✅ [MAILBOX] Actualización exitosa, verificando dirección actualizada");
+                                
+                                // Verificar que la dirección se actualizó correctamente
+                                if let Some(updated_addr) = updated_session.addresses.get(&addr_id) {
+                                    log::info!("📬 [MAILBOX] Dirección actualizada - mailbox_access={:?}", updated_addr.mailbox_access);
+                                } else {
+                                    log::warn!("⚠️ [MAILBOX] Dirección no encontrada después de actualizar: {}", addr_id);
+                                }
+                                
+                                // Primero actualizar la sesión
+                                state_clone.session.set_session(Some(updated_session.clone()));
+                                
+                                // Luego actualizar details_package (después de que set_session haya liberado sus borrows)
+                                let pkg_opt = {
+                                    let borrow = state_clone.details_package.borrow();
+                                    borrow.clone()
+                                }; // El borrow se libera aquí explícitamente
+                                
+                                if let Some((pkg, _)) = pkg_opt {
+                                    if let Some(updated_addr) = updated_session.addresses.get(&addr_id) {
+                                        log::info!("📬 [MAILBOX] Actualizando details_package con mailbox_access={:?}", updated_addr.mailbox_access);
+                                        *state_clone.details_package.borrow_mut() = Some((pkg, updated_addr.clone()));
+                                    }
+                                }
+                                
+                                *state_clone.saving_mailbox.borrow_mut() = false;
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                            Err(e) => {
+                                log::error!("❌ [MAILBOX] Error actualizando acceso BAL: {}", e);
+                                *state_clone.edit_error_message.borrow_mut() = Some(e);
+                                *state_clone.saving_mailbox.borrow_mut() = false;
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                        }
+                    });
+                }) as Rc<dyn Fn(bool)>)
+            };
+            
+            let on_edit_driver_notes = {
+                let session_clone = session_clone.clone();
+                let state_clone = state_clone.clone();
+                let addr_id = addr_id.clone();
+                let session_id = session_id.clone();
+                Some(Rc::new(move |new_notes: String| {
+                    let session_clone = session_clone.clone();
+                    let state_clone = state_clone.clone();
+                    let addr_id = addr_id.clone();
+                    let session_id = session_id.clone();
+                    let driver_notes = Some(new_notes.trim().to_string());
+                    
+                    state_clone.session.set_loading(true);
+                    
+                    wasm_bindgen_futures::spawn_local(async move {
+                        use crate::viewmodels::session_viewmodel::SessionViewModel;
+                        let vm = SessionViewModel::new();
+                        match vm.update_address_fields(&session_id, &addr_id, None, None, driver_notes).await {
+                            Ok(updated_session) => {
+                                state_clone.session.set_session(Some(updated_session.clone()));
+                                
+                                // Actualizar details_package
+                                let pkg_opt = {
+                                    let borrow = state_clone.details_package.borrow();
+                                    borrow.clone()
+                                }; // El borrow se libera aquí explícitamente
+                                if let Some((pkg, _)) = pkg_opt {
+                                    if let Some(updated_addr) = updated_session.addresses.get(&addr_id) {
+                                        *state_clone.details_package.borrow_mut() = Some((pkg, updated_addr.clone()));
+                                    }
+                                }
+                                
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                            Err(e) => {
+                                log::error!("❌ Error actualizando notas chofer: {}", e);
+                                *state_clone.edit_error_message.borrow_mut() = Some(e);
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                        }
+                    });
+                }) as Rc<dyn Fn(String)>)
+            };
+            
+            let on_mark_problematic = {
+                let session_clone = session_clone.clone();
+                let state_clone = state_clone.clone();
+                let addr_id = addr_id.clone();
+                let session_id = session_id.clone();
+                let pkg_clone = pkg_clone.clone();
+                Some(Rc::new(move || {
+                    let session_clone = session_clone.clone();
+                    let state_clone = state_clone.clone();
+                    let addr_id = addr_id.clone();
+                    let session_id = session_id.clone();
+                    let pkg_clone = pkg_clone.clone();
+                    
+                    log::info!("⚠️ Marcando dirección como problemática: {}", addr_id);
+                    state_clone.session.set_loading(true);
+                    
+                    wasm_bindgen_futures::spawn_local(async move {
+                        use crate::viewmodels::session_viewmodel::SessionViewModel;
+                        let vm = SessionViewModel::new();
+                        match vm.mark_as_problematic(&session_id, &addr_id).await {
+                            Ok(updated_session) => {
+                                log::info!("✅ Dirección marcada como problemática exitosamente");
+                                
+                                state_clone.session.set_session(Some(updated_session.clone()));
+                                
+                                // Actualizar details_package con la dirección actualizada
+                                // El backend marca los paquetes como problemáticos automáticamente cuando la dirección tiene coordenadas 0.0, 0.0
+                                if let Some(updated_addr) = updated_session.addresses.get(&addr_id) {
+                                    // Buscar el paquete actualizado en la sesión
+                                    if let Some(updated_pkg) = updated_session.packages.values().find(|p| p.address_id == addr_id) {
+                                        *state_clone.details_package.borrow_mut() = Some((updated_pkg.clone(), updated_addr.clone()));
+                                    } else {
+                                        // Si no encontramos el paquete actualizado, usar el original pero actualizar la dirección
+                                        *state_clone.details_package.borrow_mut() = Some((pkg_clone.clone(), updated_addr.clone()));
+                                    }
+                                }
+                                
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                            Err(e) => {
+                                log::error!("❌ Error marcando como problemático: {}", e);
+                                *state_clone.edit_error_message.borrow_mut() = Some(e);
+                                state_clone.session.set_loading(false);
+                                crate::rerender_app();
+                            }
+                        }
+                    });
+                }) as Rc<dyn Fn()>)
+            };
+            
+            let details_modal = render_details_modal(
+                pkg,
+                addr,
+                state,
+                on_close_details,
+                on_edit_address,
+                on_edit_door_code,
+                on_edit_mailbox,
+                on_edit_driver_notes,
+                on_mark_problematic,
+            )?;
+            append_child(&main_app, &details_modal)?;
+        }
+    }
+    
+    let show_scanner = *state.show_scanner.borrow();
+    if show_scanner {
+                let on_close_scanner = {
+                    let state_clone = state.clone();
+                    Rc::new(move || {
+                        state_clone.set_show_scanner(false);
+                    })
+                };
+        
+        let on_barcode_detected = {
+            let state_clone = state.clone();
+            let groups_clone = groups.clone();
+            Rc::new(move |barcode: String| {
+                log::info!("📱 [APP] Código escaneado: {}", barcode);
+                
+                // Buscar group_idx del paquete
+                let group_idx_opt = find_group_idx_by_tracking(&barcode, &groups_clone);
+                
+                if let Some(group_idx) = group_idx_opt {
+                    log::info!("✅ [APP] group_idx encontrado: {}", group_idx);
+                    
+                    // Actualizar índice seleccionado
+                    state_clone.set_selected_package_index(Some(group_idx));
+                    
+                    // Abrir bottom sheet si está collapsed
+                    let current_state = state_clone.sheet_state.borrow().clone();
+                    if current_state == "collapsed" {
+                        state_clone.set_sheet_state("half".to_string());
+                    }
+                    
+                    // Sincronizar con mapa
+                    crate::utils::mapbox_ffi::update_selected_package(group_idx as i32);
+                    crate::utils::mapbox_ffi::center_map_on_package(group_idx);
+                    
+                    // Hacer scroll al card
+                    use gloo_timers::callback::Timeout;
+                    Timeout::new(300, move || {
+                        crate::utils::mapbox_ffi::scroll_to_selected_package(group_idx);
+                    }).forget();
+                } else {
+                    log::warn!("⚠️ [APP] No se encontró group_idx para tracking: {}", barcode);
+                }
+                
+                // Cerrar scanner
+                state_clone.set_show_scanner(false);
+            })
+        };
+        
+        let scanner_modal = render_scanner(on_close_scanner, on_barcode_detected)?;
+        append_child(&main_app, &scanner_modal)?;
+    }
+    
+    // Modal de tracking - siempre renderizar, mostrar/ocultar con CSS (como en Yew)
+    let on_close_tracking = {
+        let state_clone = state.clone();
+        Rc::new(move || {
+            state_clone.set_show_tracking_modal(false);
+        })
+    };
+
+    let on_tracking_selected = {
+        let state_clone = state.clone();
+        let groups_clone = groups.clone();
+        Rc::new(move |tracking: String| {
+            log::info!("🔍 [APP] Tracking seleccionado desde modal: {}", tracking);
+            
+            // Buscar group_idx
+            let group_idx_opt = find_group_idx_by_tracking(&tracking, &groups_clone);
+            
+            if let Some(group_idx) = group_idx_opt {
+                log::info!("✅ [APP] group_idx encontrado: {}", group_idx);
+                
+                // Actualizar índice seleccionado
+                state_clone.set_selected_package_index(Some(group_idx));
+                
+                // Abrir bottom sheet si está collapsed
+                let current_state = state_clone.sheet_state.borrow().clone();
+                if current_state == "collapsed" {
+                    state_clone.set_sheet_state("half".to_string());
+                }
+                
+                // Sincronizar con mapa
+                crate::utils::mapbox_ffi::update_selected_package(group_idx as i32);
+                crate::utils::mapbox_ffi::center_map_on_package(group_idx);
+                
+                // Hacer scroll al card
+                use gloo_timers::callback::Timeout;
+                Timeout::new(300, move || {
+                    crate::utils::mapbox_ffi::scroll_to_selected_package(group_idx);
+                }).forget();
+            } else {
+                log::warn!("⚠️ [APP] No se encontró group_idx para tracking: {}", tracking);
+            }
+            
+            // Cerrar modal
+            state_clone.set_show_tracking_modal(false);
+        })
+    };
+    
+    let tracking_modal = render_tracking_modal(session, on_tracking_selected, on_close_tracking)?;
+    append_child(&main_app, &tracking_modal)?;
+    
+    // Settings popup - siempre renderizar, mostrar/ocultar con CSS (como tracking modal)
+    let on_close_settings = {
+        let state_clone = state.clone();
+        Rc::new(move || {
+            state_clone.set_show_settings(false);
+        })
+    };
+    
+    let on_logout = {
+        let state_clone = state.clone();
+        Rc::new(move || {
+            log::info!("🚪 [APP] Logout");
+            // Limpiar auth state
+            state_clone.auth.set_logged_in(false);
+            state_clone.auth.set_username(None);
+            state_clone.auth.set_token(None);
+            state_clone.auth.set_company_id(None);
+            // Limpiar sesión
+            state_clone.session.set_session(None);
+            state_clone.notify_subscribers();
+        })
+    };
+    
+    let settings_popup = render_settings_popup(state, on_close_settings, on_logout)?;
+    append_child(&main_app, &settings_popup)?;
+    
+    Ok(main_app)
+}
+
+/// Helper: Buscar group_idx por tracking
 fn find_group_idx_by_tracking(
     tracking: &str,
     groups: &[PackageGroup],
@@ -35,1785 +762,469 @@ fn find_group_idx_by_tracking(
         .map(|(idx, _)| idx)
 }
 
-#[function_component(App)]
-pub fn app() -> Html {
-    html! {
-        <SessionContextProvider>
-            <AppContent />
-        </SessionContextProvider>
-    }
-}
-
-#[function_component(AppContent)]
-fn app_content() -> Html {
-    let session_handle = use_session();
-    let sync_handle = use_sync_state();
-    let auth_handle = use_auth();
-    let map_handle = use_map();
+/// Crear header con título, botones y sync indicator
+fn create_header(state: &AppState, session: Option<&crate::models::session::DeliverySession>) -> Result<Element, JsValue> {
+    use crate::utils::i18n::t;
     
-    let session_state = session_handle.state.clone();
-    let auth_state = auth_handle.state.clone();
+    let header = ElementBuilder::new("div")?
+        .class("app-header")
+        .build();
     
-    let is_logged_in = auth_state.is_logged_in;
-    let loading = session_state.loading;
+    // Título
+    let title = ElementBuilder::new("h1")?
+        .text("Route Optimizer")
+        .build();
+    append_child(&header, &title)?;
     
-    // Log del estado de autenticación para debugging
-    {
-        let auth_state_log = auth_state.clone();
-        let session_state_log = session_state.clone();
-        use_effect_with(is_logged_in, move |logged| {
-            log::info!("🔍 [APP] Estado de is_logged_in cambió: {}", logged);
-            log::info!("🔍 [APP] auth_state.is_logged_in: {}, session: {:?}", 
-                auth_state_log.is_logged_in, 
-                session_state_log.session.as_ref().map(|s| s.session_id.clone()));
-            || ()
-        });
+    // Actions container
+    let actions = ElementBuilder::new("div")?
+        .class("header-actions")
+        .build();
+    
+    // Sync indicator (solo si no está Synced)
+    if let Some(sync_indicator) = render_sync_indicator(state)? {
+        append_child(&actions, &sync_indicator)?;
     }
     
-    // Cargar sesión al iniciar (localStorage)
+    let language = state.language.borrow().clone();
+    let loading = state.session.get_loading();
+    let has_session = session.is_some();
+    
+    // Optimize route button (🎯)
+    let optimize_btn = ElementBuilder::new("button")?
+        .class("btn-icon-header btn-optimize-mini")
+        .attr("title", &t("optimiser", &language))?
+        .text("🎯")
+        .build();
+    
+    if loading || !has_session {
+        set_attribute(&optimize_btn, "disabled", "true")?;
+    }
+    
     {
-        let session_state = session_handle.state.clone();
-        let auth_state = auth_handle.state.clone();
-        use_effect_with((), move |_| {
-            let vm = SessionViewModel::new();
-            let session_state = session_state.clone();
-            let auth_state = auth_state.clone();
-
-            // Listener de 'loggedIn'
-            log::info!("🔍 [APP] Configurando listener para evento 'loggedIn'...");
-            let win = web_sys::window().unwrap();
-            let session_for_event = session_state.clone();
-            let auth_for_event = auth_state.clone();
-            let on_logged = Closure::wrap(Box::new(move |_e: web_sys::Event| {
-                log::info!("🔔 [APP] Evento 'loggedIn' recibido!");
-                let vm = SessionViewModel::new();
-                let session_state_in = session_for_event.clone();
-                let auth_state_in = auth_for_event.clone();
+        let state_clone = state.clone();
+        let session_opt = session.map(|s| s.session_id.clone());
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            if let Some(session_id) = &session_opt {
+                let state_clone = state_clone.clone();
+                let session_id_clone = session_id.clone();
                 wasm_bindgen_futures::spawn_local(async move {
-                    log::info!("🔔 [APP] Cargando sesión desde storage...");
-                    match vm.load_session_from_storage().await {
-                        Ok(Some(session)) => {
-                            log::info!("✅ [APP] Sesión cargada desde storage: {} paquetes", session.stats.total_packages);
-                        let mut new_session_state = (*session_state_in).clone();
-                        new_session_state.session = Some(session);
-                        session_state_in.set(new_session_state);
-                            log::info!("🔔 [APP] Estado de sesión actualizado");
+                    use crate::viewmodels::SessionViewModel;
+                    let vm = SessionViewModel::new();
+                    
+                    *state_clone.session.loading.borrow_mut() = true;
+                    // Actualizar header inmediatamente para mostrar loading state
+                    let has_session = state_clone.session.get_session().is_some();
+                    if let Err(e) = crate::dom::incremental::update_header(&state_clone, has_session) {
+                        log::error!("❌ Error actualizando header: {:?}", e);
+                    }
+                    
+                    match vm.optimize_route(&session_id_clone).await {
+                        Ok(updated_session) => {
+                            log::info!("✅ Optimización completada: {} paquetes", updated_session.stats.total_packages);
+                            state_clone.session.set_session(Some(updated_session));
+                            state_clone.session.set_loading(false);
+                            state_clone.invalidate_groups_memo();
                             
-                        let mut new_auth_state = (*auth_state_in).clone();
-                            log::info!("🔔 [APP] Estado auth antes: is_logged_in={}", new_auth_state.is_logged_in);
-                        new_auth_state.is_logged_in = true;
-                            let is_logged_in_after = new_auth_state.is_logged_in;
-                        auth_state_in.set(new_auth_state);
-                            log::info!("✅ [APP] Estado auth actualizado: is_logged_in={}", is_logged_in_after);
-                        }
-                        Ok(None) => {
-                            log::warn!("⚠️ [APP] No hay sesión en storage");
+                            // Actualizar header después de completar
+                            let has_session_after = state_clone.session.get_session().is_some();
+                            if let Err(e) = crate::dom::incremental::update_header(&state_clone, has_session_after) {
+                                log::error!("❌ Error actualizando header: {:?}", e);
+                            }
                         }
                         Err(e) => {
-                            log::error!("❌ [APP] Error cargando sesión desde storage: {}", e);
+                            log::error!("❌ Error optimizando ruta: {}", e);
+                            state_clone.session.set_loading(false);
+                            
+                            // Actualizar header después del error
+                            let has_session_after = state_clone.session.get_session().is_some();
+                            if let Err(e) = crate::dom::incremental::update_header(&state_clone, has_session_after) {
+                                log::error!("❌ Error actualizando header: {:?}", e);
+                            }
+                            
+                            // Mostrar alert si el error es por falta de localización
+                            if e.to_lowercase().contains("geolocalización") || 
+                               e.to_lowercase().contains("ubicación") ||
+                               e.to_lowercase().contains("location") {
+                                if let Some(window) = web_sys::window() {
+                                    let _ = window.alert_with_message(
+                                        "⚠️ Debes activar tu localización primero.\n\nPor favor, haz clic en el botón de geolocalización (📍) en el mapa para activar tu ubicación antes de optimizar la ruta."
+                                    );
+                                }
+                            }
                         }
                     }
                 });
-            }) as Box<dyn FnMut(_)>);
-            match win.add_event_listener_with_callback("loggedIn", on_logged.as_ref().unchecked_ref()) {
-                Ok(_) => log::info!("✅ [APP] Listener 'loggedIn' registrado exitosamente"),
-                Err(e) => log::error!("❌ [APP] Error registrando listener 'loggedIn': {:?}", e),
             }
-
-            // Carga inicial
-            wasm_bindgen_futures::spawn_local(async move {
-                if let Ok(Some(session)) = vm.load_session_from_storage().await {
-                    log::info!("📋 Sesión cargada desde storage: {} paquetes", session.stats.total_packages);
-                    let mut new_session_state = (*session_state).clone();
-                    new_session_state.session = Some(session.clone());
-                    session_state.set(new_session_state);
-                    let mut new_auth_state = (*auth_state).clone();
-                    new_auth_state.is_logged_in = true;
-                    auth_state.set(new_auth_state);
-                }
-            });
-
-            // Mantener closure vivo
-            on_logged.forget();
-            || ()
-        });
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        optimize_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
     }
     
-    let show_scanner = use_state(|| false);
-    let show_params = use_state(|| false);
-    let sheet_state = use_state(|| String::from("half")); // collapsed | half | full
-    let selected_package_index = use_state(|| None::<usize>); // Índice del paquete seleccionado
-    let show_details = use_state(|| false);
-    let details_package = use_state(|| None::<(Package, Address)>); // Paquete y dirección para el modal
+    append_child(&actions, &optimize_btn)?;
     
-    // Estados para modal de búsqueda de trackings
-    let show_tracking_modal = use_state(|| false);
-    let tracking_query = use_state(|| String::new());
+    // Search tracking button (🔍)
+    let search_btn = ElementBuilder::new("button")?
+        .class("btn-icon-header btn-tracking-search")
+        .attr("title", "Buscar tracking")?
+        .text("🔍")
+        .build();
     
-    // Estados para idioma, filtro y modo edición
-    let language = use_state(|| {
-        // Cargar desde localStorage si existe
-        if let Some(window) = web_sys::window() {
-            if let Ok(Some(storage)) = window.local_storage() {
-                if let Ok(Some(lang)) = storage.get_item("language") {
-                    return lang;
-                }
-            }
-        }
-        "ES".to_string() // Por defecto español
-    });
-    let filter_mode = use_state(|| false); // Filtrar solo STATUT_CHARGER
-    let edit_mode = use_state(|| false); // Modo edición para reordenar
-    let edit_origin_idx = use_state(|| None::<usize>); // Índice del paquete/grupo seleccionado como origen
+    if loading || !has_session {
+        set_attribute(&search_btn, "disabled", "true")?;
+    }
     
-    // Actualizar details_package cuando la sesión se actualiza
     {
-        let session_state = session_handle.state.clone();
-        let details_package = details_package.clone();
-        use_effect_with(session_state.session.clone(), move |session_opt| {
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("🔄 EFECTO: Sesión cambió, intentando actualizar details_package");
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            
-            if let Some(session) = session_opt {
-                log::info!("   📊 Sesión tiene {} paquetes y {} direcciones", 
-                          session.packages.len(), session.addresses.len());
-                
-                // Leer el estado actual de details_package sin incluirlo en dependencias
-                if let Some((pkg, addr)) = (*details_package).clone() {
-                    log::info!("   🔍 details_package actual:");
-                    log::info!("      - tracking: {}", pkg.tracking);
-                    log::info!("      - address_id: {}", addr.address_id);
-                    log::info!("      - label actual: '{}'", addr.label);
-                    log::info!("      - is_problematic actual: {}", pkg.is_problematic);
+                let state_clone = state.clone();
+                let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+                    state_clone.set_show_tracking_modal(true);
+                }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        search_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    append_child(&actions, &search_btn)?;
+    
+    // Scanner button (📷)
+    let scanner_btn = ElementBuilder::new("button")?
+        .class("btn-icon-header btn-scanner")
+        .attr("title", &t("scanner", &language))?
+        .text("📷")
+        .build();
+    
+    if loading {
+        set_attribute(&scanner_btn, "disabled", "true")?;
+    }
+    
+    {
+                let state_clone = state.clone();
+                let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+                    state_clone.set_show_scanner(true);
+                }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        scanner_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    append_child(&actions, &scanner_btn)?;
+    
+    // Refresh button (🔄)
+    let refresh_btn = ElementBuilder::new("button")?
+        .class("btn-icon-header btn-refresh")
+        .attr("title", &t("rafraichir", &language))?
+        .text(if loading { "⏳" } else { "🔄" })
+        .build();
+    
+    if loading || !has_session {
+        set_attribute(&refresh_btn, "disabled", "true")?;
+    }
+    
+    {
+        let state_clone = state.clone();
+        let session_opt = session.map(|s| (s.session_id.clone(), s.driver.driver_id.clone(), s.driver.company_id.clone()));
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            if let Some((session_id, username, societe)) = &session_opt {
+                let state_clone = state_clone.clone();
+                let session_id_clone = session_id.clone();
+                let username_clone = username.clone();
+                let societe_clone = societe.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    use crate::viewmodels::SessionViewModel;
+                    use crate::services::SyncService;
                     
-                    // Buscar paquete y dirección actualizados en la sesión
-                    if let Some(updated_pkg) = session.packages.get(&pkg.tracking) {
-                        log::info!("      ✅ Paquete encontrado en sesión:");
-                        log::info!("         - is_problematic: {}", updated_pkg.is_problematic);
-                        
-                        if let Some(updated_addr) = session.addresses.get(&addr.address_id) {
-                            log::info!("      ✅ Dirección encontrada en sesión:");
-                            log::info!("         - label: '{}' (len: {}, is_empty: {})", 
-                                      updated_addr.label, updated_addr.label.len(), 
-                                      updated_addr.label.trim().is_empty());
-                            log::info!("         - lat: {}, lng: {}", 
-                                      updated_addr.latitude, updated_addr.longitude);
+                    let vm = SessionViewModel::new();
+                    let sync_service = SyncService::new();
+                    
+                    *state_clone.session.loading.borrow_mut() = true;
+                    // Actualizar header inmediatamente para mostrar loading state
+                    let has_session = state_clone.session.get_session().is_some();
+                    if let Err(e) = crate::dom::incremental::update_header(&state_clone, has_session) {
+                        log::error!("❌ Error actualizando header: {:?}", e);
+                    }
+                    
+                    // 1. Procesar cambios pendientes
+                    log::info!("🔄 Procesando cambios pendientes antes de refrescar...");
+                    if let Err(e) = sync_service.process_pending_queue().await {
+                        log::warn!("⚠️ Error procesando cambios pendientes: {}", e);
+                    }
+                    
+                    // 2. Sync incremental
+                    match vm.sync_incremental(&session_id_clone, &username_clone, &societe_clone, None).await {
+                        Ok(updated_session) => {
+                            log::info!("✅ Sincronización incremental completada: {} paquetes", updated_session.stats.total_packages);
                             
-                            // Verificar si hay cambios
-                            let pkg_changed = updated_pkg.is_problematic != pkg.is_problematic;
-                            let addr_changed = updated_addr.label != addr.label || 
-                                             updated_addr.latitude != addr.latitude || 
-                                             updated_addr.longitude != addr.longitude;
+                            // Actualizar sesión en el estado
+                            state_clone.session.set_session(Some(updated_session.clone()));
+                            state_clone.session.set_loading(false);
+                            state_clone.invalidate_groups_memo();
                             
-                            if pkg_changed || addr_changed {
-                                log::info!("      🔄 Cambios detectados! Actualizando details_package...");
-                                log::info!("         - is_problematic cambió: {} → {}", pkg.is_problematic, updated_pkg.is_problematic);
-                                log::info!("         - label cambió: '{}' → '{}'", addr.label, updated_addr.label);
-                                
-                                details_package.set(Some((updated_pkg.clone(), updated_addr.clone())));
-                                log::info!("   ✅✅✅ details_package ACTUALIZADO DESDE EFECTO");
+                            // Reactivar botones del header después del refresh
+                            let has_session = state_clone.session.get_session().is_some();
+                            if let Err(e) = crate::dom::incremental::update_header(&state_clone, has_session) {
+                                log::error!("❌ Error actualizando header: {:?}", e);
+                            }
+                            
+                            // ACTUALIZAR LISTA DE PAQUETES (esto es lo que faltaba)
+                            log::info!("🔄 [REFRESH] Actualizando lista de paquetes después del sync...");
+                            
+                            // Actualizar progress bar primero (usando manipulación directa del DOM)
+                            // Asegurar que el header del bottom sheet existe antes de actualizar
+                            if get_element_by_id("drag-handle-container").is_none() {
+                                log::warn!("⚠️ [REFRESH] drag-handle-container no encontrado, el header del bottom sheet no existe");
                             } else {
-                                log::info!("      ℹ️ No hay cambios, no se actualiza details_package");
+                                if let Err(e) = crate::dom::incremental::update_progress_bar(&state_clone, &updated_session) {
+                                    log::warn!("⚠️ [REFRESH] Error actualizando progress bar: {:?}", e);
+                                }
                             }
-                        } else {
-                            log::warn!("      ❌ Dirección NO encontrada en sesión.addresses!");
-                            log::info!("      🔍 Addresses disponibles: {:?}", 
-                                      session.addresses.keys().take(5).collect::<Vec<_>>());
+                            
+                            // Luego actualizar la lista de paquetes (solo si el header existe)
+                            if get_element_by_id("drag-handle-container").is_some() {
+                                crate::rerender_app_with_type(crate::state::app_state::UpdateType::Incremental(
+                                    crate::state::app_state::IncrementalUpdate::PackageList
+                                ));
+                            } else {
+                                log::warn!("⚠️ [REFRESH] No se puede actualizar lista de paquetes: header del bottom sheet no existe");
+                            }
+                            
+                            // Actualizar mapa (con delay para que el mapa esté listo)
+                            use gloo_timers::callback::Timeout;
+                            use crate::viewmodels::map_viewmodel::MapViewModel;
+                            use crate::views::group_packages_by_address;
+                            
+                            let filter_mode = *state_clone.filter_mode.borrow();
+                            let mut packages_vec: Vec<_> = updated_session.packages.values().cloned().collect();
+                            if filter_mode {
+                                packages_vec.retain(|p| p.status.starts_with("STATUT_CHARGER"));
+                            }
+                            
+                            let groups = group_packages_by_address(packages_vec);
+                            let packages_for_map = MapViewModel::prepare_packages_for_map(&groups, &updated_session);
+                            let packages_json = serde_json::to_string(&packages_for_map)
+                                .unwrap_or_else(|_| "[]".to_string());
+                            
+                            // Actualizar mapa también
+                            Timeout::new(300, move || {
+                                log::info!("🗺️ [REFRESH] Actualizando mapa con {} paquetes", packages_for_map.len());
+                                crate::utils::mapbox_ffi::add_packages_to_map(&packages_json);
+                            }).forget();
+                            
+                            log::info!("✅ [REFRESH] Actualización completa: lista y mapa actualizados");
                         }
-                    } else {
-                        log::warn!("      ❌ Paquete NO encontrado en sesión.packages!");
-                        log::info!("      🔍 Tracking buscado: {}", pkg.tracking);
+                        Err(e) => {
+                            log::error!("❌ Error en sincronización incremental: {}", e);
+                            state_clone.session.set_loading(false);
+                            state_clone.session.set_error(Some(e));
+                            
+                            // Reactivar botones del header incluso si hay error
+                            let has_session = state_clone.session.get_session().is_some();
+                            if let Err(e) = crate::dom::incremental::update_header(&state_clone, has_session) {
+                                log::error!("❌ Error actualizando header: {:?}", e);
+                            }
+                        }
                     }
-                } else {
-                    log::warn!("   ⚠️ details_package es None");
-                }
-            } else {
-                log::warn!("   ⚠️ session_opt es None");
+                });
             }
-            
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            || ()
-        });
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        refresh_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
     }
     
-    let toggle_scanner = {
-        let show_scanner = show_scanner.clone();
-        Callback::from(move |_| {
-            show_scanner.set(!*show_scanner);
-        })
-    };
-    let toggle_params = {
-        let show_params = show_params.clone();
-        Callback::from(move |_| {
-            show_params.set(!*show_params);
-        })
-    };
-
-    let on_close_settings = {
-        let show_params = show_params.clone();
-        Callback::from(move |_| show_params.set(false))
-    };
+    append_child(&actions, &refresh_btn)?;
     
-    let on_logout = {
-        let session_state = session_handle.state.clone();
-        let auth_state = auth_handle.state.clone();
-        let show_params = show_params.clone();
-        let reset_map = map_handle.reset.clone();
+    // Settings button (⚙️)
+    let settings_btn = ElementBuilder::new("button")?
+        .class("btn-icon-header btn-settings")
+        .attr("title", &t("parametres", &language))?
+        .text("⚙️")
+        .build();
+    
+    {
+        let state_clone = state.clone();
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            state_clone.set_show_settings(true);
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        settings_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    append_child(&actions, &settings_btn)?;
+    append_child(&header, &actions)?;
+    
+    Ok(header)
+}
+
+/// Crear container para el mapa
+fn create_map_container(
+    state: &AppState,
+    session: &crate::models::session::DeliverySession,
+) -> Result<Element, JsValue> {
+    // Crear container con ID "map" directamente (Mapbox espera este ID)
+    let map_container = ElementBuilder::new("div")?
+        .class("map-container")
+        .attr("id", "map")?
+        .build();
+    
+    // Detectar dark mode
+    let is_dark = web_sys::window()
+        .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok())
+        .flatten()
+        .map(|mq| mq.matches())
+        .unwrap_or(false);
+    
+    // Preparar paquetes para el mapa
+    let packages: Vec<Package> = session.packages.values().cloned().collect();
+    let groups = group_packages_by_address(packages);
+    let map_packages = MapViewModel::prepare_packages_for_map(&groups, session);
+    let packages_json = serde_json::to_string(&map_packages)
+        .unwrap_or_else(|_| "[]".to_string());
+    
+    // Clonar valores necesarios para el closure
+    let packages_json_for_closure = packages_json;
+    let selected_idx = *state.selected_package_index.borrow();
+    let is_dark_for_closure = is_dark;
+    
+    // Usar setTimeout con gloo_timers para asegurar que el elemento esté en el DOM antes de inicializar
+    // Aumentar delay a 200ms para asegurar que el DOM esté completamente renderizado
+    // (especialmente importante después de login cuando se re-renderiza toda la app)
+    Timeout::new(200, move || {
+        console::log_1(&JsValue::from_str("🗺️ [MAP] Inicializando Mapbox después de que el elemento esté en el DOM"));
         
-        Callback::from(move |_| {
-            log::info!("👋 Logout iniciado");
-            
-            // Limpiar con ViewModel
-            let vm = SessionViewModel::new();
-            if let Err(e) = vm.logout() {
-                log::error!("❌ Error en logout: {}", e);
-            }
-            
-            // Resetear estado de sesión
-            let mut new_session_state = (*session_state).clone();
-            new_session_state.session = None;
-            new_session_state.loading = false;
-            new_session_state.error = None;
-            session_state.set(new_session_state);
-            
-            // Resetear estado de auth
-            let mut new_auth_state = (*auth_state).clone();
-            new_auth_state.is_logged_in = false;
-            new_auth_state.username = None;
-            new_auth_state.token = None;
-            new_auth_state.company_id = None;
-            auth_state.set(new_auth_state);
-            
-            // Resetear estado del mapa (patrón de app-backup)
-            reset_map.emit(());
-            
-            // Cerrar popup de settings
-            show_params.set(false);
-            
-            log::info!("✅ Logout completado");
-        })
-    };
-    
-    let on_retry = Callback::from(|_| log::info!("retry map"));
-
-    let toggle_sheet_size = {
-        let sheet_state = sheet_state.clone();
-        Callback::from(move |_| {
-            let cur = sheet_state.as_str().to_string();
-            let next = if cur == "collapsed" { "half" } else if cur == "half" { "full" } else { "collapsed" };
-            sheet_state.set(next.to_string());
-        })
-    };
-
-    let close_sheet = {
-        let sheet_state = sheet_state.clone();
-        Callback::from(move |_| sheet_state.set("collapsed".to_string()))
-    };
-    
-    // Memorizar grupos de paquetes para evitar reordenamientos en cada render
-    let filter_mode_clone = filter_mode.clone();
-    let groups_memo = use_memo(
-        (session_state.session.clone(), *filter_mode),
-        |(session_opt, filter)| {
-            session_opt.as_ref().map(|session| {
-                let mut items: Vec<_> = session.packages.values()
-                    .cloned()
-                    .collect();
+        // Verificar que el elemento existe y tiene dimensiones antes de inicializar
+        if let Some(map_element) = crate::dom::get_element_by_id("map") {
+            // Verificar que el elemento tiene dimensiones (está visible)
+            if let Ok(html_element) = map_element.dyn_into::<web_sys::HtmlElement>() {
+                let width = html_element.offset_width();
+                let height = html_element.offset_height();
                 
-                // Aplicar filtro si está activado
-                if *filter {
-                    items.retain(|p| p.status.starts_with("STATUT_CHARGER"));
-                }
-                
-                items.sort_by_key(|p| p.route_order.unwrap_or(p.original_order));
-                let groups = group_packages(items, GroupBy::Address);
-                
-                log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                log::info!("📦 AGRUPACIÓN DE PAQUETES");
-                log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                log::info!("   📊 Total paquetes en sesión: {}", session.packages.len());
-                log::info!("   📦 Total grupos creados: {}", groups.len());
-                
-                // Log de los primeros 10 grupos
-                for (idx, group) in groups.iter().take(10).enumerate() {
-                    log::info!("   [{idx}] group_idx={}, count={}, address_id={}", 
-                              idx, group.count, group.title);
-                }
-                if groups.len() > 10 {
-                    log::info!("   ... y {} grupos más", groups.len() - 10);
-                }
-                log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                
-                groups
-            })
-        }
-    );
-    
-    // Callback cuando se detecta un código de barras
-    let on_barcode_detected = {
-        let scan_package = session_handle.scan_package.clone();
-        let show_scanner = show_scanner.clone();
-        let sheet_state = sheet_state.clone();
-        let selected_package_index = selected_package_index.clone();
-        let center_on_package = map_handle.center_on_package.clone();
-        let session_state = session_handle.state.clone();
-        let groups_memo = groups_memo.clone();
-        
-        Callback::from(move |tracking: String| {
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("📱 CÓDIGO DE BARRAS DETECTADO");
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("   📦 Tracking: {}", tracking);
-            
-            // 1. Emitir scan_package (actualiza estado en backend)
-            scan_package.emit(tracking.clone());
-            
-            // 2. Cerrar scanner
-            show_scanner.set(false);
-            
-            // 3. Buscar group_idx del paquete
-            let group_idx_opt = if let Some(session) = &(*session_state).session {
-                if let Some(groups) = (*groups_memo).as_ref() {
-                    find_group_idx_by_tracking(&tracking, groups)
-                } else {
-                    log::warn!("   ⚠️ No hay grupos disponibles en groups_memo");
-                    None
-                }
-            } else {
-                log::warn!("   ⚠️ No hay sesión activa");
-                None
-            };
-            
-            if let Some(group_idx) = group_idx_opt {
-                log::info!("   ✅ group_idx encontrado: {}", group_idx);
-                
-                // 4. Abrir bottom sheet si está colapsado
-                let current_state = (*sheet_state).clone();
-                log::info!("   📱 Estado actual del sheet: {}", current_state);
-                if current_state == "collapsed" {
-                    sheet_state.set("half".to_string());
-                    log::info!("   📱 Bottom sheet abierto desde colapsado → half");
-                }
-                
-                // 5. Actualizar índice seleccionado
-                selected_package_index.set(Some(group_idx));
-                log::info!("   ✅ selected_package_index actualizado: {:?}", Some(group_idx));
-                
-                // 6. Centrar mapa en el paquete (con delay para que el sheet se abra primero)
-                let center_on_package_clone = center_on_package.clone();
-                Timeout::new(300, move || {
-                    log::info!("   🗺️ Centrando mapa en grupo {}...", group_idx);
-                    center_on_package_clone.emit(group_idx);
+                if width > 0 && height > 0 {
+                    console::log_1(&JsValue::from_str(&format!("✅ [MAP] Elemento encontrado con dimensiones: {}x{}", width, height)));
                     
-                    // 7. Hacer scroll al card (con delay adicional para que el mapa se centre)
+                    // Inicializar mapa
+                    mapbox_ffi::init_mapbox("map", is_dark_for_closure);
+                    
+                    // Agregar paquetes al mapa después de un pequeño delay adicional
+                    // para asegurar que el mapa esté completamente inicializado
+                    let packages_json_clone = packages_json_for_closure.clone();
+                    let selected_idx_clone = selected_idx;
                     Timeout::new(100, move || {
-                        if let Some(window) = web_sys::window() {
-                            let scroll_fn = js_sys::Function::new_no_args(&format!(
-                                "if (window.scrollToSelectedPackage) window.scrollToSelectedPackage({});",
-                                group_idx
-                            ));
-                            let _ = scroll_fn.call0(&window.into());
-                            log::info!("   📜 Scroll completado para grupo {}", group_idx);
+                        mapbox_ffi::add_packages_to_map(&packages_json_clone);
+                        
+                        // Actualizar paquete seleccionado si hay uno
+                        if let Some(idx) = selected_idx_clone {
+                            mapbox_ffi::update_selected_package(idx as i32);
                         }
+                        
+                        console::log_1(&JsValue::from_str("✅ [MAP] Paquetes agregados al mapa"));
                     }).forget();
-                }).forget();
-            } else {
-                log::warn!("   ⚠️ No se encontró group_idx para tracking: {}", tracking);
-            }
-            
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        })
-    };
-    
-    // Callback cuando se selecciona un tracking desde el modal de búsqueda
-    let on_tracking_selected = {
-        let scan_package = session_handle.scan_package.clone();
-        let show_tracking_modal = show_tracking_modal.clone();
-        let sheet_state = sheet_state.clone();
-        let selected_package_index = selected_package_index.clone();
-        let center_on_package = map_handle.center_on_package.clone();
-        let session_state = session_handle.state.clone();
-        let groups_memo = groups_memo.clone();
-        
-        Callback::from(move |tracking: String| {
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("🔍 TRACKING SELECCIONADO DESDE MODAL");
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("   📦 Tracking: {}", tracking);
-            
-            // 1. Emitir scan_package (actualiza estado en backend)
-            scan_package.emit(tracking.clone());
-            
-            // 2. Cerrar modal
-            show_tracking_modal.set(false);
-            
-            // 3. Buscar group_idx del paquete
-            let group_idx_opt = if let Some(session) = &(*session_state).session {
-                if let Some(groups) = (*groups_memo).as_ref() {
-                    find_group_idx_by_tracking(&tracking, groups)
+                    
+                    console::log_1(&JsValue::from_str("✅ [MAP] Mapbox inicializado exitosamente"));
                 } else {
-                    log::warn!("   ⚠️ No hay grupos disponibles en groups_memo");
-                    None
-                }
-            } else {
-                log::warn!("   ⚠️ No hay sesión activa");
-                None
-            };
-            
-            if let Some(group_idx) = group_idx_opt {
-                log::info!("   ✅ group_idx encontrado: {}", group_idx);
-                
-                // 4. Abrir bottom sheet si está colapsado
-                let current_state = (*sheet_state).clone();
-                log::info!("   📱 Estado actual del sheet: {}", current_state);
-                if current_state == "collapsed" {
-                    sheet_state.set("half".to_string());
-                    log::info!("   📱 Bottom sheet abierto desde colapsado → half");
-                }
-                
-                // 5. Actualizar índice seleccionado
-                selected_package_index.set(Some(group_idx));
-                log::info!("   ✅ selected_package_index actualizado: {:?}", Some(group_idx));
-                
-                // 6. Centrar mapa en el paquete (con delay para que el sheet se abra primero)
-                let center_on_package_clone = center_on_package.clone();
-                Timeout::new(300, move || {
-                    log::info!("   🗺️ Centrando mapa en grupo {}...", group_idx);
-                    center_on_package_clone.emit(group_idx);
-                    
-                    // 7. Hacer scroll al card (con delay adicional para que el mapa se centre)
-                    Timeout::new(100, move || {
-                        if let Some(window) = web_sys::window() {
-                            let scroll_fn = js_sys::Function::new_no_args(&format!(
-                                "if (window.scrollToSelectedPackage) window.scrollToSelectedPackage({});",
-                                group_idx
-                            ));
-                            let _ = scroll_fn.call0(&window.into());
-                            log::info!("   📜 Scroll completado para grupo {}", group_idx);
+                    console::warn_1(&JsValue::from_str(&format!("⚠️ [MAP] Elemento 'map' encontrado pero sin dimensiones: {}x{}, reintentando...", width, height)));
+                    // Reintentar después de otro delay si no tiene dimensiones
+                    let packages_json_retry = packages_json_for_closure.clone();
+                    let selected_idx_retry = selected_idx;
+                    let is_dark_retry = is_dark_for_closure;
+                    Timeout::new(300, move || {
+                        if let Some(map_el) = crate::dom::get_element_by_id("map") {
+                            if let Ok(html_el) = map_el.dyn_into::<web_sys::HtmlElement>() {
+                                if html_el.offset_width() > 0 && html_el.offset_height() > 0 {
+                                    mapbox_ffi::init_mapbox("map", is_dark_retry);
+                                    Timeout::new(100, move || {
+                                        mapbox_ffi::add_packages_to_map(&packages_json_retry);
+                                        if let Some(idx) = selected_idx_retry {
+                                            mapbox_ffi::update_selected_package(idx as i32);
+                                        }
+                                    }).forget();
+                                }
+                            }
                         }
                     }).forget();
-                }).forget();
-            } else {
-                log::warn!("   ⚠️ No se encontró group_idx para tracking: {}", tracking);
-            }
-            
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        })
-    };
-    
-    // Si no está logueado, mostrar login
-    log::info!("🔍 [APP] Renderizando: is_logged_in={}, loading={}, tiene_session={}", 
-        is_logged_in, loading, session_state.session.is_some());
-    
-    if !is_logged_in {
-        log::info!("🔍 [APP] Usuario no logueado, mostrando LoginView");
-        return html! {
-            <LoginView />
-        };
-    }
-    
-    log::info!("🔍 [APP] Usuario logueado, mostrando vista principal");
-    
-    // Inicializar mapa cuando se hace login (MVVM)
-    // IMPORTANTE: Se inicializa cuando el componente se monta Y está logueado,
-    // o cuando is_logged_in cambia de false a true
-    {
-        let map_init = map_handle.initialize.clone();
-        let map_initialized = map_handle.state.initialized.clone();
-        let is_logged = is_logged_in;
-        
-        // Efecto que se ejecuta al montar Y cuando cambian las dependencias
-        use_effect_with((is_logged, map_initialized.clone()), move |(logged, initialized)| {
-            log::info!("🔍 use_effect_with ejecutado: is_logged={}, map_initialized={}", logged, initialized);
-            
-            // Solo inicializar si está logueado Y el mapa no está inicializado
-            if *logged && !*initialized {
-                log::info!("🗺️ Usuario logueado y mapa no inicializado, inicializando... (is_logged: {}, initialized: {})", 
-                          logged, initialized);
-                
-                // Pequeño delay para asegurar que el DOM está listo (especialmente después de logout/login)
-                use gloo_timers::callback::Timeout;
-                Timeout::new(200, move || {
-                    log::info!("🗺️ Llamando a initialize después del delay (200ms)...");
-                    map_init.emit(());
-                }).forget();
-            } else {
-                log::debug!("🗺️ Condiciones no cumplidas para inicializar mapa (is_logged: {}, initialized: {})", 
-                           logged, initialized);
-            }
-            || ()
-        });
-    }
-    
-    // Enviar paquetes al mapa cuando cambia la sesión (MVVM)
-    {
-        let session_opt = session_state.session.clone();
-        let map_update = map_handle.update_packages.clone();
-        let map_handle_state = map_handle.state.clone();
-        let filter_mode_for_map = filter_mode.clone();
-        
-        use_effect_with((session_opt.clone(), *filter_mode, map_handle_state.initialized), move |(session_opt, filter, initialized)| {
-            if let Some(session) = session_opt {
-                if *initialized {
-                    log::info!("📦 Sesión actualizada, preparando paquetes para el mapa...");
-                    
-                    // Convertir HashMap a Vec y aplicar filtro si está activado
-                    let mut packages_vec: Vec<_> = session.packages.values().cloned().collect();
-                    if *filter {
-                        packages_vec.retain(|p| p.status.starts_with("STATUT_CHARGER"));
-                    }
-                    let packages_count = packages_vec.len();
-                    
-                    // Preparar grupos
-                    let groups = group_packages(packages_vec, GroupBy::Address);
-                    log::info!("📦 Grupos preparados: {} grupos de {} paquetes", 
-                              groups.len(), packages_count);
-                    
-                    // Preparar paquetes para el mapa (usando ViewModel)
-                    let packages_for_map = MapViewModel::prepare_packages_for_map(&groups, &session);
-                    log::info!("🗺️ Paquetes preparados para mapa: {} de {} grupos", 
-                              packages_for_map.len(), groups.len());
-                    
-                    // Enviar al mapa con delay
-                    Timeout::new(200, move || {
-                        map_update.emit(packages_for_map);
-                    }).forget();
                 }
+            } else {
+                console::warn_1(&JsValue::from_str("⚠️ [MAP] Elemento 'map' no es un HtmlElement"));
             }
-            || ()
-        });
-    }
-
-    // Re-enviar paquetes cuando el mapa se marca como inicializado
-    {
-        let session_state_clone = session_state.clone();
-        let map_update = map_handle.update_packages.clone();
-        let map_initialized = map_handle.state.initialized;
-        let filter_mode_for_map_init = filter_mode.clone();
-        
-        use_effect_with((map_initialized.clone(), *filter_mode), move |(initialized, filter)| {
-            if *initialized {
-                if let Some(session) = &session_state_clone.session {
-                    log::info!("🗺️ Mapa ahora inicializado, re-enviando paquetes...");
-                    
-                    // Convertir HashMap a Vec y aplicar filtro si está activado
-                    let mut packages_vec: Vec<_> = session.packages.values().cloned().collect();
-                    if *filter {
-                        packages_vec.retain(|p| p.status.starts_with("STATUT_CHARGER"));
-                    }
-                    
-                    // Preparar grupos
-                    let groups = group_packages(packages_vec, GroupBy::Address);
-                    
-                    // Preparar paquetes para el mapa
-                    let packages_for_map = MapViewModel::prepare_packages_for_map(&groups, session);
-                    
-                    // Enviar al mapa con delay más largo
-                    Timeout::new(500, move || {
-                        log::info!("📤 Enviando {} paquetes al mapa...", packages_for_map.len());
-                        map_update.emit(packages_for_map);
-                    }).forget();
-                }
-            }
-            || ()
-        });
-    }
-    
-    // Escuchar clicks en el mapa (SINCRONIZACIÓN: Mapa → Bottom Sheet)
-    // Usa el hook dedicado que garantiza registro único (patrón de app-backup)
-    let on_map_select = {
-        let map_select = map_handle.select_package.clone();
-        let sheet_state = sheet_state.clone();
-        let selected_package_index = selected_package_index.clone();
-        let edit_mode_clone = edit_mode.clone();
-        let edit_origin_idx_clone = edit_origin_idx.clone();
-        let session_handle_clone = session_handle.clone();
-        let groups_memo_clone = groups_memo.clone();
-        let groups_count = if let Some(ref groups) = *groups_memo {
-            groups.len()
         } else {
-            0
-        };
-        
-        Callback::from(move |package_index: usize| {
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("🖱️ CLICK EN MAPA RECIBIDO EN APP");
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("   📍 group_idx recibido: {}", package_index);
-            log::info!("   📦 Total grupos disponibles: {}", groups_count);
-            log::info!("   ✏️ Modo edición: {}", *edit_mode_clone);
-            
-            if package_index >= groups_count {
-                log::warn!("⚠️  group_idx {} >= grupos disponibles {}, ignorando", 
-                          package_index, groups_count);
-                return;
-            }
-            
-            log::info!("   ✅ group_idx válido, actualizando selección...");
-            
-            // Si está en modo edición, manejar reordenamiento
-            if *edit_mode_clone {
-                if let Some(origin_idx) = *edit_origin_idx_clone {
-                    // Ya tenemos origen, este es el destino - ejecutar reordenamiento
-                    if origin_idx != package_index {
-                        log::info!("   🔄 Reordenando desde mapa: origen {} → destino {}", origin_idx, package_index);
-                        
-                        // Reordenar grupos y actualizar route_order
-                        if let Some(mut groups) = (*groups_memo_clone).as_ref().cloned() {
-                            if origin_idx < groups.len() && package_index < groups.len() {
-                                let group_to_move = groups.remove(origin_idx);
-                                let dest_idx = if package_index > origin_idx { package_index - 1 } else { package_index };
-                                groups.insert(dest_idx.min(groups.len()), group_to_move);
-                                
-                                // Actualizar route_order de todos los paquetes
-                                let mut new_order = 0;
-                                let mut trackings_order: Vec<(String, usize)> = Vec::new();
-                                for group in &groups {
-                                    for pkg in &group.packages {
-                                        trackings_order.push((pkg.tracking.clone(), new_order));
-                                    }
-                                    new_order += 1;
+            console::warn_1(&JsValue::from_str("⚠️ [MAP] Elemento 'map' no encontrado, reintentando..."));
+            // Reintentar después de otro delay si no se encuentra
+            let packages_json_retry = packages_json_for_closure.clone();
+            let selected_idx_retry = selected_idx;
+            let is_dark_retry = is_dark_for_closure;
+            Timeout::new(500, move || {
+                if let Some(map_el) = crate::dom::get_element_by_id("map") {
+                    if let Ok(html_el) = map_el.dyn_into::<web_sys::HtmlElement>() {
+                        if html_el.offset_width() > 0 && html_el.offset_height() > 0 {
+                            mapbox_ffi::init_mapbox("map", is_dark_retry);
+                            Timeout::new(100, move || {
+                                mapbox_ffi::add_packages_to_map(&packages_json_retry);
+                                if let Some(idx) = selected_idx_retry {
+                                    mapbox_ffi::update_selected_package(idx as i32);
                                 }
-                                
-                                // Actualizar sesión con nuevo orden
-                                if let Some(session) = &session_handle_clone.state.session {
-                                    let mut updated_session = session.clone();
-                                    
-                                    // Guardar posiciones anteriores antes de actualizar
-                                    let mut old_positions: Vec<(String, usize)> = Vec::new();
-                                    for (tracking, _) in &trackings_order {
-                                        if let Some(pkg) = updated_session.packages.get(tracking) {
-                                            let old_pos = pkg.route_order.unwrap_or(pkg.visual_position);
-                                            old_positions.push((tracking.clone(), old_pos));
-                                        }
-                                    }
-                                    
-                                    // Actualizar route_order y visual_position
-                                    for (tracking, order) in &trackings_order {
-                                        if let Some(pkg) = updated_session.packages.get_mut(tracking) {
-                                            pkg.route_order = Some(*order);
-                                            pkg.visual_position = *order;
-                                        }
-                                    }
-                                    
-                                    // Guardar sesión actualizada en localStorage
-                                    let offline_service = OfflineService::new();
-                                    if let Err(e) = offline_service.save_session(&updated_session) {
-                                        log::error!("❌ Error guardando sesión en localStorage: {}", e);
-                                    } else {
-                                        log::info!("✅ Sesión guardada en localStorage");
-                                    }
-                                    
-                                    // Guardar sesión actualizada
-                                    let session_id = updated_session.session_id.clone();
-                                    let sync_service = SyncService::new();
-                                    let trackings_order_clone = trackings_order.clone();
-                                    let session_handle_for_sync = session_handle_clone.clone();
-                                    
-                                    // Crear cambios de sincronización con old_position correcto
-                                    let mut changes = Vec::new();
-                                    for (tracking, new_pos) in &trackings_order_clone {
-                                        // Buscar la posición anterior del paquete
-                                        let old_pos = old_positions.iter()
-                                            .find(|(t, _)| t == tracking)
-                                            .map(|(_, pos)| *pos)
-                                            .unwrap_or(origin_idx);
-                                        
-                                        changes.push(crate::models::sync::Change::OrderChanged {
-                                            package_internal_id: tracking.clone(),
-                                            old_position: old_pos,
-                                            new_position: *new_pos,
-                                            timestamp: chrono::Utc::now().timestamp(),
-                                        });
-                                    }
-                                    
-                                    // Guardar cambios pendientes y sincronizar
-                                    wasm_bindgen_futures::spawn_local(async move {
-                                        if let Err(e) = sync_service.save_pending_changes(&changes) {
-                                            log::error!("❌ Error guardando cambios pendientes: {}", e);
-                                        }
-                                        
-                                        // Procesar queue automáticamente
-                                        if let Err(e) = sync_service.process_pending_queue().await {
-                                            log::warn!("⚠️ Error sincronizando cambios: {}", e);
-                                        }
-                                    });
-                                    
-                                    // Actualizar estado local
-                                    let mut new_state = (*session_handle_for_sync.state).clone();
-                                    new_state.session = Some(updated_session);
-                                    session_handle_for_sync.state.set(new_state);
-                                    
-                                    log::info!("   ✅ Reordenamiento completado y sincronizado");
-                                }
-                            }
+                            }).forget();
                         }
-                        
-                        // Limpiar origen
-                        edit_origin_idx_clone.set(None);
-                    } else {
-                        // Mismo índice, cancelar
-                        edit_origin_idx_clone.set(None);
                     }
-                } else {
-                    // Primer click - establecer como origen
-                    edit_origin_idx_clone.set(Some(package_index));
-                    selected_package_index.set(Some(package_index));
-                    log::info!("   📍 Origen establecido: {}", package_index);
-                    
-                    // Mostrar animación flash
-                    map_select.clone().emit(package_index);
-                }
-            } else {
-                // Modo normal - comportamiento original
-            // Actualizar índice seleccionado
-            selected_package_index.set(Some(package_index));
-            log::info!("   ✅ selected_package_index actualizado: {:?}", Some(package_index));
-            
-            // Abrir bottom sheet si está colapsado (patrón de app-backup)
-            let current_state = (*sheet_state).clone();
-            log::info!("   📱 Estado actual del sheet: {}", current_state);
-            if current_state == "collapsed" {
-                sheet_state.set("half".to_string());
-                log::info!("   📱 Bottom sheet abierto desde colapsado → half");
-            }
-            
-            // Hacer scroll y animación flash (con delay para que el sheet se abra primero)
-            let map_select_clone = map_select.clone();
-            use gloo_timers::callback::Timeout;
-            Timeout::new(300, move || {
-                log::info!("   ⏱️  Delay completado, emitiendo select_package con group_idx: {}", 
-                          package_index);
-                map_select_clone.emit(package_index);
-            }).forget();
-            }
-            
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        })
-    };
-    use_map_selection_listener(on_map_select);
-    
-    // Callback cuando se selecciona un paquete en el bottom sheet
-    let on_package_selected = {
-        let center_on_package = map_handle.center_on_package.clone();
-        let selected_package_index = selected_package_index.clone();
-        let edit_mode_clone = edit_mode.clone();
-        let edit_origin_idx_clone = edit_origin_idx.clone();
-        let session_handle_clone = session_handle.clone();
-        let groups_memo_clone = groups_memo.clone();
-        
-        Callback::from(move |index: usize| {
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("📦 PAQUETE SELECCIONADO EN BOTTOM SHEET");
-            log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            log::info!("   📍 group_idx: {}", index);
-            log::info!("   ✏️ Modo edición: {}", *edit_mode_clone);
-            
-            // Si está en modo edición, manejar reordenamiento
-            if *edit_mode_clone {
-                if let Some(origin_idx) = *edit_origin_idx_clone {
-                    // Ya tenemos origen, este es el destino - ejecutar reordenamiento
-                    if origin_idx != index {
-                        log::info!("   🔄 Reordenando desde bottom sheet: origen {} → destino {}", origin_idx, index);
-                        
-                        // Reordenar grupos y actualizar route_order
-                        if let Some(mut groups) = (*groups_memo_clone).as_ref().cloned() {
-                            if origin_idx < groups.len() && index < groups.len() {
-                                let group_to_move = groups.remove(origin_idx);
-                                let dest_idx = if index > origin_idx { index - 1 } else { index };
-                                groups.insert(dest_idx.min(groups.len()), group_to_move);
-                                
-                                // Actualizar route_order de todos los paquetes
-                                let mut new_order = 0;
-                                let mut trackings_order: Vec<(String, usize)> = Vec::new();
-                                for group in &groups {
-                                    for pkg in &group.packages {
-                                        trackings_order.push((pkg.tracking.clone(), new_order));
-                                    }
-                                    new_order += 1;
-                                }
-                                
-                                // Actualizar sesión con nuevo orden
-                                if let Some(session) = &session_handle_clone.state.session {
-                                    let mut updated_session = session.clone();
-                                    
-                                    // Guardar posiciones anteriores antes de actualizar
-                                    let mut old_positions: Vec<(String, usize)> = Vec::new();
-                                    for (tracking, _) in &trackings_order {
-                                        if let Some(pkg) = updated_session.packages.get(tracking) {
-                                            let old_pos = pkg.route_order.unwrap_or(pkg.visual_position);
-                                            old_positions.push((tracking.clone(), old_pos));
-                                        }
-                                    }
-                                    
-                                    let trackings_order_clone = trackings_order.clone();
-                                    
-                                    // Actualizar route_order y visual_position
-                                    for (tracking, order) in trackings_order {
-                                        if let Some(pkg) = updated_session.packages.get_mut(&tracking) {
-                                            pkg.route_order = Some(order);
-                                            pkg.visual_position = order;
-                                        }
-                                    }
-                                    
-                                    // Guardar sesión actualizada en localStorage
-                                    let offline_service = OfflineService::new();
-                                    if let Err(e) = offline_service.save_session(&updated_session) {
-                                        log::error!("❌ Error guardando sesión en localStorage: {}", e);
-                                    } else {
-                                        log::info!("✅ Sesión guardada en localStorage");
-                                    }
-                                    
-                                    // Guardar sesión actualizada
-                                    let session_id = updated_session.session_id.clone();
-                                    let sync_service = SyncService::new();
-                                    
-                                    // Crear cambios de sincronización con old_position correcto
-                                    let mut changes = Vec::new();
-                                    for (tracking, new_pos) in trackings_order_clone {
-                                        // Buscar la posición anterior del paquete
-                                        let old_pos = old_positions.iter()
-                                            .find(|(t, _)| t == &tracking)
-                                            .map(|(_, pos)| *pos)
-                                            .unwrap_or(origin_idx);
-                                        
-                                        changes.push(crate::models::sync::Change::OrderChanged {
-                                            package_internal_id: tracking.clone(),
-                                            old_position: old_pos,
-                                            new_position: new_pos,
-                                            timestamp: chrono::Utc::now().timestamp(),
-                                        });
-                                    }
-                                    
-                                    // Guardar cambios pendientes y sincronizar
-                                    wasm_bindgen_futures::spawn_local(async move {
-                                        if let Err(e) = sync_service.save_pending_changes(&changes) {
-                                            log::error!("❌ Error guardando cambios pendientes: {}", e);
-                                        }
-                                        
-                                        // Procesar queue automáticamente
-                                        if let Err(e) = sync_service.process_pending_queue().await {
-                                            log::warn!("⚠️ Error sincronizando cambios: {}", e);
-                                        }
-                                    });
-                                    
-                                    // Actualizar estado local
-                                    let mut new_state = (*session_handle_clone.state).clone();
-                                    new_state.session = Some(updated_session);
-                                    session_handle_clone.state.set(new_state);
-                                    
-                                    log::info!("   ✅ Reordenamiento completado y sincronizado");
-                                }
-                            }
-                        }
-                        
-                        // Limpiar origen
-                        edit_origin_idx_clone.set(None);
-                    } else {
-                        // Mismo índice, cancelar
-                        edit_origin_idx_clone.set(None);
-                    }
-                } else {
-                    // Primer click - establecer como origen
-                    edit_origin_idx_clone.set(Some(index));
-                    selected_package_index.set(Some(index));
-                    log::info!("   📍 Origen establecido desde bottom sheet: {}", index);
-                }
-            } else {
-                // Modo normal - comportamiento original
-            log::info!("   🗺️  Centrando mapa en grupo {}...", index);
-            
-            // Actualizar índice seleccionado
-            selected_package_index.set(Some(index));
-            
-            // Centrar mapa en el paquete seleccionado (con pulse animation)
-            center_on_package.emit(index);
-            
-            // ⭐ NUEVO: Scroll al card seleccionado (para centrarlo visualmente en el bottom sheet)
-            // Usar delay de 300ms como en el prototipo para dar tiempo al render
-            Timeout::new(300, move || {
-                if let Some(window) = web_sys::window() {
-                    let scroll_fn = js_sys::Function::new_no_args(&format!(
-                        "if (window.scrollToSelectedPackage) window.scrollToSelectedPackage({});",
-                        index
-                    ));
-                    let _ = scroll_fn.call0(&window.into());
                 }
             }).forget();
-            }
-        })
-    };
-
-    // Preparar datos para el modal de trackings
-    let session_state_for_modal = session_handle.state.clone();
-    let tracking_query_for_modal = tracking_query.clone();
-    let show_tracking_modal_for_modal = show_tracking_modal.clone();
-    let on_tracking_selected_for_modal = on_tracking_selected.clone();
-    
-    let modal_class = if *show_tracking_modal { "company-modal show" } else { "company-modal" };
-    
-    // Obtener trackings de la sesión
-    let trackings: Vec<String> = if let Some(session) = &(*session_state_for_modal).session {
-        session.packages.keys().cloned().collect()
-    } else {
-        Vec::new()
-    };
-    
-    // Filtrar trackings basado en la query
-    let filtered_trackings: Vec<String> = {
-        let q = (*tracking_query_for_modal).to_lowercase();
-        if q.is_empty() {
-            trackings.clone()
-        } else {
-            trackings.iter()
-                .filter(|tracking| tracking.to_lowercase().contains(&q))
-                .cloned()
-                .collect()
         }
-    };
+    }).forget();
     
-    // Obtener información adicional de los paquetes para mostrar
-    let tracking_items: Vec<(String, Option<String>, Option<String>)> = if let Some(session) = &(*session_state_for_modal).session {
-        filtered_trackings.iter()
-            .filter_map(|tracking| {
-                session.packages.get(tracking).map(|pkg| {
-                    (tracking.clone(), Some(pkg.customer_name.clone()), Some(pkg.status.clone()))
-                })
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
+    Ok(map_container)
+}
 
-    html! {
-        <>
-            <header class="app-header">
-                <h1>{t("route_optimizer", &(*language))}</h1>
-                <div class="header-actions">
-                    <button 
-                        class="btn-icon-header btn-optimize-mini" 
-                        onclick={Callback::from({
-                            let session_state = session_handle.state.clone();
-                            move |_| {
-                                let session_state = session_state.clone();
-                                
-                                // Obtener sesión actual
-                                let current_session = {
-                                    let session = (*session_state).clone();
-                                    session.session.clone()
-                                };
-                                
-                                if let Some(session) = current_session {
-                                    let session_id = session.session_id.clone();
-                                    let vm = SessionViewModel::new();
-                                    
-                                    // Marcar como cargando
-                                    let mut new_state = (*session_state).clone();
-                                    new_state.loading = true;
-                                    new_state.error = None;
-                                    session_state.set(new_state);
-                                    
-                                    wasm_bindgen_futures::spawn_local(async move {
-                                        match vm.optimize_route(&session_id).await {
-                                            Ok(updated_session) => {
-                                                log::info!("✅ Optimización completada: {} paquetes en orden optimizado", 
-                                                          updated_session.stats.total_packages);
-                                                
-                                                // Actualizar estado con sesión optimizada
-                                                let mut new_state = (*session_state).clone();
-                                                new_state.session = Some(updated_session);
-                                                new_state.loading = false;
-                                                new_state.error = None;
-                                                session_state.set(new_state);
-                                            }
-                                            Err(e) => {
-                                                log::error!("❌ Error optimizando ruta: {}", e);
-                                                
-                                                // Mostrar alert si el error es por falta de localización
-                                                let error_lower = e.to_lowercase();
-                                                if error_lower.contains("geolocalización") || 
-                                                   error_lower.contains("ubicación") || 
-                                                   error_lower.contains("localización") ||
-                                                   error_lower.contains("location") {
-                                                    if let Some(window) = web_sys::window() {
-                                                        let _ = window.alert_with_message(
-                                                            "⚠️ Debes activar tu localización primero.\n\nPor favor, haz clic en el botón de geolocalización (📍) en el mapa para activar tu ubicación antes de optimizar la ruta."
-                                                        );
-                                                    }
-                                                }
-                                                
-                                                // Mostrar error en estado
-                                                let mut new_state = (*session_state).clone();
-                                                new_state.loading = false;
-                                                new_state.error = Some(e);
-                                                session_state.set(new_state);
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    log::warn!("⚠️ No hay sesión activa para optimizar");
-                                }
-                            }
-                        })}
-                        disabled={loading}
-                        title={t("optimiser", &(*language))}
-                    >
-                        {"🎯"}
-                    </button>
-                    <button 
-                        class="btn-icon-header btn-tracking-search" 
-                        onclick={Callback::from({
-                            let show_tracking_modal = show_tracking_modal.clone();
-                            move |_| {
-                                show_tracking_modal.set(true);
-                            }
-                        })}
-                        disabled={loading || session_state.session.is_none()}
-                        title="Buscar tracking"
-                    >
-                        {"🔍"}
-                    </button>
-                    <button 
-                        class="btn-icon-header btn-scanner" 
-                        onclick={toggle_scanner.clone()}
-                        disabled={loading}
-                        title={t("scanner", &(*language))}
-                    >
-                        {"📷"}
-                    </button>
-                    <button 
-                        class="btn-icon-header btn-refresh" 
-                        onclick={Callback::from({
-                            let session_state = session_handle.state.clone();
-                            let map_handle_refresh = map_handle.update_packages.clone();
-                            let filter_mode_refresh = filter_mode.clone();
-                            move |_| {
-                                let session_state = session_state.clone();
-                                let map_update = map_handle_refresh.clone();
-                                let filter_mode_for_refresh = filter_mode_refresh.clone();
-                                
-                                // Obtener sesión actual
-                                let current_session = {
-                                    let session = (*session_state).clone();
-                                    session.session.clone()
-                                };
-                                
-                                if let Some(session) = current_session {
-                                    let session_id = session.session_id.clone();
-                                    let username = session.driver.driver_id.clone();
-                                    let societe = session.driver.company_id.clone();
-                                    let vm = SessionViewModel::new();
-                                    let sync_service = SyncService::new();
-                                    
-                                    // Marcar como cargando
-                                    let mut new_state = (*session_state).clone();
-                                    new_state.loading = true;
-                                    new_state.error = None;
-                                    session_state.set(new_state);
-                                    
-                                    wasm_bindgen_futures::spawn_local(async move {
-                                        // 1. Primero procesar cambios pendientes
-                                        log::info!("🔄 Procesando cambios pendientes antes de refrescar...");
-                                        if let Err(e) = sync_service.process_pending_queue().await {
-                                            log::warn!("⚠️ Error procesando cambios pendientes: {}", e);
-                                        }
-                                        
-                                        // 2. Luego hacer sync incremental
-                                        match vm.sync_incremental(&session_id, &username, &societe, None).await {
-                                            Ok(updated_session) => {
-                                                log::info!("✅ Sincronización incremental completada: {} paquetes", 
-                                                          updated_session.stats.total_packages);
-                                                
-                                                // Actualizar estado con sesión actualizada
-                                                let mut new_state = (*session_state).clone();
-                                                new_state.session = Some(updated_session.clone());
-                                                new_state.loading = false;
-                                                new_state.error = None;
-                                                session_state.set(new_state);
-                                                
-                                                // ⭐ Actualizar mapa explícitamente
-                                                use gloo_timers::callback::Timeout;
-                                                use crate::viewmodels::map_viewmodel::MapViewModel;
-                                                
-                                                // Preparar paquetes para el mapa
-                                                let mut packages_vec: Vec<_> = updated_session.packages.values().cloned().collect();
-                                                if *filter_mode_for_refresh {
-                                                    packages_vec.retain(|p| p.status.starts_with("STATUT_CHARGER"));
-                                                }
-                                                
-                                                let groups = group_packages(packages_vec, GroupBy::Address);
-                                                let packages_for_map = MapViewModel::prepare_packages_for_map(&groups, &updated_session);
-                                                
-                                                Timeout::new(300, move || {
-                                                    log::info!("🗺️ Actualizando mapa después de refresh: {} paquetes", packages_for_map.len());
-                                                    map_update.emit(packages_for_map);
-                                                }).forget();
-                                            }
-                                            Err(e) => {
-                                                log::error!("❌ Error en sincronización incremental: {}", e);
-                                                
-                                                // Mostrar error
-                                                let mut new_state = (*session_state).clone();
-                                                new_state.loading = false;
-                                                new_state.error = Some(e);
-                                                session_state.set(new_state);
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    log::warn!("⚠️ No hay sesión activa para refrescar");
-                                }
-                            }
-                        })}
-                        disabled={loading}
-                        title={t("rafraichir", &(*language))}
-                    >
-                        {if loading { "⏳" } else { "🔄" }}
-                    </button>
-                    <button class="btn-icon-header btn-settings" onclick={toggle_params.clone()}>{"⚙️"}</button>
-                </div>
-            </header>
-            
-            <div id="map" class="map-container"></div>
-            
-            <div id="package-container" class="package-container">
-                <div id="backdrop" class={classes!("backdrop", if sheet_state.as_str() != "collapsed" { Some("active") } else { None })} onclick={close_sheet.clone()}></div>
-                
-                <div id="bottom-sheet" class={
-                    let cls = sheet_state.as_str().to_string();
-                    classes!("bottom-sheet", cls)
-                }>
-                    <div class="drag-handle-container" onclick={toggle_sheet_size.clone()}>
-                        <div class="drag-handle"></div>
-                        {
-                            if let Some(ref session) = session_state.session {
-                                // ========== CONTADOR DE DIRECCIONES TRATADAS ==========
-                                let total_addresses = session.stats.total_addresses;
-                                let completed_addresses = session.addresses.values()
-                                    .filter(|address| {
-                                        // Dirección tratada = TODOS los paquetes están hechos (no CHARGER)
-                                        !address.package_ids.is_empty() && address.package_ids.iter().all(|pkg_id| {
-                                            session.packages.get(pkg_id)
-                                                .map(|pkg| !pkg.status.starts_with("STATUT_CHARGER"))
-                                                .unwrap_or(false)
-                                        })
-                                    })
-                                    .count();
-                                
-                                // ========== CONTADOR DE PAQUETES ==========
-                                let total_packages = session.stats.total_packages;
-                                
-                                // Paquetes entregados (LIVRER)
-                                let delivered_packages = session.packages.values()
-                                    .filter(|p| p.status.contains("LIVRER"))
-                                    .count();
-                                
-                                // Paquetes fallidos (NONLIV)
-                                let failed_packages = session.packages.values()
-                                    .filter(|p| p.status.contains("NONLIV"))
-                                    .count();
-                                
-                                // Porcentajes para la barra de progreso
-                                let delivered_percent = if total_packages > 0 { 
-                                    (delivered_packages * 100) / total_packages 
-                                } else { 
-                                    0 
-                                };
-                                
-                                let failed_percent = if total_packages > 0 { 
-                                    (failed_packages * 100) / total_packages 
-                                } else { 
-                                    0 
-                                };
-                                
-                                html!{
-                                    <>
-                                    <div class="progress-info">
-                                        <div class="progress-text">
-                                                <span class="progress-count">
-                                                    {format!("✓ {}/{} {}", completed_addresses, total_addresses, t("traitees", &(*language)))}
-                                                </span>
-                                            </div>
-                                            <div class="progress-packages">
-                                                <span class="packages-count">
-                                                    {format!("{}/{} {}", delivered_packages, total_packages, t("paquets", &(*language)))}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="progress-bar-container">
-                                            // Barra verde (entregados)
-                                            <div 
-                                                class="progress-bar progress-bar-delivered" 
-                                                style={format!("width: {}%", delivered_percent)}
-                                            ></div>
-                                            // Barra roja (fallidos) - se superpone después de la verde
-                                            <div 
-                                                class="progress-bar progress-bar-failed" 
-                                                style={format!("width: {}%; left: {}%", failed_percent, delivered_percent)}
-                                            ></div>
-                                    </div>
-                                    </>
-                                }
-                            } else { html!{} }
-                        }
-                    </div>
-                    {
-                        if let Some(ref session) = session_state.session {
-                            if session.packages.is_empty() {
-                                html!{
-                                    <div class="no-packages">
-                                        <div class="no-packages-icon">{"📦"}</div>
-                                        <div class="no-packages-text">{t("aucun_colis", &(*language))}</div>
-                                        <div class="no-packages-subtitle">{t("veuillez_rafraichir", &(*language))}</div>
-                                    </div>
-                                }
-                            } else {
-                                // Usar los grupos memorizados
-                                if let Some(groups) = (*groups_memo).as_ref() {
-                                    let addresses: std::collections::HashMap<String, String> = session.addresses.iter().map(|(id, a)| (id.clone(), a.label.clone())).collect();
-                                    
-                                    // Callback para abrir modal de detalles
-                                    let show_details_state = show_details.clone();
-                                    let details_package_state = details_package.clone();
-                                    let session_packages = session.packages.clone();
-                                    let session_addresses = session.addresses.clone();
-                                    let on_info = Callback::from(move |tracking: String| {
-                                        log::info!("📦 Abriendo detalles para tracking: {}", tracking);
-                                        
-                                        // Buscar el paquete en la sesión
-                                        if let Some(pkg) = session_packages.get(&tracking) {
-                                            // Obtener la dirección asociada
-                                            if let Some(addr) = session_addresses.get(&pkg.address_id) {
-                                                log::info!("✅ Paquete y dirección encontrados");
-                                                details_package_state.set(Some((pkg.clone(), addr.clone())));
-                                                show_details_state.set(true);
-                                            } else {
-                                                log::warn!("⚠️ Dirección no encontrada para address_id: {}", pkg.address_id);
-                                            }
-                                        } else {
-                                            log::warn!("⚠️ Paquete no encontrado: {}", tracking);
-                                        }
-                                    });
-                                    
-                                    html!{ 
-                                        <PackageList 
-                                            groups={groups.clone()} 
-                                            addresses={addresses} 
-                                            on_info={on_info} 
-                                            on_package_selected={Some(on_package_selected.clone())}
-                                            selected_index={*selected_package_index}
-                                        /> 
-                                    }
-                                } else {
-                                    html!{}
-                                }
-                            }
-                        } else { html!{} }
-                    }
-                </div>
-            </div>
-            
-            {
-                if *show_scanner {
-                    html! {
-                        <Scanner
-                            show={true}
-                            on_close={Callback::from(move |_| {
-                                show_scanner.set(false);
-                            })}
-                            on_barcode_detected={on_barcode_detected.clone()}
-                        />
-                    }
-                } else {
-                    html! {}
-                }
-            }
+/// Obtener altura del header (de CSS variable o default)
+fn get_header_height() -> String {
+    // Por defecto 60px, pero debería leerse de CSS variable
+    "60".to_string()
+}
 
-            <SettingsPopup 
-                active={*show_params} 
-                on_close={on_close_settings} 
-                on_logout={on_logout} 
-                on_retry_map={on_retry}
-                language={(*language).clone()}
-                on_toggle_language={Some(Callback::from({
-                    let language = language.clone();
-                    move |new_lang: String| {
-                        language.set(new_lang.clone());
-                        // Guardar en localStorage
-                        if let Some(window) = web_sys::window() {
-                            if let Ok(Some(storage)) = window.local_storage() {
-                                let _ = storage.set_item("language", &new_lang);
-                            }
-                        }
-                    }
-                }))}
-                edit_mode={*edit_mode}
-                on_toggle_edit_mode={Some(Callback::from({
-                    let edit_mode = edit_mode.clone();
-                    let edit_origin_idx = edit_origin_idx.clone();
-                    move |enabled: bool| {
-                        edit_mode.set(enabled);
-                        if !enabled {
-                            // Si se desactiva el modo edición, limpiar origen
-                            edit_origin_idx.set(None);
-                        }
-                    }
-                }))}
-                filter_mode={*filter_mode}
-                on_toggle_filter={Some(Callback::from({
-                    let filter_mode = filter_mode.clone();
-                    move |enabled: bool| {
-                        filter_mode.set(enabled);
-                    }
-                }))}
-            />
+/// Configurar listener para eventos de selección del mapa
+fn setup_map_selection_listener(state: crate::state::app_state::AppState, groups_count: usize) {
+    if let Some(win) = web_sys::window() {
+        let state_clone = state.clone();
+        let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |event: wasm_bindgen::JsValue| {
+            log::info!("📡 [MAP] Evento 'packageSelected' recibido");
             
-            // Modal de detalles
-            {
-                if *show_details {
-                    if let Some((pkg, addr)) = (*details_package).clone() {
-                        let session_state_for_modal = session_handle.state.clone();
-                        let address_id = addr.address_id.clone();
-                        let session_id = if let Some(ref session) = session_state_for_modal.session {
-                            session.session_id.clone()
-                        } else {
-                            String::new()
-                        };
-                        let username = if let Some(ref session) = session_state_for_modal.session {
-                            session.driver.driver_id.clone()
-                        } else {
-                            String::new()
-                        };
-                        let societe = if let Some(ref session) = session_state_for_modal.session {
-                            session.driver.company_id.clone()
-                        } else {
-                            String::new()
-                        };
+            // Obtener detail.index del evento custom
+            if let Ok(detail) = js_sys::Reflect::get(&event, &wasm_bindgen::JsValue::from_str("detail")) {
+                if let Ok(index_val) = js_sys::Reflect::get(&detail, &wasm_bindgen::JsValue::from_str("index")) {
+                    if let Some(index_f64) = index_val.as_f64() {
+                        let package_index = index_f64 as usize;
                         
-                        html! {
-                            <DetailsModal
-                                package={pkg}
-                                address={addr}
-                                language={(*language).clone()}
-                                on_close={Callback::from({
-                                    let show_details = show_details.clone();
-                                    move |_| show_details.set(false)
-                                })}
-                                on_edit_address={Some(Callback::from({
-                                    let session_state = session_state_for_modal.clone();
-                                    let address_id = address_id.clone();
-                                    let session_id = session_id.clone();
-                                    let details_package_state = details_package.clone();
-                                    move |new_label: String| {
-                                        log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                        log::info!("📝 ON_EDIT_ADDRESS CALLBACK EJECUTADO");
-                                        log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                        log::info!("   📍 address_id: {}", address_id);
-                                        log::info!("   📝 new_label: '{}'", new_label);
-                                        
-                                        let session_state = session_state.clone();
-                                        let address_id = address_id.clone();
-                                        let session_id = session_id.clone();
-                                        let details_package = details_package_state.clone();
-                                        let vm = SessionViewModel::new();
-                                        
-                                        // Log estado actual de details_package
-                                        if let Some((pkg, addr)) = (*details_package).clone() {
-                                            log::info!("   📦 details_package actual: tracking={}, address_id={}, label='{}'", 
-                                                      pkg.tracking, addr.address_id, addr.label);
-                                            log::info!("   📦 is_problematic: {}", pkg.is_problematic);
-                                        } else {
-                                            log::warn!("   ⚠️ details_package es None");
-                                        }
-                                        
-                                        // Marcar como cargando
-                                        let mut new_state = (*session_state).clone();
-                                        new_state.loading = true;
-                                        new_state.error = None;
-                                        session_state.set(new_state);
-                                        
-                                        wasm_bindgen_futures::spawn_local(async move {
-                                            log::info!("   🔄 Llamando a vm.update_address...");
-                                            match vm.update_address(&session_id, &address_id, new_label.clone()).await {
-                                                Ok(updated_session) => {
-                                                    log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                                    log::info!("✅ RESPUESTA DEL BACKEND - Dirección actualizada");
-                                                    log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                                    
-                                                    // Verificar dirección actualizada en la sesión
-                                                    if let Some(updated_addr) = updated_session.addresses.get(&address_id) {
-                                                        log::info!("   📍 Dirección actualizada en sesión:");
-                                                        log::info!("      - address_id: {}", address_id);
-                                                        log::info!("      - label: '{}'", updated_addr.label);
-                                                        log::info!("      - lat: {}, lng: {}", 
-                                                                  updated_addr.latitude, updated_addr.longitude);
-                                                    } else {
-                                                        log::error!("   ❌ Dirección NO encontrada en updated_session.addresses!");
-                                                    }
-                                                    
-                                                    // Verificar paquetes problemáticos
-                                                    let problematic_packages: Vec<_> = updated_session.packages.iter()
-                                                        .filter(|(_, p)| p.is_problematic)
-                                                        .collect();
-                                                    log::info!("   📦 Paquetes problemáticos en sesión: {}", problematic_packages.len());
-                                                    for (tracking, pkg) in problematic_packages.iter() {
-                                                        log::info!("      - tracking: {}, is_problematic: {}", tracking, pkg.is_problematic);
-                                                    }
-                                                    
-                                                    // Actualizar estado con sesión actualizada
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.session = Some(updated_session.clone());
-                                                    new_state.loading = false;
-                                                    new_state.error = None;
-                                                    session_state.set(new_state);
-                                                    log::info!("   ✅ session_state actualizado");
-                                                    
-                                                    // Actualizar también details_package inmediatamente si está abierto
-                                                    if let Some((pkg, old_addr)) = (*details_package).clone() {
-                                                        log::info!("   🔍 Buscando paquete y dirección actualizados en details_package...");
-                                                        log::info!("      - tracking buscado: {}", pkg.tracking);
-                                                        log::info!("      - address_id buscado: {}", address_id);
-                                                        
-                                                        if let Some(updated_pkg) = updated_session.packages.get(&pkg.tracking) {
-                                                            log::info!("      ✅ Paquete encontrado: tracking={}, is_problematic={}", 
-                                                                      updated_pkg.tracking, updated_pkg.is_problematic);
-                                                            
-                                                            if let Some(updated_addr) = updated_session.addresses.get(&address_id) {
-                                                                log::info!("      ✅ Dirección encontrada: address_id={}, label='{}', lat={}, lng={}", 
-                                                                          address_id, updated_addr.label, 
-                                                                          updated_addr.latitude, updated_addr.longitude);
-                                                                
-                                                                details_package.set(Some((updated_pkg.clone(), updated_addr.clone())));
-                                                                log::info!("   ✅✅✅ details_package ACTUALIZADO INMEDIATAMENTE");
-                                                                log::info!("      - Nuevo is_problematic: {}", updated_pkg.is_problematic);
-                                                                log::info!("      - Nuevo label: '{}'", updated_addr.label);
-                                                            } else {
-                                                                log::error!("      ❌ Dirección NO encontrada en updated_session.addresses!");
-                                                                log::info!("      🔍 Addresses disponibles: {:?}", 
-                                                                          updated_session.addresses.keys().collect::<Vec<_>>());
-                                                            }
-                                                        } else {
-                                                            log::error!("      ❌ Paquete NO encontrado en updated_session.packages!");
-                                                            log::info!("      🔍 Tracking buscado: {}", pkg.tracking);
-                                                        }
-                                                    } else {
-                                                        log::warn!("   ⚠️ details_package es None, no se puede actualizar");
-                                                    }
-                                                    
-                                                    log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                                }
-                                                Err(e) => {
-                                                    log::error!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                                    log::error!("❌ ERROR ACTUALIZANDO DIRECCIÓN");
-                                                    log::error!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                                    log::error!("   Error: {}", e);
-                                                    
-                                                    // Mostrar error
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.loading = false;
-                                                    new_state.error = Some(e);
-                                                    session_state.set(new_state);
-                                                }
-                                            }
-                                        });
-                                    }
-                                }))}
-                                on_edit_door_code={Some(Callback::from({
-                                    let session_state = session_state_for_modal.clone();
-                                    let address_id = address_id.clone();
-                                    let session_id = session_id.clone();
-                                    let details_package_state = details_package.clone();
-                                    move |new_code: String| {
-                                        let session_state = session_state.clone();
-                                        let address_id = address_id.clone();
-                                        let session_id = session_id.clone();
-                                        let details_package = details_package_state.clone();
-                                        let vm = SessionViewModel::new();
-                                        
-                                        // Marcar como cargando
-                                        let mut new_state = (*session_state).clone();
-                                        new_state.loading = true;
-                                        new_state.error = None;
-                                        session_state.set(new_state);
-                                        
-                                        wasm_bindgen_futures::spawn_local(async move {
-                                            // Enviar Some("") para borrar campo, el backend lo convertirá a None
-                                            let door_code = Some(new_code.trim().to_string());
-                                            
-                                            match vm.update_address_fields(&session_id, &address_id, door_code, None, None).await {
-                                                Ok(updated_session) => {
-                                                    log::info!("✅ Código de puerta actualizado exitosamente");
-                                                    
-                                                    // Actualizar estado con sesión actualizada
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.session = Some(updated_session.clone());
-                                                    new_state.loading = false;
-                                                    new_state.error = None;
-                                                    session_state.set(new_state);
-                                                    
-                                                    // ⭐ Actualizar details_package inmediatamente si está abierto
-                                                    if let Some((pkg, old_addr)) = (*details_package).clone() {
-                                                        if let Some(updated_addr) = updated_session.addresses.get(&address_id) {
-                                                            details_package.set(Some((pkg.clone(), updated_addr.clone())));
-                                                            log::info!("✅ details_package actualizado inmediatamente para door_code");
-                                                        }
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    log::error!("❌ Error actualizando código de puerta: {}", e);
-                                                    
-                                                    // Mostrar error
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.loading = false;
-                                                    new_state.error = Some(e);
-                                                    session_state.set(new_state);
-                                                }
-                                            }
-                                        });
-                                    }
-                                }))}
-                                on_toggle_mailbox={Some(Callback::from({
-                                    let session_state = session_state_for_modal.clone();
-                                    let address_id = address_id.clone();
-                                    let session_id = session_id.clone();
-                                    move |new_value: bool| {
-                                        let session_state = session_state.clone();
-                                        let address_id = address_id.clone();
-                                        let session_id = session_id.clone();
-                                        let vm = SessionViewModel::new();
-                                        
-                                        // Marcar como cargando
-                                        let mut new_state = (*session_state).clone();
-                                        new_state.loading = true;
-                                        new_state.error = None;
-                                        session_state.set(new_state);
-                                        
-                                        wasm_bindgen_futures::spawn_local(async move {
-                                            match vm.update_address_fields(&session_id, &address_id, None, Some(new_value), None).await {
-                                                Ok(updated_session) => {
-                                                    log::info!("✅ Acceso BAL actualizado exitosamente: {}", new_value);
-                                                    
-                                                    // Actualizar estado con sesión actualizada
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.session = Some(updated_session);
-                                                    new_state.loading = false;
-                                                    new_state.error = None;
-                                                    session_state.set(new_state);
-                                                }
-                                                Err(e) => {
-                                                    log::error!("❌ Error actualizando acceso BAL: {}", e);
-                                                    
-                                                    // Mostrar error
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.loading = false;
-                                                    new_state.error = Some(e);
-                                                    session_state.set(new_state);
-                                                }
-                                            }
-                                        });
-                                    }
-                                }))}
-                                on_edit_driver_notes={Some(Callback::from({
-                                    let session_state = session_state_for_modal.clone();
-                                    let address_id = address_id.clone();
-                                    let session_id = session_id.clone();
-                                    let details_package_state = details_package.clone();
-                                    move |new_notes: String| {
-                                        let session_state = session_state.clone();
-                                        let address_id = address_id.clone();
-                                        let session_id = session_id.clone();
-                                        let details_package = details_package_state.clone();
-                                        let vm = SessionViewModel::new();
-                                        
-                                        // Marcar como cargando
-                                        let mut new_state = (*session_state).clone();
-                                        new_state.loading = true;
-                                        new_state.error = None;
-                                        session_state.set(new_state);
-                                        
-                                        wasm_bindgen_futures::spawn_local(async move {
-                                            // Enviar Some("") para borrar campo, el backend lo convertirá a None
-                                            let driver_notes = Some(new_notes.trim().to_string());
-                                            
-                                            match vm.update_address_fields(&session_id, &address_id, None, None, driver_notes).await {
-                                                Ok(updated_session) => {
-                                                    log::info!("✅ Notas chofer actualizadas exitosamente");
-                                                    
-                                                    // Actualizar estado con sesión actualizada
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.session = Some(updated_session.clone());
-                                                    new_state.loading = false;
-                                                    new_state.error = None;
-                                                    session_state.set(new_state);
-                                                    
-                                                    // ⭐ Actualizar details_package inmediatamente si está abierto
-                                                    if let Some((pkg, old_addr)) = (*details_package).clone() {
-                                                        if let Some(updated_addr) = updated_session.addresses.get(&address_id) {
-                                                            details_package.set(Some((pkg.clone(), updated_addr.clone())));
-                                                            log::info!("✅ details_package actualizado inmediatamente para driver_notes");
-                                                        }
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    log::error!("❌ Error actualizando notas chofer: {}", e);
-                                                    
-                                                    // Mostrar error
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.loading = false;
-                                                    new_state.error = Some(e);
-                                                    session_state.set(new_state);
-                                                }
-                                            }
-                                        });
-                                    }
-                                }))}
-                                on_mark_problematic={Some(Callback::from({
-                                    let session_state = session_state_for_modal.clone();
-                                    let address_id = address_id.clone();
-                                    let session_id = session_id.clone();
-                                    let details_package_state = details_package.clone();
-                                    move |_| {
-                                        log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                        log::info!("⚠️ MARCAR COMO PROBLEMÁTICO");
-                                        log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                        log::info!("   📍 address_id: {}", address_id);
-                                        
-                                        let session_state = session_state.clone();
-                                        let address_id = address_id.clone();
-                                        let session_id = session_id.clone();
-                                        let details_package = details_package_state.clone();
-                                        let vm = SessionViewModel::new();
-                                        
-                                        // Marcar como cargando
-                                        let mut new_state = (*session_state).clone();
-                                        new_state.loading = true;
-                                        new_state.error = None;
-                                        session_state.set(new_state);
-                                        
-                                        wasm_bindgen_futures::spawn_local(async move {
-                                            log::info!("   🔄 Llamando a vm.mark_as_problematic...");
-                                            match vm.mark_as_problematic(&session_id, &address_id).await {
-                                                Ok(updated_session) => {
-                                                    log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                                    log::info!("✅ Dirección marcada como problemática exitosamente");
-                                                    log::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                                                    
-                                                    // Actualizar estado con sesión actualizada
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.session = Some(updated_session.clone());
-                                                    new_state.loading = false;
-                                                    new_state.error = None;
-                                                    session_state.set(new_state);
-                                                    
-                                                    // Actualizar details_package
-                                                    if let Some((pkg, addr)) = (*details_package).clone() {
-                                                        if let Some(updated_pkg) = updated_session.packages.get(&pkg.tracking) {
-                                                            if let Some(updated_addr) = updated_session.addresses.get(&address_id) {
-                                                                details_package.set(Some((updated_pkg.clone(), updated_addr.clone())));
-                                                                log::info!("   ✅ details_package actualizado");
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    log::error!("❌ Error marcando como problemática: {}", e);
-                                                    let mut new_state = (*session_state).clone();
-                                                    new_state.loading = false;
-                                                    new_state.error = Some(e);
-                                                    session_state.set(new_state);
-                                                }
-                                            }
-                                        });
-                                    }
-                                }))}
-                            />
+                        log::info!("📍 [MAP] group_idx recibido del mapa: {}", package_index);
+                        
+                        // Validar índice
+                        if package_index >= groups_count {
+                            log::warn!("⚠️ [MAP] group_idx {} >= grupos disponibles {}, ignorando", 
+                                      package_index, groups_count);
+                            return;
                         }
-                    } else {
-                        html! {}
+                        
+                        // Actualizar índice seleccionado
+                        state_clone.set_selected_package_index(Some(package_index));
+                        
+                        // Abrir bottom sheet si está collapsed
+                        let current_state = state_clone.sheet_state.borrow().clone();
+                        if current_state == "collapsed" {
+                            state_clone.set_sheet_state("half".to_string());
+                            log::info!("📱 [MAP] Bottom sheet abierto desde colapsado → half");
+                        }
+                        
+                        // Hacer scroll al card seleccionado (con delay para que el sheet se abra)
+                        use gloo_timers::callback::Timeout;
+                        Timeout::new(300, move || {
+                            crate::utils::mapbox_ffi::scroll_to_selected_package(package_index);
+                        }).forget();
+                        
+                        log::info!("✅ [MAP] Selección sincronizada con bottom sheet");
                     }
-                } else {
-                    html! {}
                 }
             }
-            
-            <SyncIndicator />
-            
-            // Modal de búsqueda de trackings
-            {
-                html! {
-                    <div class={modal_class} onclick={Callback::from({
-                        let show_tracking_modal = show_tracking_modal_for_modal.clone();
-                        move |_| { if *show_tracking_modal { show_tracking_modal.set(false); } }
-                    })}>
-                        <div class="company-modal-content" onclick={Callback::from(|e: MouseEvent| e.stop_propagation())}>
-                            <div class="company-modal-header">
-                                <h3>{"Buscar Tracking"}</h3>
-                                <button type="button" class="btn-close" onclick={Callback::from({
-                                    let show_tracking_modal = show_tracking_modal_for_modal.clone();
-                                    move |_| { show_tracking_modal.set(false); }
-                                })}>{"✕"}</button>
-                            </div>
-                            <div class="company-search">
-                                <input
-                                    type="text"
-                                    id="tracking-search"
-                                    placeholder="Buscar tracking..."
-                                    value={(*tracking_query_for_modal).clone()}
-                                    oninput={Callback::from({
-                                        let tracking_query = tracking_query_for_modal.clone();
-                                        move |e: InputEvent| {
-                                            let input: HtmlInputElement = e.target_unchecked_into();
-                                            tracking_query.set(input.value());
-                                        }
-                                    })}
-                                />
-                            </div>
-                            <div class="company-list">
-                                {
-                                    if trackings.is_empty() {
-                                        html!{ <div class="company-loading">{"⏳ No hay trackings disponibles"}</div> }
-                                    } else if filtered_trackings.is_empty() {
-                                        html!{ <div class="company-empty">{"No se encontraron trackings"}</div> }
-                                    } else {
-                                        html!{ for tracking_items.iter().map(|(tracking, customer_name, status)| {
-                                            let tracking_clone = tracking.clone();
-                                            let on_click = Callback::from({
-                                                let on_tracking_selected = on_tracking_selected_for_modal.clone();
-                                                let show_tracking_modal = show_tracking_modal_for_modal.clone();
-                                                move |_| { 
-                                                    on_tracking_selected.emit(tracking_clone.clone());
-                                                }
-                                            });
-                                            html!{
-                                                <div class="company-item" onclick={on_click}>
-                                                    <div>
-                                                        <div class="company-name">{tracking}</div>
-                                                        {
-                                                            if let Some(name) = customer_name {
-                                                                html!{ <div class="company-code">{name}</div> }
-                                                            } else {
-                                                                html!{}
-                                                            }
-                                                        }
-                                                        {
-                                                            if let Some(stat) = status {
-                                                                html!{ <div class="company-code" style="font-size: 11px; color: #999;">{stat}</div> }
-                                                            } else {
-                                                                html!{}
-                                                            }
-                                                        }
-                                                    </div>
-                                                </div>
-                                            }
-                                        }) }
-                                    }
-                                }
-                            </div>
-                        </div>
-                    </div>
-                }
-            }
-        </>
+        }) as Box<dyn FnMut(wasm_bindgen::JsValue)>);
+        
+        // Registrar listener (se mantiene vivo con forget)
+        if win.add_event_listener_with_callback("packageSelected", closure.as_ref().unchecked_ref()).is_ok() {
+            log::info!("✅ [MAP] Listener 'packageSelected' registrado");
+            closure.forget();
+        } else {
+            log::error!("❌ [MAP] Error registrando listener 'packageSelected'");
+        }
     }
 }

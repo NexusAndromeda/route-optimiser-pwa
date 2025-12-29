@@ -5,7 +5,7 @@
 // ============================================================================
 
 use crate::models::{Package, session::DeliverySession};
-use crate::hooks::use_grouped_packages::PackageGroup;
+use crate::views::package_list::PackageGroup;
 use crate::utils::mapbox_ffi::*;
 use gloo_timers::callback::Timeout;
 use serde::Serialize;

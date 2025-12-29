@@ -1,25 +1,39 @@
 /* ============================================
-   CSS CUSTOM PROPERTIES (Variables extendidas)
+   CSS CUSTOM PROPERTIES - Variables CSS
+   Organizadas por categoría siguiendo mejores prácticas
    ============================================ */
+
 :root {
+  /* ========== COLORES ========== */
+  
+  /* Primarios */
   --color-primary: #2563eb;
   --color-primary-dark: #764ba2;
   --color-primary-light: #a8b9ff;
   --color-primary-hover: #5568d3;
+  
+  /* Estados semánticos */
   --color-success: #10b981;
   --color-success-light: #d1fae5;
   --color-success-dark: #059669;
+  
   --color-warning: #f59e0b;
   --color-warning-light: #fef3c7;
   --color-warning-dark: #d97706;
+  
   --color-error: #ef4444;
   --color-error-light: #fee2e2;
   --color-error-dark: #dc2626;
+  
   --color-info: #3b82f6;
   --color-info-light: #dbeafe;
   --color-info-dark: #2563eb;
+  
+  /* Colores neutros */
   --color-black: #000000;
   --color-white: #ffffff;
+  
+  /* Escala de grises */
   --color-gray-50: #f9fafb;
   --color-gray-100: #f3f4f6;
   --color-gray-200: #e5e7eb;
@@ -30,15 +44,21 @@
   --color-gray-700: #374151;
   --color-gray-800: #1f2937;
   --color-gray-900: #111827;
+  
+  /* Fondos (dark mode por defecto) */
   --bg-primary: #111827;
   --bg-surface: #1F2937;
   --bg-surface-variant: #374151;
   --bg-surface-container: #4B5563;
-  --header-height: 64px;
-  --sidebar-width: 320px;
+  
+  /* Textos (dark mode por defecto) */
   --text-primary: #F9FAFB;
   --text-secondary: #9CA3AF;
+  
+  /* Bordes */
   --border-color: #374151;
+  
+  /* ========== ESPACIADO ========== */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
@@ -46,30 +66,14 @@
   --spacing-xl: 32px;
   --spacing-2xl: 48px;
   --spacing-3xl: 64px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 20px;
-  --radius-full: 9999px;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  --transition-fast: 150ms ease;
-  --transition-normal: 300ms ease;
-  --transition-slow: 500ms ease;
-  --z-base: 0;
-  --z-dropdown: 1000;
-  --z-sticky: 1020;
-  --z-fixed: 1030;
-  --z-modal-backdrop: 1040;
-  --z-modal: 1050;
-  --z-popover: 1060;
-  --z-tooltip: 1070;
+  
+  /* ========== TIPOGRAFÍA ========== */
+  
+  /* Familias de fuentes */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+  
+  /* Tamaños de fuente */
   --font-size-xs: 12px;
   --font-size-sm: 14px;
   --font-size-md: 16px;
@@ -78,15 +82,55 @@
   --font-size-2xl: 24px;
   --font-size-3xl: 30px;
   --font-size-4xl: 36px;
+  
+  /* Pesos de fuente */
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
+  
+  /* Alturas de línea */
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.75;
-  --bottom-sheet-height: 60vh;
+  
+  /* ========== LAYOUT ========== */
+  --header-height: 64px;
+  --sidebar-width: 320px;
+  --bottom-sheet-height: 60vh; /* Altura del bottom sheet para ajustar el mapa */
   --max-content-width: 1200px;
+  
+  /* ========== BORDES Y RADIOS ========== */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+  
+  /* ========== EFECTOS ========== */
+  
+  /* Sombras */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  
+  /* Transiciones */
+  --transition-fast: 150ms ease;
+  --transition-normal: 300ms ease;
+  --transition-slow: 500ms ease;
+  
+  /* Z-index layers */
+  --z-base: 0;
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
 }
 @media (prefers-color-scheme: light) {
   :root {

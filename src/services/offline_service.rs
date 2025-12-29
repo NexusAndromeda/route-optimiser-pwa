@@ -93,8 +93,16 @@ impl OfflineService {
                 match serde_json::from_str::<DeliverySession>(&json) {
                     Ok(session) => {
                         log::info!("✅ [STORAGE] Sesión deserializada exitosamente: {} paquetes", session.stats.total_packages);
-                Ok(Some(session))
-            }
+                        
+                        // Log de direcciones con mailbox_access después de deserializar
+                        for (addr_id, addr) in &session.addresses {
+                            if addr.mailbox_access.is_some() {
+                                log::info!("📬 [STORAGE] Dirección {} tiene mailbox_access={:?} después de deserializar", addr_id, addr.mailbox_access);
+                            }
+                        }
+                        
+                        Ok(Some(session))
+                    }
                     Err(e) => {
                         log::error!("❌ [STORAGE] Error deserializando sesión: {}", e);
                         // Intentar encontrar el campo problemático

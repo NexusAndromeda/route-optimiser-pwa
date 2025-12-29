@@ -72,12 +72,6 @@ impl SyncViewModel {
         }
     }
     
-    /// Iniciar auto-sync (helper para hooks)
-    pub fn start_auto_sync(&self) {
-        log::info!("⏰ Auto-sync iniciado (manejado por hook)");
-        // La lógica de auto-sync se maneja en use_sync_state hook
-    }
-    
     /// Iniciar monitoreo de red (helper para hooks)
     pub fn start_network_monitor(&mut self) {
         log::info!("🌐 Network monitor iniciado (manejado por hook)");

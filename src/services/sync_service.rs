@@ -258,24 +258,6 @@ impl SyncService {
             }
         }
     }
-    
-    /// Iniciar sincronización automática cuando vuelve la conexión
-    pub fn start_auto_sync(&mut self) {
-        let mut network_monitor = NetworkMonitor::new();
-        let sync_service = self.clone();
-        
-        network_monitor.on_online(move || {
-            let sync_service = sync_service.clone();
-            spawn_local(async move {
-                log::info!("🌐 Conexión restaurada - procesando queue automáticamente");
-                if let Err(e) = sync_service.process_pending_queue().await {
-                    log::error!("❌ Error procesando queue automática: {}", e);
-                }
-            });
-        });
-        
-        log::info!("🚀 Auto-sync iniciado - procesará queue cuando vuelva la conexión");
-    }
 }
 
 impl Default for SyncService {

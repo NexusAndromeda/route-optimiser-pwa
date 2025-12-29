@@ -158,17 +158,29 @@ window.initBarcodeScannerWithReady = function(containerId, onBarcodeDetected, on
 window.stopBarcodeScanner = function() {
     if (window.Quagga) {
         try {
+            // Intentar detener Quagga solo si está inicializado
+            // Usar try-catch para manejar el caso donde no está inicializado
+            if (typeof Quagga.stop === 'function') {
             Quagga.stop();
-            // Remove event listeners
+            }
+        } catch (e) {
+            // Si falla, probablemente no está inicializado - esto es OK
+            console.log("Quagga no estaba inicializado o ya estaba detenido:", e.message);
+        }
+        
+        // Siempre limpiar listeners (es seguro incluso si no está inicializado)
+        try {
             Quagga.offDetected();
             Quagga.offProcessed();
+        } catch (e) {
+            // Ignorar errores al limpiar listeners
+            console.log("Error limpiando listeners (puede ser normal):", e.message);
+        }
+        
             // Limpiar error visual si existe
             const viewport = document.getElementById('scanner-viewport');
             if (viewport) {
                 viewport.classList.remove('scanner-error');
-            }
-        } catch (e) {
-            console.error("Error stopping Quagga:", e);
         }
     }
 };

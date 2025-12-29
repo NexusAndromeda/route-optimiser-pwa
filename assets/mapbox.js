@@ -1,36 +1,20 @@
-// Mapbox initialization and helper functions
+// ============================================================================
+// MAPBOX HELPER FUNCTIONS
+// ============================================================================
+// Funciones helper para interactuar con Mapbox desde Rust/WASM
+// ============================================================================
+
 let map = null;
-let selectedPackageIndex = null;
-let pulseAnimationId = null;
 let geolocateControl = null;
 let currentDriverLocation = null;
+let selectedPackageIndex = null;
 
-// Initialize Mapbox map
-window.initMapbox = function(containerId, isDark) {
+// Initialize Mapbox
+window.initMapbox = function(containerId, isDark = true) {
     console.log('🗺️ Initializing Mapbox...');
     console.log('Container:', containerId);
     console.log('Dark mode:', isDark);
     
-    // Clean up existing map instance if any
-    if (map) {
-        console.log('🧹 Cleaning up existing map instance...');
-        try {
-            map.remove();
-            map = null;
-            selectedPackageIndex = null;
-        } catch (e) {
-            console.log('⚠️ Error removing existing map:', e);
-            map = null;
-        }
-    }
-    
-    // Check if mapboxgl is available
-    if (typeof mapboxgl === 'undefined') {
-        console.error('❌ Mapbox GL JS not loaded');
-        return;
-    }
-    
-    // Check if container exists
     const container = document.getElementById(containerId);
     if (!container) {
         console.error('❌ Container not found:', containerId);
@@ -83,6 +67,13 @@ window.initMapbox = function(containerId, isDark) {
         
         console.log('✅ Map created');
         
+        // Actualizar tamaño del mapa después de crearlo
+        setTimeout(() => {
+            if (window.updateMapSizeForBottomSheet) {
+                window.updateMapSizeForBottomSheet();
+            }
+        }, 100);
+        
         // Add navigation controls
         map.addControl(new mapboxgl.NavigationControl(), 'top-right');
         
@@ -106,10 +97,18 @@ window.initMapbox = function(containerId, isDark) {
         
         map.addControl(geolocateControl, 'top-right');
         
-        // Add packages when map loads
+        // Cuando el mapa carga, el estilo ya debería estar listo
         map.on('load', () => {
-            console.log('✅ Map loaded, adding packages...');
-            addPackagesToMap();
+            console.log('✅ Map loaded');
+            if (window.pendingPackagesJson) {
+                console.log('📦 Found pending packages, adding them now...');
+                // Llamar directamente a la función interna para evitar duplicar listeners
+                const packages = JSON.parse(window.pendingPackagesJson);
+                if (map.isStyleLoaded()) {
+                    // Función inline para agregar paquetes (similar a actuallyAddPackages pero sin duplicar código)
+                    window.addPackagesToMap(window.pendingPackagesJson);
+                }
+            }
         });
         
         map.on('error', (e) => {
@@ -123,9 +122,11 @@ window.initMapbox = function(containerId, isDark) {
                 console.log('🎨 Changing map theme:', e.matches ? 'Dark' : 'Light');
                 if (map) {
                     map.setStyle(newStyle);
-                    // Re-add packages after style change
-                    map.once('styledata', () => {
-                        addPackagesToMap();
+                    // Cuando el estilo cambia, re-agregar paquetes pendientes
+                    map.once('style.load', () => {
+                        if (window.pendingPackagesJson) {
+                            window.addPackagesToMap(window.pendingPackagesJson);
+                        }
                     });
                 }
             });
@@ -136,67 +137,63 @@ window.initMapbox = function(containerId, isDark) {
             if (map) {
                 setTimeout(() => {
                     map.resize();
-                    console.log('🔄 Map resized');
                 }, 100);
             }
         });
         
-        // Force resize after a short delay to handle initial render issues
+        // Initial resize after a short delay
         setTimeout(() => {
             if (map) {
-                map.resize();
                 console.log('🔄 Map initial resize');
+                map.resize();
             }
-        }, 500);
+        }, 200);
         
-        // Additional resize after DOM is fully loaded
+        // MutationObserver para detectar cambios en el DOM del container
+        const observer = new MutationObserver(() => {
+            if (map && window.updateMapSizeForBottomSheet) {
+                // Debounce para evitar demasiadas llamadas
+                if (window.mapResizeTimeout) {
+                    clearTimeout(window.mapResizeTimeout);
+                }
+                window.mapResizeTimeout = setTimeout(() => {
+                    window.updateMapSizeForBottomSheet();
+                }, 50);
+            }
+        });
+        
+        observer.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['style', 'class'],
+            childList: true,
+            subtree: true
+        });
+        
+        // Resize cuando el DOM está listo
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
+                if (map) {
+                    console.log('🔄 Map DOM ready resize');
                 setTimeout(() => {
-                    if (map) {
                         map.resize();
-                        console.log('🔄 Map DOM loaded resize');
+                    }, 100);
                     }
-                }, 200);
             });
         } else {
-            // DOM already loaded
             setTimeout(() => {
                 if (map) {
-                    map.resize();
                     console.log('🔄 Map DOM ready resize');
+                    map.resize();
                 }
-            }, 200);
+            }, 100);
         }
     } catch (error) {
-        console.error('❌ Error initializing map:', error);
+        console.error('❌ Error creating map:', error);
     }
     };
     
     // Start initialization
     initMap();
-};
-
-// Function to reinitialize map if it fails to load
-window.reinitializeMap = function() {
-    console.log('🔄 Reinitializing map...');
-    if (map) {
-        try {
-            map.remove();
-            map = null;
-        } catch (e) {
-            console.log('Map already removed or not initialized');
-        }
-    }
-    
-    // Wait a bit then reinitialize
-    setTimeout(() => {
-        const container = document.getElementById('map');
-        if (container) {
-            const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-            window.initMapbox('map', isDark);
-        }
-    }, 1000);
 };
 
 // Add packages to map as Style Layers
@@ -207,27 +204,34 @@ window.addPackagesToMap = function(packagesJson) {
     
     if (!map) {
         console.error('❌ Map not initialized');
+        // Guardar para cuando el mapa esté listo
+        if (packagesJson) {
+            window.pendingPackagesJson = packagesJson;
+        }
         return;
     }
     
     try {
-        // Use provided packages or fall back to window.currentPackages
-        let packages;
-        if (packagesJson) {
-            packages = JSON.parse(packagesJson);
-        } else {
-            packages = window.currentPackages || [];
-        }
-        console.log(`📦 Total paquetes recibidos: ${packages.length}`);
-        
-        // Wait for style to load before adding layers
-        if (!map.isStyleLoaded()) {
-            console.log('⏳ Waiting for map style to load...');
-            map.once('style.load', () => {
-                window.addPackagesToMap(packagesJson);
-            });
+        // Require packagesJson to be provided - don't use fallback to avoid clearing packages
+        if (!packagesJson) {
+            console.warn('⚠️ addPackagesToMap called without packagesJson, ignoring to prevent clearing existing packages');
             return;
         }
+        
+        // Guardar packagesJson para cuando el mapa esté listo
+        window.pendingPackagesJson = packagesJson;
+        
+        let packages = JSON.parse(packagesJson);
+        console.log(`📦 Total paquetes recibidos: ${packages.length}`);
+        
+        // Función interna para agregar paquetes cuando el mapa esté listo
+        const actuallyAddPackages = (packagesData) => {
+            if (!map || !map.isStyleLoaded()) {
+                console.log('⏳ Map style not loaded yet');
+                return false;
+            }
+            
+            console.log(`✅ Map style loaded, adding ${packagesData.length} packages...`);
         
         // Remove existing source and layers
         if (map.getSource('packages')) {
@@ -240,7 +244,7 @@ window.addPackagesToMap = function(packagesJson) {
         let skippedCount = 0;
         const geojsonData = {
             type: 'FeatureCollection',
-            features: packages.map((pkg, index) => {
+                features: packagesData.map((pkg, index) => {
                 // Skip packages without valid coordinates
                 if (!pkg.coords || !Array.isArray(pkg.coords) || pkg.coords.length !== 2) {
                     console.warn(`⚠️ Paquete ${index} sin coordenadas válidas: id=${pkg.id}, coords=${JSON.stringify(pkg.coords)}`);
@@ -410,6 +414,21 @@ window.addPackagesToMap = function(packagesJson) {
         
         console.log(`✅ ${geojsonData.features.length} packages added as Style Layers`);
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            return true;
+        };
+        
+        // Intentar agregar paquetes ahora
+        if (!actuallyAddPackages(packages)) {
+            // Si el mapa no está listo, esperar a que lo esté
+            console.log('⏳ Waiting for map style to load...');
+            // Registrar listener para cuando el estilo cargue (si aún no está registrado)
+            map.once('style.load', () => {
+                console.log('✅ Map style loaded, retrying addPackagesToMap...');
+                if (window.pendingPackagesJson) {
+                    actuallyAddPackages(JSON.parse(window.pendingPackagesJson));
+                }
+            });
+        }
         
     } catch (error) {
         console.error('❌ Error adding packages to map:', error);
@@ -429,394 +448,255 @@ window.updateSelectedPackage = function(groupIdx) {
     }
     
     selectedPackageIndex = groupIdx;
-    console.log(`   ✅ selectedPackageIndex actualizado: ${selectedPackageIndex}`);
     
-    // Create new GeoJSON data with updated selection
-    // ⭐ Usar group_idx para la comparación, no index
+    // Update source data to mark selected package
     const source = map.getSource('packages');
     if (source && source._data) {
-        let updatedCount = 0;
-        const geojsonData = {
-            type: 'FeatureCollection',
-            features: source._data.features.map(feature => {
-                const featureGroupIdx = feature.properties.group_idx !== undefined 
-                    ? feature.properties.group_idx 
-                    : feature.properties.index;
-                const isSelected = featureGroupIdx === groupIdx;
-                
-                if (isSelected) {
-                    updatedCount++;
-                    console.log(`   ✅ Feature seleccionado: index=${feature.properties.index}, group_idx=${featureGroupIdx}, id=${feature.properties.id}`);
-                }
-                
-                return {
-                ...feature,
-                properties: {
-                    ...feature.properties,
-                        isSelected: isSelected
-                }
-                };
-            })
-        };
-        
-        // Update the source data
-        source.setData(geojsonData);
-        console.log(`   ✅ ${updatedCount} feature(s) actualizado(s) como seleccionado(s)`);
-        
-        // Start pulse animation for selected package
-        startPulseAnimation();
-        console.log('   ✅ Animación de pulso iniciada');
-    } else {
-        console.warn('   ⚠️  Source o data no disponible');
+        source._data.features.forEach((feature) => {
+            feature.properties.isSelected = feature.properties.group_idx === groupIdx;
+        });
+        source.setData(source._data);
     }
-    
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 };
 
-// Pulse animation for selected package
-function startPulseAnimation() {
-    // Clear existing animation
-    if (pulseAnimationId) {
-        cancelAnimationFrame(pulseAnimationId);
-    }
-    
-    let phase = 0;
-    
-    function animate() {
-        if (!map || selectedPackageIndex === null) {
-            return;
-        }
-        
-        phase += 0.05; // Speed of animation
-        
-        // Calculate pulsating stroke width (between 2 and 5)
-        const strokeWidth = 3 + Math.sin(phase) * 1.5;
-        
-        // Calculate pulsating opacity (between 0.4 and 0.8)
-        const strokeOpacity = 0.6 + Math.sin(phase) * 0.2;
-        
-        // Update paint properties
-        map.setPaintProperty('packages-circles', 'circle-stroke-width', [
-            'case',
-            ['get', 'isSelected'], strokeWidth, // Selected: pulsating
-            ['get', 'is_problematic'], 1.5, // Problemático: borde visible
-            0 // Sin borde para el resto
-        ]);
-        
-        map.setPaintProperty('packages-circles', 'circle-stroke-opacity', [
-            'case',
-            ['get', 'isSelected'], strokeOpacity, // Selected: pulsating opacity
-            1 // Default: opaco
-        ]);
-        
-        pulseAnimationId = requestAnimationFrame(animate);
-    }
-    
-    animate();
-}
-
-// Center map on package
+// Center map on a specific package
 window.centerMapOnPackage = function(groupIdx) {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🗺️ MAPBOX: CENTER_MAP_ON_PACKAGE');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`   📍 groupIdx: ${groupIdx}`);
     
-    if (!map) {
-        console.error('❌ Map not initialized');
+    if (!map || !map.getSource('packages')) {
+        console.warn('   ⚠️  Mapa o source no disponible');
         return;
     }
     
     const source = map.getSource('packages');
-    if (!source || !source._data || !source._data.features) {
+    if (!source || !source._data) {
         console.error('❌ No package data found');
         return;
     }
     
-    console.log(`   📦 Total features disponibles: ${source._data.features.length}`);
+    // Find package by group_idx
+    const feature = source._data.features.find(f => f.properties.group_idx === groupIdx);
+    if (!feature) {
+        console.error(`❌ Package with group_idx ${groupIdx} not found`);
+        return;
+    }
     
-    // ⭐ Buscar feature por group_idx (índice original del grupo)
-    const feature = source._data.features.find(f => {
-        const featureGroupIdx = f.properties.group_idx !== undefined 
-            ? f.properties.group_idx 
-            : f.properties.index;
-        return featureGroupIdx === groupIdx;
-    });
-    
-    if (feature) {
-        const [lng, lat] = feature.geometry.coordinates;
-        console.log(`   ✅ Feature encontrado:`);
-        console.log(`      - id: ${feature.properties.id}`);
-        console.log(`      - address: ${feature.properties.address}`);
-        console.log(`      - coords: [${lat}, ${lng}]`);
-        console.log(`   🗺️  Centrando mapa en grupo ${groupIdx}...`);
+    const [lng, lat] = feature.geometry.coordinates;
+    console.log(`   📍 Centrando en: [${lat}, ${lng}]`);
         
             map.flyTo({
             center: [lng, lat],
-            zoom: 16,
-                duration: 1000,
-                essential: true
-            });
-        
-        // Actualizar selección visual
-        updateSelectedPackage(groupIdx);
-        console.log('   ✅ Mapa centrado y selección actualizada');
-    } else {
-        console.warn(`   ⚠️  No feature found for group index ${groupIdx}`);
-        console.log(`   🔍 Buscando en ${source._data.features.length} features...`);
-        source._data.features.slice(0, 5).forEach((f, i) => {
-            const fGroupIdx = f.properties.group_idx !== undefined ? f.properties.group_idx : f.properties.index;
-            console.log(`      [${i}] group_idx=${fGroupIdx}, id=${f.properties.id}`);
-        });
-    }
-    
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        zoom: 15,
+        duration: 1000
+    });
 };
 
-// Scroll to selected package in bottom sheet
+// Scroll to selected package in the bottom sheet
+// MEJORADO: Hace scroll dentro del contenedor .package-list en lugar del documento completo
 window.scrollToSelectedPackage = function(groupIdx) {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📜 MAPBOX: SCROLL_TO_SELECTED_PACKAGE');
+    console.log('📜 MAPBOX: SCROLL_TO_SELECTED_PACKAGE (MEJORADO)');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`   📍 groupIdx: ${groupIdx}`);
     
-    // First try package-card (current structure uses PackageList)
-    const packageCards = document.querySelectorAll('.package-card');
-    console.log(`   📦 package-cards encontrados: ${packageCards.length}`);
+    // Find the package card in the DOM
+    const cards = document.querySelectorAll('.package-card[data-index]');
+    console.log(`   📦 package-cards encontrados: ${cards.length}`);
     
-    // ⭐ Usar groupIdx directamente (corresponde al índice en la lista de grupos)
-    const selectedPackage = packageCards[groupIdx];
+    if (cards.length === 0) {
+        console.warn('   ⚠️  No se encontraron package-cards');
+        return;
+    }
     
-    if (selectedPackage) {
-        console.log(`   ✅ package-card encontrado en índice ${groupIdx}`);
+    // Find card with matching data-index
+    let targetCard = null;
+    for (let card of cards) {
+        const cardIndex = parseInt(card.getAttribute('data-index'), 10);
+        if (cardIndex === groupIdx) {
+            targetCard = card;
+            break;
+        }
+    }
+    
+    if (!targetCard) {
+        console.warn(`   ⚠️  Package card con groupIdx ${groupIdx} no encontrado`);
+        return;
+    }
+    
+    console.log(`   ✅ package-card encontrado en índice ${groupIdx}`);
+    
+    // Buscar el contenedor .package-list (el que tiene overflow-y: auto)
+    const packageListContainer = document.querySelector('.package-list');
+    
+    if (packageListContainer) {
+        console.log(`   📜 Haciendo scroll dentro del contenedor .package-list...`);
+        
+        // Obtener posiciones relativas
+        const cardRect = targetCard.getBoundingClientRect();
+        const containerRect = packageListContainer.getBoundingClientRect();
+        
+        // Calcular posición del card dentro del contenedor
+        const cardTop = cardRect.top - containerRect.top + packageListContainer.scrollTop;
+        const cardHeight = cardRect.height;
+        const containerHeight = packageListContainer.clientHeight;
+        
+        // Calcular scrollTop para centrar el card
+        const targetScrollTop = cardTop - (containerHeight / 2) + (cardHeight / 2);
+        
+        // Hacer scroll suave usando requestAnimationFrame con easing
+        const startScrollTop = packageListContainer.scrollTop;
+        const distance = targetScrollTop - startScrollTop;
+        const duration = 300; // ms
+        const startTime = performance.now();
+        
+        function animateScroll(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function: ease-out cubic (suave y natural)
+            const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+            
+            packageListContainer.scrollTop = startScrollTop + (distance * easeOutCubic);
+            
+            if (progress < 1) {
+                requestAnimationFrame(animateScroll);
+            } else {
+                // Agregar clase flash al card después del scroll
+                targetCard.classList.add('flash');
+                setTimeout(() => {
+                    targetCard.classList.remove('flash');
+                }, 500);
+                
+                console.log(`   ✅ Scroll completado dentro del contenedor y animación flash iniciada`);
+            }
+        }
+        
+        requestAnimationFrame(animateScroll);
+    } else {
+        // Fallback: si no se encuentra .package-list, usar scrollIntoView normal
+        console.warn(`   ⚠️  Contenedor .package-list no encontrado, usando scrollIntoView como fallback`);
         console.log(`   📜 Haciendo scroll a grupo ${groupIdx}...`);
         
-        // Log info del card seleccionado
-        const cardText = selectedPackage.textContent.substring(0, 100).replace(/\s+/g, ' ').trim();
-        console.log(`   📄 Texto del card: "${cardText}..."`);
-        
-        selectedPackage.scrollIntoView({
+        targetCard.scrollIntoView({
             behavior: 'smooth',
             block: 'center'
         });
         
-        // Add flash animation
-        selectedPackage.style.animation = 'none';
+        // Add flash animation class
+        targetCard.classList.add('flash');
         setTimeout(() => {
-            selectedPackage.style.animation = 'flash 0.8s ease';
-        }, 100);
-        console.log('   ✅ Scroll completado y animación flash iniciada');
-    } else {
-        console.log(`   ⚠️  No package-card encontrado en índice ${groupIdx}`);
-        console.log(`   🔍 Índices disponibles: 0-${packageCards.length - 1}`);
+            targetCard.classList.remove('flash');
+        }, 500);
         
-        // Fallback to address-card (new structure)
-        const addressCards = document.querySelectorAll('.address-card');
-        console.log(`   📦 address-cards encontrados: ${addressCards.length}`);
-        
-        const selectedAddress = addressCards[groupIdx];
-        
-        if (selectedAddress) {
-            console.log(`   ✅ address-card encontrado en índice ${groupIdx}`);
-            console.log(`   📜 Haciendo scroll a address group ${groupIdx}...`);
-            
-            selectedAddress.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center'
-            });
-            
-            // Add flash animation
-            selectedAddress.style.animation = 'none';
-            setTimeout(() => {
-                selectedAddress.style.animation = 'flash 0.8s ease';
-            }, 100);
-            console.log('   ✅ Scroll completado y animación flash iniciada');
-        } else {
-            console.log(`   ❌ No card found at group index ${groupIdx}`);
-            console.log(`   📊 Resumen:`);
-            console.log(`      - package-cards: ${packageCards.length}`);
-            console.log(`      - address-cards: ${addressCards.length}`);
-            console.log(`      - groupIdx solicitado: ${groupIdx}`);
-            
-            // Log primeros cards para debugging
-            if (packageCards.length > 0) {
-                const firstCard = packageCards[0];
-                const firstText = firstCard.textContent.substring(0, 50).replace(/\s+/g, ' ').trim();
-                console.log(`      - Primer package-card: "${firstText}..."`);
-            }
-            if (addressCards.length > 0) {
-                const firstAddr = addressCards[0];
-                const firstAddrText = firstAddr.textContent.substring(0, 50).replace(/\s+/g, ' ').trim();
-                console.log(`      - Primer address-card: "${firstAddrText}..."`);
+        console.log(`   ✅ Scroll completado (fallback) y animación flash iniciada`);
+    }
+};
+
+// Update map size for bottom sheet
+window.updateMapSizeForBottomSheet = function() {
+    if (!map) return;
+    
+    // Obtener altura del bottom sheet desde CSS variable
+    const root = document.documentElement;
+    const computedStyle = window.getComputedStyle(root);
+    const sheetHeight = computedStyle.getPropertyValue('--bottom-sheet-height').trim();
+    
+    if (!sheetHeight) {
+        console.warn('⚠️ No se pudo obtener --bottom-sheet-height del CSS');
+        return;
+    }
+    
+    // Limpiar cualquier intervalo activo
+    if (window.activeResizeInterval) {
+        clearInterval(window.activeResizeInterval);
+        window.activeResizeInterval = null;
+    }
+    
+    // Estrategia de resize progresivo para fluidez durante transiciones CSS
+    // 1. Resize inmediato en el próximo frame para respuesta instantánea
+    requestAnimationFrame(() => {
+        map.resize();
+    });
+    
+    // 2. Resize múltiple durante la transición (300ms) cada 40ms para fluidez
+    let resizeCount = 0;
+    const maxResizes = Math.ceil(300 / 40); // ~7-8 resizes durante la transición
+    
+    window.activeResizeInterval = setInterval(() => {
+        if (resizeCount >= maxResizes) {
+            clearInterval(window.activeResizeInterval);
+            window.activeResizeInterval = null;
+            return;
         }
-    }
-    }
+        map.resize();
+        resizeCount++;
+    }, 40);
     
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    // 3. Resize final después de la transición para precisión
+    setTimeout(() => {
+        if (window.activeResizeInterval) {
+            clearInterval(window.activeResizeInterval);
+            window.activeResizeInterval = null;
+        }
+            map.resize();
+    }, 300 + 20); // 20ms de margen después de la transición
 };
 
-// Get map instance
-window.getMapInstance = function() {
-    return map;
-};
-
-// Update package coordinates on the map
-window.updatePackageCoordinates = function(packageId, latitude, longitude) {
-    if (!map) {
-        console.error('❌ Map not initialized');
-        return false;
+// MutationObserver para detectar cambios en bottom-sheet y actualizar tamaño del mapa
+(function() {
+    const bottomSheet = document.getElementById('bottom-sheet');
+    if (!bottomSheet) {
+        // Si el bottom-sheet no existe aún, crear observer después de un delay
+        setTimeout(arguments.callee, 100);
+        return;
     }
     
-    const source = map.getSource('packages');
-    if (!source) {
-        console.error('❌ Packages source not found');
-        return false;
-    }
-    
-    // Get current data
-    const data = source._data;
-    if (!data || !data.features) {
-        console.error('❌ No package data found');
-        return false;
-    }
-    
-    // Find and update the package
-    const feature = data.features.find(f => f.properties.id === packageId);
-    if (!feature) {
-        console.error('❌ Package not found:', packageId);
-        return false;
-    }
-    
-    // Update coordinates [lng, lat] format for GeoJSON
-    feature.geometry.coordinates = [longitude, latitude];
-    
-    // Update the source
-    source.setData(data);
-    
-    // Fly to the new location
-    map.flyTo({
-        center: [longitude, latitude],
-        zoom: 15,
-        duration: 1500
-    });
-    
-    console.log('✅ Package coordinates updated:', packageId, 'to', [latitude, longitude]);
-    return true;
-};
-
-// Add single package to map (when geocoded from problematic)
-window.addPackageToMap = function(packageId, latitude, longitude, address, code_statut_article) {
-    if (!map) {
-        console.error('❌ Map not initialized');
-        return false;
-    }
-    
-    const source = map.getSource('packages');
-    if (!source) {
-        console.error('❌ Packages source not found');
-        return false;
-    }
-    
-    const data = source._data;
-    if (!data || !data.features) {
-        console.error('❌ No package data found');
-        return false;
-    }
-    
-    // Check if package already exists
-    const existingIndex = data.features.findIndex(f => f.properties.id === packageId);
-    if (existingIndex !== -1) {
-        // Update existing package
-        data.features[existingIndex].geometry.coordinates = [longitude, latitude];
-        data.features[existingIndex].properties.address = address;
-        data.features[existingIndex].properties.code_statut_article = code_statut_article || null;
-        console.log('🔄 Package updated on map:', packageId);
-    } else {
-        // Add new package
-        const newFeature = {
-            type: 'Feature',
-            geometry: {
-                type: 'Point',
-                coordinates: [longitude, latitude]
-            },
-            properties: {
-                id: packageId,
-                address: address,
-                code_statut_article: code_statut_article || null
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const target = mutation.target;
+                if (target.id === 'bottom-sheet') {
+                    console.log('🔍 [OBSERVER] Detectado cambio de clase en bottom-sheet');
+                    // Debounce para evitar demasiadas llamadas
+                    if (window.mapResizeDebounce) {
+                        clearTimeout(window.mapResizeDebounce);
+                    }
+                    window.mapResizeDebounce = setTimeout(() => {
+                        if (window.updateMapSizeForBottomSheet) {
+                window.updateMapSizeForBottomSheet();
+                        }
+                    }, 50);
+                }
             }
-        };
-        data.features.push(newFeature);
-        console.log('➕ Package added to map:', packageId);
-    }
-    
-    // Update the source
-    source.setData(data);
-    
-    // Fly to the package
-    map.flyTo({
-        center: [longitude, latitude],
-        zoom: 15,
-        duration: 1500
+        });
     });
     
-    return true;
-};
+    observer.observe(bottomSheet, {
+        attributes: true,
+        attributeFilter: ['class']
+    });
+})();
 
-// Remove package from map
-window.removePackageFromMap = function(packageId) {
-    if (!map) {
-        console.error('❌ Map not initialized');
-        return false;
+// Initialize update when DOM is ready
+(function() {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                if (window.updateMapSizeForBottomSheet) {
+        window.updateMapSizeForBottomSheet();
+                }
+            }, 100);
+    });
+    } else {
+        setTimeout(() => {
+            if (window.updateMapSizeForBottomSheet) {
+    window.updateMapSizeForBottomSheet();
+            }
+        }, 100);
     }
-    
-    const source = map.getSource('packages');
-    if (!source) {
-        console.error('❌ Packages source not found');
-        return false;
-    }
-    
-    // Get current data
-    const data = source._data;
-    if (!data || !data.features) {
-        console.error('❌ No package data found');
-        return false;
-    }
-    
-    // Find and remove the package
-    const featureIndex = data.features.findIndex(f => f.properties.id === packageId);
-    if (featureIndex === -1) {
-        console.error('❌ Package not found:', packageId);
-        return false;
-    }
-    
-    // Remove the feature
-    data.features.splice(featureIndex, 1);
-    
-    // Update the source
-    source.setData(data);
-    
-    console.log('🗑️ Package removed from map:', packageId);
-    return true;
-};
-
-// Get driver location for optimization
-window.getDriverLocation = function() {
-    if (currentDriverLocation) {
-        console.log('✅ Ubicación del chofer disponible:', currentDriverLocation);
-        return currentDriverLocation;
-    }
-    
-    console.warn('⚠️ No hay ubicación del chofer - debe activar geolocalización primero');
-    return null;
-};
-
-// Trigger geolocate (for programmatic use)
-window.triggerGeolocate = function() {
-    if (geolocateControl && map) {
-        console.log('📍 Activando geolocalización...');
-        geolocateControl.trigger();
-    }
-};
+})();
 
 console.log('📍 Mapbox helper functions loaded');
-
