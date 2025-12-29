@@ -10,7 +10,14 @@ install-dev-tools:
 # Desarrollo (compila una vez y sirve)
 dev:
 	@echo "🔨 Compilando WASM en modo desarrollo..."
-	wasm-pack build --target web --dev
+	@if [ -f .env ]; then \
+		echo "📋 Cargando variables de entorno desde .env..."; \
+		export $$(grep -v '^#' .env | xargs); \
+		BACKEND_URL=$${BACKEND_URL:-http://localhost:3000} wasm-pack build --target web --dev; \
+	else \
+		BACKEND_URL=$${BACKEND_URL:-http://localhost:3000} wasm-pack build --target web --dev; \
+	fi
+	@echo "✅ Build desarrollo completado"
 	@echo "📋 Creando symlinks temporales para desarrollo..."
 	@ln -sf assets/sw.js sw.js 2>/dev/null || cp assets/sw.js sw.js
 	@ln -sf assets/icons/icon-192.png icon-192.png 2>/dev/null || cp assets/icons/icon-192.png icon-192.png
@@ -21,7 +28,13 @@ dev:
 # Build producción
 build:
 	@echo "🔨 Compilando WASM para producción..."
-	wasm-pack build --target web --release
+	@if [ -f .env ]; then \
+		echo "📋 Cargando variables de entorno desde .env..."; \
+		export $$(grep -v '^#' .env | xargs); \
+		BACKEND_URL=$${BACKEND_URL:-https://api.delivery.nexuslabs.one} wasm-pack build --target web --release; \
+	else \
+		BACKEND_URL=$${BACKEND_URL:-https://api.delivery.nexuslabs.one} wasm-pack build --target web --release; \
+	fi
 	@echo "✅ Build completado en pkg/"
 
 # Deploy a Raspberry Pi (build + preparar + rsync)
