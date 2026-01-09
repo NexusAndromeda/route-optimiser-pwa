@@ -13,6 +13,7 @@
 
 /* Components - Componentes (orden alfabético) */
 @import url('./components/address-list.css');
+@import url('./components/admin-view.css');
 @import url('./components/buttons.css');
 @import url('./components/details-modal.css');
 @import url('./components/draggable-list.css');

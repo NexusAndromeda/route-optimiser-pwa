@@ -23,6 +23,8 @@ use crate::views::{
     render_scanner,
     render_bottom_sheet,
     render_tracking_modal,
+    render_admin_dashboard,
+    render_status_change_modal,
 };
 use crate::viewmodels::map_viewmodel::MapViewModel;
 use crate::models::package::Package;
@@ -32,6 +34,13 @@ use serde_json;
 /// Renderizar vista principal de la aplicación
 pub fn render_app(state: &AppState) -> Result<Element, JsValue> {
     console::log_1(&JsValue::from_str("🎬 [APP] render_app() llamado"));
+    
+    // Verificar admin_mode primero
+    let is_admin_mode = *state.admin_mode.borrow();
+    if is_admin_mode {
+        console::log_1(&JsValue::from_str("👑 [APP] Modo admin activo, renderizando dashboard admin"));
+        return render_admin_dashboard(state);
+    }
     
     let is_logged_in = state.auth.get_logged_in();
     let msg = format!("🔐 [APP] Usuario logged in: {}", is_logged_in);
@@ -616,6 +625,11 @@ fn render_main_app_view(
             )?;
             append_child(&main_app, &details_modal)?;
         }
+    }
+    
+    // Status change modal
+    if let Ok(Some(status_modal)) = render_status_change_modal(state) {
+        append_child(&main_app, &status_modal)?;
     }
     
     let show_scanner = *state.show_scanner.borrow();

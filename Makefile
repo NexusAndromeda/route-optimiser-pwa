@@ -10,13 +10,8 @@ install-dev-tools:
 # Desarrollo (compila una vez y sirve)
 dev:
 	@echo "🔨 Compilando WASM en modo desarrollo..."
-	@if [ -f .env ]; then \
-		echo "📋 Cargando variables de entorno desde .env..."; \
-		export $$(grep -v '^#' .env | xargs); \
-		BACKEND_URL=$${BACKEND_URL:-http://localhost:3000} wasm-pack build --target web --dev; \
-	else \
-		BACKEND_URL=$${BACKEND_URL:-http://localhost:3000} wasm-pack build --target web --dev; \
-	fi
+	@echo "🌐 Usando BACKEND_URL=http://localhost:3000 (forzado para desarrollo)"
+	@BACKEND_URL=http://localhost:3000 wasm-pack build --target web --dev
 	@echo "✅ Build desarrollo completado"
 	@echo "📋 Creando symlinks temporales para desarrollo..."
 	@ln -sf assets/sw.js sw.js 2>/dev/null || cp assets/sw.js sw.js
@@ -31,9 +26,11 @@ build:
 	@if [ -f .env ]; then \
 		echo "📋 Cargando variables de entorno desde .env..."; \
 		export $$(grep -v '^#' .env | xargs); \
+		echo "🌐 Usando BACKEND_URL=$${BACKEND_URL:-https://api.delivery.nexuslabs.one}"; \
 		BACKEND_URL=$${BACKEND_URL:-https://api.delivery.nexuslabs.one} wasm-pack build --target web --release; \
 	else \
-		BACKEND_URL=$${BACKEND_URL:-https://api.delivery.nexuslabs.one} wasm-pack build --target web --release; \
+		echo "🌐 Usando BACKEND_URL=https://api.delivery.nexuslabs.one (default producción)"; \
+		BACKEND_URL=https://api.delivery.nexuslabs.one wasm-pack build --target web --release; \
 	fi
 	@echo "✅ Build completado en pkg/"
 

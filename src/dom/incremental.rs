@@ -23,13 +23,22 @@ pub enum ModalType {
 }
 
 /// Actualizar bottom sheet incrementalmente (clases CSS y altura del mapa)
+/// Funciona tanto para chofer como para admin
 pub fn update_bottom_sheet_incremental(state: &AppState) -> Result<(), JsValue> {
     use web_sys::HtmlElement;
     use wasm_bindgen::JsValue;
     
-    let sheet_state = state.sheet_state.borrow().clone();
+    // Detectar si estamos en modo admin o chofer
+    let is_admin = *state.admin_mode.borrow();
+    let sheet_state = if is_admin {
+        state.admin_sheet_state.borrow().clone()
+    } else {
+        state.sheet_state.borrow().clone()
+    };
+    
     web_sys::console::log_1(&JsValue::from_str(&format!("🔵 [BOTTOM-SHEET-UPDATE] ========== INICIANDO ACTUALIZACIÓN ==========")));
-    web_sys::console::log_1(&JsValue::from_str(&format!("🔵 [BOTTOM-SHEET-UPDATE] Estado actual del sheet: '{}'", sheet_state)));
+    web_sys::console::log_1(&JsValue::from_str(&format!("🔵 [BOTTOM-SHEET-UPDATE] Modo: {} | Estado actual del sheet: '{}'", 
+        if is_admin { "ADMIN" } else { "CHOFER" }, sheet_state)));
     
     // 1. Actualizar clases del bottom-sheet
     if let Some(bottom_sheet) = get_element_by_id("bottom-sheet") {
@@ -422,10 +431,20 @@ pub fn update_details_modal_direct(state: &AppState) -> Result<(), JsValue> {
                 
                 // Crear callbacks de edición REALES que envían al backend
                 // Obtener session_id de la sesión actual
-                let session_id = if let Some(session) = state.session.get_session() {
+                let session_id = if *state.admin_mode.borrow() {
+                    // En modo admin, usar sesión seleccionada
+                    if let Some(session) = state.admin_selected_tournee_session.borrow().as_ref() {
+                        session.session_id.clone()
+                    } else {
+                        return Err(JsValue::from_str("No admin session selected"));
+                    }
+                } else {
+                    // En modo chofer, usar sesión normal
+                    if let Some(session) = state.session.get_session() {
                     session.session_id.clone()
                 } else {
                     return Err(JsValue::from_str("No session available"));
+                    }
                 };
                 let addr_id = addr.address_id.clone();
                 let pkg_tracking = pkg.tracking.clone();

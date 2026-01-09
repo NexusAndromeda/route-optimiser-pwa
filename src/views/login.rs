@@ -136,6 +136,55 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
         loading.clone(),
     )?;
     
+    // User type toggle (Chofer/Admin)
+    let user_type_group = ElementBuilder::new("div")?
+        .class("form-group")
+        .build();
+    
+    let user_type_label = ElementBuilder::new("label")?
+        .text("Type d'utilisateur")
+        .build();
+    append_child(&user_type_group, &user_type_label)?;
+    
+    let user_type_container = ElementBuilder::new("div")?
+        .class("user-type-toggle")
+        .build();
+    
+    // Botón Chofer
+    let driver_btn = ElementBuilder::new("button")?
+        .class(if *state.user_type.borrow() == "driver" { "user-type-btn active" } else { "user-type-btn" })
+        .attr("type", "button")?
+        .text("🚚 Chauffeur")
+        .build();
+    
+    {
+        let state_clone = state.clone();
+        on_click(&driver_btn, move |_| {
+            *state_clone.user_type.borrow_mut() = "driver".to_string();
+            crate::rerender_app();
+        })?;
+    }
+    
+    // Botón Admin
+    let admin_btn = ElementBuilder::new("button")?
+        .class(if *state.user_type.borrow() == "admin" { "user-type-btn active" } else { "user-type-btn" })
+        .attr("type", "button")?
+        .text("👔 Admin")
+        .build();
+    
+    {
+        let state_clone = state.clone();
+        on_click(&admin_btn, move |_| {
+            *state_clone.user_type.borrow_mut() = "admin".to_string();
+            crate::rerender_app();
+        })?;
+    }
+    
+    append_child(&user_type_container, &driver_btn)?;
+    append_child(&user_type_container, &admin_btn)?;
+    append_child(&user_type_group, &user_type_container)?;
+    append_child(&form, &user_type_group)?;
+    
     // Submit button
     let submit_btn = ElementBuilder::new("button")?
         .attr("type", "submit")?
@@ -176,13 +225,70 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
             let state_clone = state_clone.clone();
             let loading_clone = loading_clone.clone();
             let error_clone = error_clone.clone();
+            let user_type = state_clone.user_type.borrow().clone();
             
             spawn_local(async move {
-                let vm = SessionViewModel::new();
+                log::info!("🔐 [LOGIN] Iniciando login como: {}", user_type);
                 
-                log::info!("🔐 [LOGIN] Iniciando login...");
-                
-                match vm.login_smart(username_val.clone(), password_val.clone(), societe_val.clone()).await {
+                // Login diferenciado según tipo de usuario
+                if user_type == "admin" {
+                    // Login como admin - llamar API de admin dashboard
+                    use crate::services::api_client::ApiClient;
+                    let api = ApiClient::new();
+                    
+                    // Formatear fecha de hoy para date_debut
+                    let today = js_sys::Date::new_0();
+                    let date_debut = format!(
+                        "{:04}-{:02}-{:02}T00:00:00.000Z",
+                        today.get_full_year(),
+                        today.get_month() + 1,
+                        today.get_date()
+                    );
+                    
+                    match api.fetch_admin_dashboard(&username_val, &password_val, &societe_val, &date_debut).await {
+                        Ok(response) => {
+                            log::info!("✅ [LOGIN ADMIN] Dashboard obtenido con {} districts", response.districts.len());
+                            
+                            // Actualizar estado admin
+                            *state_clone.admin_mode.borrow_mut() = true;
+                            *state_clone.admin_districts.borrow_mut() = response.districts;
+                            *state_clone.admin_total_packages.borrow_mut() = response.total_packages;
+                            // Guardar credenciales para polling automático
+                            *state_clone.admin_username.borrow_mut() = Some(username_val.clone());
+                            *state_clone.admin_password.borrow_mut() = Some(password_val.clone());
+                            *state_clone.admin_societe.borrow_mut() = Some(societe_val.clone());
+                            
+                            // Guardar credenciales en localStorage para persistencia
+                            use crate::services::OfflineService;
+                            let offline_service = OfflineService::new();
+                            if let Err(e) = offline_service.save_admin_credentials(&username_val, &password_val, &societe_val) {
+                                log::error!("❌ Error guardando credenciales admin: {}", e);
+                            }
+                            
+                            state_clone.auth.set_logged_in(true);
+                            state_clone.auth.set_username(Some(username_val));
+                            state_clone.auth.set_company_id(Some(societe_val));
+                            
+                            // Notificar re-render
+                            if let Some(win) = web_sys::window() {
+                                if let Ok(event) = web_sys::Event::new("loggedIn") {
+                                    let _ = win.dispatch_event(&event);
+                                }
+                            }
+                            
+                            *loading_clone.borrow_mut() = false;
+                        }
+                        Err(e) => {
+                            log::error!("❌ Error en login admin: {}", e);
+                            *error_clone.borrow_mut() = Some(format!("Error admin: {}", e));
+                            *loading_clone.borrow_mut() = false;
+                        }
+                    }
+                } else {
+                    // Login normal de chofer
+                    let vm = SessionViewModel::new();
+                    
+                    match vm.login_smart(username_val.clone(), password_val.clone(), societe_val.clone()).await {
                     Ok(session) => {
                         let msg = format!("✅ [LOGIN] Login exitoso, sesión creada con {} paquetes", session.stats.total_packages);
                         console::log_1(&JsValue::from_str(&msg));
@@ -228,6 +334,7 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
                         *error_clone.borrow_mut() = Some(format!("Error: {}", e));
                         *loading_clone.borrow_mut() = false;
                     }
+                }
                 }
             });
         }) as Box<dyn FnMut(web_sys::Event)>);

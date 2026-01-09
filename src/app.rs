@@ -47,6 +47,61 @@ impl App {
             }
         }
         
+        // Cargar credenciales del admin desde storage si existen
+        {
+            use crate::services::OfflineService;
+            use crate::services::api_client::ApiClient;
+            let offline_service = OfflineService::new();
+            
+            if let Ok(Some((username, password, societe))) = offline_service.load_admin_credentials() {
+                log::info!("💾 [APP] Credenciales admin encontradas, restaurando sesión...");
+                
+                // Guardar credenciales en el estado
+                *state.admin_username.borrow_mut() = Some(username.clone());
+                *state.admin_password.borrow_mut() = Some(password.clone());
+                *state.admin_societe.borrow_mut() = Some(societe.clone());
+                
+                // Hacer fetch del dashboard para restaurar el estado
+                let state_clone = state.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let api = ApiClient::new();
+                    
+                    // Formatear fecha de hoy para date_debut
+                    let today = js_sys::Date::new_0();
+                    let date_debut = format!(
+                        "{:04}-{:02}-{:02}T00:00:00.000Z",
+                        today.get_full_year(),
+                        today.get_month() + 1,
+                        today.get_date()
+                    );
+                    
+                    match api.fetch_admin_dashboard(&username, &password, &societe, &date_debut).await {
+                        Ok(response) => {
+                            log::info!("✅ [APP] Dashboard admin restaurado con {} districts", response.districts.len());
+                            
+                            // Restaurar estado admin
+                            *state_clone.admin_mode.borrow_mut() = true;
+                            *state_clone.admin_districts.borrow_mut() = response.districts;
+                            *state_clone.admin_total_packages.borrow_mut() = response.total_packages;
+                            state_clone.auth.set_logged_in(true);
+                            state_clone.auth.set_username(Some(username));
+                            state_clone.auth.set_company_id(Some(societe));
+                            
+                            // Re-renderizar para mostrar el dashboard
+                            crate::rerender_app();
+                        }
+                        Err(e) => {
+                            log::error!("❌ [APP] Error restaurando dashboard admin: {}", e);
+                            // Limpiar credenciales si falla
+                            if let Err(clear_err) = offline_service.clear_admin_credentials() {
+                                log::error!("❌ Error limpiando credenciales: {}", clear_err);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
         // Suscribirse a cambios de estado para re-renderizar automáticamente
         state.subscribe_to_changes(move || {
             // Usar gloo_timers para batchear múltiples updates

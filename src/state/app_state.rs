@@ -8,6 +8,8 @@ use std::collections::HashSet;
 use crate::state::{SessionState, AuthState, SyncStateWrapper};
 use crate::views::PackageGroup;
 use crate::dom::incremental::ModalType;
+use crate::models::admin::{AdminDistrict, StatusChangeRequest, PackageTraceabilityResponse};
+use crate::models::session::DeliverySession;
 use web_sys;
 
 /// Tipo de actualización del DOM
@@ -87,6 +89,32 @@ pub struct AppState {
     pub saving_driver_notes: Rc<RefCell<bool>>,
     pub edit_error_message: Rc<RefCell<Option<String>>>,
     
+    // Admin state
+    pub user_type: Rc<RefCell<String>>, // "driver" | "admin"
+    pub admin_mode: Rc<RefCell<bool>>,
+    pub admin_districts: Rc<RefCell<Vec<AdminDistrict>>>,
+    pub admin_total_packages: Rc<RefCell<usize>>, // Total de paquetes sin duplicados
+    pub admin_selected_district: Rc<RefCell<Option<String>>>,
+    pub admin_expanded_districts: Rc<RefCell<HashSet<String>>>,
+    pub admin_expanded_tournees: Rc<RefCell<HashSet<String>>>, // code_tournee como key
+    pub admin_selected_tournee: Rc<RefCell<Option<String>>>, // code_tournee seleccionado
+    pub admin_selected_tournee_session: Rc<RefCell<Option<DeliverySession>>>, // Sesión completa de la tournée seleccionada
+    pub admin_view: Rc<RefCell<String>>, // "districts" | "packages" | "status_requests"
+    pub admin_status_requests: Rc<RefCell<Vec<StatusChangeRequest>>>,
+    pub admin_auto_refresh: Rc<RefCell<bool>>,
+    pub admin_sheet_state: Rc<RefCell<String>>, // "collapsed" | "half" | "full"
+    // Credenciales del admin para polling automático
+    pub admin_username: Rc<RefCell<Option<String>>>,
+    pub admin_password: Rc<RefCell<Option<String>>>,
+    pub admin_societe: Rc<RefCell<Option<String>>>,
+    
+    // Modal para cambio de status (chofer)
+    pub show_status_change_modal: Rc<RefCell<bool>>,
+    pub status_change_tracking: Rc<RefCell<Option<String>>>,
+    
+    // Traçabilité del paquete (para modal de detalles en admin)
+    pub package_traceability: Rc<RefCell<Option<PackageTraceabilityResponse>>>,
+    
     // Reactivity: Callbacks para notificar cambios (usamos Rc para poder compartir)
     pub change_subscribers: Rc<RefCell<Vec<Rc<dyn Fn()>>>>,
 }
@@ -134,6 +162,31 @@ impl AppState {
             saving_mailbox: Rc::new(RefCell::new(false)),
             saving_driver_notes: Rc::new(RefCell::new(false)),
             edit_error_message: Rc::new(RefCell::new(None)),
+            
+            // Admin state (inicializado con valores por defecto)
+            user_type: Rc::new(RefCell::new("driver".to_string())),
+            admin_mode: Rc::new(RefCell::new(false)),
+            admin_districts: Rc::new(RefCell::new(Vec::new())),
+            admin_total_packages: Rc::new(RefCell::new(0)),
+            admin_selected_district: Rc::new(RefCell::new(None)),
+            admin_expanded_districts: Rc::new(RefCell::new(HashSet::new())),
+            admin_expanded_tournees: Rc::new(RefCell::new(HashSet::new())),
+            admin_selected_tournee: Rc::new(RefCell::new(None)),
+            admin_selected_tournee_session: Rc::new(RefCell::new(None)),
+            admin_view: Rc::new(RefCell::new("districts".to_string())),
+            admin_status_requests: Rc::new(RefCell::new(Vec::new())),
+            admin_auto_refresh: Rc::new(RefCell::new(true)),
+            admin_sheet_state: Rc::new(RefCell::new("collapsed".to_string())),
+            admin_username: Rc::new(RefCell::new(None)),
+            admin_password: Rc::new(RefCell::new(None)),
+            admin_societe: Rc::new(RefCell::new(None)),
+            
+            // Modal para cambio de status (chofer)
+            show_status_change_modal: Rc::new(RefCell::new(false)),
+            status_change_tracking: Rc::new(RefCell::new(None)),
+            
+            // Traçabilité del paquete
+            package_traceability: Rc::new(RefCell::new(None)),
             
             change_subscribers: Rc::new(RefCell::new(Vec::new())),
         }
@@ -235,6 +288,16 @@ impl AppState {
         // Actualización incremental del bottom sheet
         crate::rerender_app_with_type(UpdateType::Incremental(IncrementalUpdate::BottomSheet));
         web_sys::console::log_1(&wasm_bindgen::JsValue::from_str("✅ [SET-SHEET-STATE] rerender_app_with_type completado"));
+    }
+    
+    /// Establecer admin_sheet_state y actualizar incrementalmente
+    pub fn set_admin_sheet_state(&self, state: String) {
+        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!("🔵 [SET-ADMIN-SHEET-STATE] Llamado con estado: {}", state)));
+        *self.admin_sheet_state.borrow_mut() = state.clone();
+        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str("🔵 [SET-ADMIN-SHEET-STATE] Llamando a rerender_app_with_type(BottomSheet)"));
+        // Actualización incremental del bottom sheet (usa la misma función que detecta admin_mode)
+        crate::rerender_app_with_type(UpdateType::Incremental(IncrementalUpdate::BottomSheet));
+        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str("✅ [SET-ADMIN-SHEET-STATE] rerender_app_with_type completado"));
     }
     
     /// Establecer edit_mode y limpiar edit_origin_idx si se desactiva

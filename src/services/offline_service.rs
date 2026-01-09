@@ -11,6 +11,7 @@ pub struct OfflineService {
 
 const SESSION_STORAGE_KEY: &str = "delivery_session";
 const QUEUE_STORAGE_KEY: &str = "pending_changes_queue";
+const ADMIN_CREDENTIALS_KEY: &str = "admin_credentials";
 
 impl OfflineService {
     pub fn new() -> Self {
@@ -168,6 +169,72 @@ impl OfflineService {
     /// Registrar Background Sync (TODO)
     pub async fn register_background_sync(&self) -> Result<(), String> {
         // TODO: Implementar Background Sync API
+        Ok(())
+    }
+    
+    /// Guardar credenciales del admin
+    pub fn save_admin_credentials(&self, username: &str, password: &str, societe: &str) -> Result<(), String> {
+        #[derive(serde::Serialize)]
+        struct AdminCredentials {
+            username: String,
+            password: String,
+            societe: String,
+        }
+        
+        let creds = AdminCredentials {
+            username: username.to_string(),
+            password: password.to_string(),
+            societe: societe.to_string(),
+        };
+        
+        let json = serde_json::to_string(&creds)
+            .map_err(|e| format!("Error serializando credenciales: {}", e))?;
+        
+        self.save_storage(ADMIN_CREDENTIALS_KEY, &json)?;
+        log::info!("💾 Credenciales admin guardadas");
+        Ok(())
+    }
+    
+    /// Cargar credenciales del admin
+    pub fn load_admin_credentials(&self) -> Result<Option<(String, String, String)>, String> {
+        #[derive(serde::Deserialize)]
+        struct AdminCredentials {
+            username: String,
+            password: String,
+            societe: String,
+        }
+        
+        match self.load_storage(ADMIN_CREDENTIALS_KEY)? {
+            Some(json) => {
+                match serde_json::from_str::<AdminCredentials>(&json) {
+                    Ok(creds) => {
+                        log::info!("✅ Credenciales admin cargadas");
+                        Ok(Some((creds.username, creds.password, creds.societe)))
+                    }
+                    Err(e) => {
+                        log::error!("❌ Error deserializando credenciales: {}", e);
+                        Err(format!("Error deserializando: {}", e))
+                    }
+                }
+            }
+            None => {
+                log::info!("📋 No hay credenciales admin guardadas");
+                Ok(None)
+            }
+        }
+    }
+    
+    /// Limpiar credenciales del admin
+    pub fn clear_admin_credentials(&self) -> Result<(), String> {
+        let storage = window()
+            .and_then(|w| w.local_storage().ok())
+            .flatten()
+            .ok_or("No se pudo acceder a localStorage")?;
+        
+        storage.remove_item(ADMIN_CREDENTIALS_KEY)
+            .map_err(|_| "Error eliminando credenciales".to_string())?;
+        
+        log::info!("🗑️ Credenciales admin limpiadas");
         Ok(())
     }
 }

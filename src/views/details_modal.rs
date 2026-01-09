@@ -3,7 +3,7 @@
 // ============================================================================
 
 use wasm_bindgen::prelude::*;
-use web_sys::Element;
+use web_sys::{Element, console};
 use wasm_bindgen::closure::Closure;
 use std::rc::Rc;
 use crate::dom::{ElementBuilder, append_child, set_attribute, add_class, create_element};
@@ -11,6 +11,7 @@ use crate::models::package::Package;
 use crate::models::address::Address;
 use crate::state::app_state::AppState;
 use crate::utils::i18n::t;
+use crate::models::admin::PackageTraceabilityResponse;
 
 /// Renderizar modal de detalles
 pub fn render_details_modal(
@@ -197,10 +198,139 @@ pub fn render_details_modal(
     )?;
     append_child(&body, &section_problematic)?;
     
+    // Botón para solicitar cambio de status
+    let section_status_change = create_status_change_section(state, &pkg.tracking, &lang)?;
+    append_child(&body, &section_status_change)?;
+    
+    // Traçabilité (solo en modo admin)
+    if *state.admin_mode.borrow() {
+        if let Some(ref traceability) = *state.package_traceability.borrow() {
+            let section_traceability = create_traceability_section(traceability, &lang)?;
+            append_child(&body, &section_traceability)?;
+        } else {
+            // Mostrar loading mientras se obtiene la traçabilité
+            let loading_section = ElementBuilder::new("div")?
+                .class("detail-section")
+                .build();
+            let loading_label = ElementBuilder::new("div")?
+                .class("detail-label")
+                .text(&t("traçabilité", &lang))
+                .build();
+            let loading_value = ElementBuilder::new("div")?
+                .class("detail-value")
+                .text("Chargement...")
+                .build();
+            append_child(&loading_section, &loading_label)?;
+            append_child(&loading_section, &loading_value)?;
+            append_child(&body, &loading_section)?;
+        }
+    }
+    
     append_child(&content, &body)?;
     append_child(&modal, &content)?;
     
     Ok(modal)
+}
+
+/// Crear sección de traçabilité
+fn create_traceability_section(
+    traceability: &crate::models::admin::PackageTraceabilityResponse,
+    lang: &str,
+) -> Result<Element, JsValue> {
+    let section = ElementBuilder::new("div")?
+        .class("detail-section traceability-section")
+        .build();
+    
+    let label = ElementBuilder::new("div")?
+        .class("detail-label")
+        .text(&t("traçabilité", lang))
+        .build();
+    append_child(&section, &label)?;
+    
+    // Container para las acciones
+    let actions_container = ElementBuilder::new("div")?
+        .class("traceability-actions")
+        .build();
+    
+    // Ordenar acciones por fecha (más reciente primero)
+    let mut actions = traceability.actions.clone();
+    actions.sort_by(|a, b| b.date_action.cmp(&a.date_action));
+    
+    for action in actions {
+        let action_item = ElementBuilder::new("div")?
+            .class("traceability-action-item")
+            .build();
+        
+        // Fecha y tipo de acción
+        let action_header = ElementBuilder::new("div")?
+            .class("traceability-action-header")
+            .build();
+        
+        // Formatear fecha (formato ISO 8601: "2026-01-08T11:10:55.5278814")
+        let date_str = {
+            // Intentar parsear el formato ISO con o sin timezone
+            if let Some(t_idx) = action.date_action.find('T') {
+                let date_part = &action.date_action[..t_idx];
+                let time_part = if let Some(dot_idx) = action.date_action[t_idx+1..].find('.') {
+                    &action.date_action[t_idx+1..t_idx+1+dot_idx]
+                } else if let Some(z_idx) = action.date_action[t_idx+1..].find('Z') {
+                    &action.date_action[t_idx+1..t_idx+1+z_idx]
+                } else {
+                    &action.date_action[t_idx+1..]
+                };
+                format!("{} {}", date_part, time_part)
+            } else {
+                action.date_action.clone()
+            }
+        };
+        
+        let date_el = ElementBuilder::new("span")?
+            .class("traceability-date")
+            .text(&date_str)
+            .build();
+        
+        let type_el = ElementBuilder::new("span")?
+            .class("traceability-type")
+            .text(&action.type_action)
+            .build();
+        
+        append_child(&action_header, &date_el)?;
+        append_child(&action_header, &type_el)?;
+        append_child(&action_item, &action_header)?;
+        
+        // Descripción
+        if !action.description.is_empty() {
+            let desc_el = ElementBuilder::new("div")?
+                .class("traceability-description")
+                .text(&action.description)
+                .build();
+            append_child(&action_item, &desc_el)?;
+        }
+        
+        // Comentario
+        if !action.commentaire.is_empty() {
+            let comment_el = ElementBuilder::new("div")?
+                .class("traceability-comment")
+                .text(&action.commentaire)
+                .build();
+            append_child(&action_item, &comment_el)?;
+        }
+        
+        // Origen de la acción
+        if let Some(origine) = &action.origine_action {
+            let origine_el = ElementBuilder::new("div")?
+                .class("traceability-origin")
+                .text(&format!("Origine: {}", origine))
+                .build();
+            append_child(&action_item, &origine_el)?;
+        }
+        
+        append_child(&actions_container, &action_item)?;
+    }
+    
+    append_child(&section, &actions_container)?;
+    
+    Ok(section)
 }
 
 /// Crear sección de dirección editable
@@ -812,4 +942,179 @@ fn create_problematic_section(
     append_child(&section, &detail_row)?;
     
     Ok(section)
+}
+
+/// Crear sección para cambio de status
+fn create_status_change_section(
+    state: &AppState,
+    tracking: &str,
+    lang: &str,
+) -> Result<Element, JsValue> {
+    let section = ElementBuilder::new("div")?
+        .class("detail-section")
+        .build();
+    
+    let actions = ElementBuilder::new("div")?
+        .class("detail-actions")
+        .build();
+    
+    let status_change_btn = ElementBuilder::new("button")?
+        .class("btn-status-change")
+        .text("⚠️ Nécessite changement de statut")
+        .build();
+    
+    {
+        let state_clone = state.clone();
+        let tracking_clone = tracking.to_string();
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            *state_clone.show_status_change_modal.borrow_mut() = true;
+            *state_clone.status_change_tracking.borrow_mut() = Some(tracking_clone.clone());
+            crate::rerender_app();
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        status_change_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    append_child(&actions, &status_change_btn)?;
+    append_child(&section, &actions)?;
+    
+    Ok(section)
+}
+
+/// Renderizar modal de cambio de status
+pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, JsValue> {
+    if !*state.show_status_change_modal.borrow() {
+        return Ok(None);
+    }
+    
+    let tracking = state.status_change_tracking.borrow().clone()
+        .unwrap_or_else(|| "UNKNOWN".to_string());
+    
+    // Obtener sesión actual para driver_matricule
+    let driver_matricule = state.session.get_session()
+        .map(|s| s.driver.driver_id.clone())
+        .unwrap_or_else(|| "UNKNOWN".to_string());
+    
+    let session_id = state.session.get_session()
+        .map(|s| s.session_id.clone())
+        .unwrap_or_default();
+    
+    let modal = ElementBuilder::new("div")?
+        .class("modal-overlay")
+        .build();
+    
+    let modal_content = ElementBuilder::new("div")?
+        .class("modal-content")
+        .build();
+    
+    // Prevenir cierre al click dentro
+    {
+        let closure = Closure::wrap(Box::new(move |e: web_sys::MouseEvent| {
+            e.stop_propagation();
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        modal_content.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    let title = ElementBuilder::new("h3")?
+        .text("📝 Notes pour changement de statut")
+        .build();
+    
+    let textarea = create_element("textarea")?;
+    set_attribute(&textarea, "class", "status-notes-textarea")?;
+    set_attribute(&textarea, "placeholder", "Ajoutez vos notes (ex: code barre manquant, étiquette déchirée, lieu de dépôt...)")?;
+    set_attribute(&textarea, "rows", "5")?;
+    
+    let actions = ElementBuilder::new("div")?
+        .class("modal-actions")
+        .build();
+    
+    let cancel_btn = ElementBuilder::new("button")?
+        .class("btn-cancel")
+        .text("Annuler")
+        .build();
+    
+    {
+        let state_clone = state.clone();
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            *state_clone.show_status_change_modal.borrow_mut() = false;
+            *state_clone.status_change_tracking.borrow_mut() = None;
+            crate::rerender_app();
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        cancel_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    let confirm_btn = ElementBuilder::new("button")?
+        .class("btn-confirm")
+        .text("✅ Confirmer")
+        .build();
+    
+    {
+        let state_clone = state.clone();
+        let textarea_clone = textarea.clone();
+        let tracking_clone = tracking.clone();
+        let driver_matricule_clone = driver_matricule.clone();
+        let session_id_clone = session_id.clone();
+        
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            // Obtener notes del textarea
+            let notes = textarea_clone.dyn_ref::<web_sys::HtmlTextAreaElement>()
+                .map(|t| t.value())
+                .unwrap_or_default();
+            
+            // Enviar al backend
+            let state_clone = state_clone.clone();
+            let tracking_clone = tracking_clone.clone();
+            let driver_matricule_clone = driver_matricule_clone.clone();
+            let session_id_clone = session_id_clone.clone();
+            let notes_clone = notes.clone();
+            
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::services::api_client::ApiClient;
+                let api = ApiClient::new();
+                
+                match api.create_status_change_request(
+                    &tracking_clone,
+                    &session_id_clone,
+                    &driver_matricule_clone,
+                    if notes_clone.is_empty() { None } else { Some(&notes_clone) },
+                ).await {
+                    Ok(_) => {
+                        console::log_1(&JsValue::from_str("✅ Request de cambio de status creado"));
+                        *state_clone.show_status_change_modal.borrow_mut() = false;
+                        *state_clone.status_change_tracking.borrow_mut() = None;
+                        crate::rerender_app();
+                    }
+                    Err(e) => {
+                        console::error_1(&JsValue::from_str(&format!("❌ Error: {}", e)));
+                    }
+                }
+            });
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        confirm_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    // Cerrar al click en overlay
+    {
+        let state_clone = state.clone();
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            *state_clone.show_status_change_modal.borrow_mut() = false;
+            *state_clone.status_change_tracking.borrow_mut() = None;
+            crate::rerender_app();
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        modal.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    append_child(&actions, &cancel_btn)?;
+    append_child(&actions, &confirm_btn)?;
+    
+    append_child(&modal_content, &title)?;
+    append_child(&modal_content, &textarea)?;
+    append_child(&modal_content, &actions)?;
+    append_child(&modal, &modal_content)?;
+    
+    Ok(Some(modal))
 }

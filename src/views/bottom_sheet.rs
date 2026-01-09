@@ -12,7 +12,8 @@ use crate::models::session::DeliverySession;
 use crate::views::{PackageGroup, render_package_list};
 use crate::utils::i18n::t;
 
-/// Renderizar bottom sheet completo
+/// Renderizar bottom sheet completo (wrapper para chofer)
+/// Mantiene compatibilidad con código existente
 pub fn render_bottom_sheet(
     state: &AppState,
     session: &DeliverySession,
@@ -23,74 +24,16 @@ pub fn render_bottom_sheet(
 ) -> Result<Element, JsValue> {
     let sheet_state = state.sheet_state.borrow().clone();
     
-    // Container principal
-    let container = ElementBuilder::new("div")?
-        .attr("id", "package-container")?
-        .class("package-container")
-        .build();
-    
-    // Backdrop (solo visible cuando sheet no está collapsed)
-    let backdrop = ElementBuilder::new("div")?
-        .attr("id", "backdrop")?
-        .class("backdrop")
-        .build();
-    
-    if sheet_state != "collapsed" {
-        add_class(&backdrop, "active")?;
-    }
-    
-    // Event listener para cerrar sheet al hacer click en backdrop
-    {
-        let on_close = on_close_sheet.clone();
-        on_click(&backdrop, move |_| {
-            on_close();
-        })?;
-    }
-    
-    append_child(&container, &backdrop)?;
-    
-    // Bottom Sheet
-    let bottom_sheet = ElementBuilder::new("div")?
-        .attr("id", "bottom-sheet")?
-        .class("bottom-sheet")
-        .build();
-    
-    // Agregar clase de estado
-    add_class(&bottom_sheet, &sheet_state)?;
-    
-    // Drag Handle Container (header con progress)
-    let drag_handle_container = ElementBuilder::new("div")?
-        .attr("id", "drag-handle-container")?
-        .class("drag-handle-container")
-        .build();
-    
-    // Drag Handle
-    let drag_handle = ElementBuilder::new("div")?
-        .class("drag-handle")
-        .build();
-    
-    // Event listener para toggle sheet size
-    {
-        let on_toggle = on_toggle_sheet.clone();
-        on_click(&drag_handle_container, move |_| {
-            on_toggle();
-        })?;
-    }
-    
-    append_child(&drag_handle_container, &drag_handle)?;
-    
-    // Progress Info y Progress Bar (solo cuando sheet no está collapsed)
-    // En Yew original: progress-info y progress-bar-container son hermanos dentro de drag-handle-container
-    if sheet_state != "collapsed" {
+    // Crear header elements (progress info + progress bar como hermanos)
+    let header_elements = if sheet_state != "collapsed" {
         let (progress_info, progress_bar_container) = render_progress_info(session, state)?;
-        append_child(&drag_handle_container, &progress_info)?;
-        append_child(&drag_handle_container, &progress_bar_container)?;
-    }
+        vec![progress_info, progress_bar_container]
+    } else {
+        vec![]
+    };
     
-    append_child(&bottom_sheet, &drag_handle_container)?;
-    
-    // Package List (contenido scrolleable)
-    if session.packages.is_empty() {
+    // Crear body content
+    let body_content = if session.packages.is_empty() {
         // Estado vacío
         let no_packages = ElementBuilder::new("div")?
             .class("no-packages")
@@ -115,7 +58,8 @@ pub fn render_bottom_sheet(
         append_child(&no_packages, &icon)?;
         append_child(&no_packages, &text)?;
         append_child(&no_packages, &subtitle)?;
-        append_child(&bottom_sheet, &no_packages)?;
+        
+        no_packages
     } else {
         // Lista de paquetes
         let addresses_map: std::collections::HashMap<String, String> = session.addresses
@@ -125,7 +69,7 @@ pub fn render_bottom_sheet(
         
         let selected_index = *state.selected_package_index.borrow();
         
-        let package_list = render_package_list(
+        render_package_list(
             groups.to_vec(),
             &addresses_map,
             selected_index,
@@ -161,10 +105,101 @@ pub fn render_bottom_sheet(
                     }
                 })
             },
-        )?;
+        )?
+    };
+    
+    // Usar función reutilizable
+    render_reusable_bottom_sheet(
+        sheet_state,
+        header_elements,
+        body_content,
+        on_toggle_sheet,
+        on_close_sheet,
+        true, // show_backdrop
+    )
+}
+
+/// Renderizar bottom sheet genérico reutilizable
+/// Permite usar el mismo componente para chofer y admin con contenido custom
+/// header_elements: Vec de elementos que se agregan al drag_handle_container como hermanos (progress_info, progress_bar, etc.)
+pub fn render_reusable_bottom_sheet(
+    sheet_state: String,
+    header_elements: Vec<Element>,
+    body_content: Element,
+    on_toggle_sheet: Rc<dyn Fn()>,
+    on_close_sheet: Rc<dyn Fn()>,
+    show_backdrop: bool,
+) -> Result<Element, JsValue> {
+    // Container principal
+    let container = ElementBuilder::new("div")?
+        .attr("id", "package-container")?
+        .class("package-container")
+        .build();
+    
+    // Backdrop (solo si show_backdrop está activo)
+    if show_backdrop {
+        let backdrop = ElementBuilder::new("div")?
+            .attr("id", "backdrop")?
+            .class("backdrop")
+            .build();
         
-        append_child(&bottom_sheet, &package_list)?;
+        if sheet_state != "collapsed" {
+            add_class(&backdrop, "active")?;
+        }
+        
+        // Event listener para cerrar sheet al hacer click en backdrop
+        {
+            let on_close = on_close_sheet.clone();
+            on_click(&backdrop, move |_| {
+                on_close();
+            })?;
+        }
+        
+        append_child(&container, &backdrop)?;
     }
+    
+    // Bottom Sheet
+    let bottom_sheet = ElementBuilder::new("div")?
+        .attr("id", "bottom-sheet")?
+        .class("bottom-sheet")
+        .build();
+    
+    // Agregar clase de estado
+    add_class(&bottom_sheet, &sheet_state)?;
+    
+    // Drag Handle Container (header con progress)
+    let drag_handle_container = ElementBuilder::new("div")?
+        .attr("id", "drag-handle-container")?
+        .class("drag-handle-container")
+        .build();
+    
+    // Drag Handle
+    let drag_handle = ElementBuilder::new("div")?
+        .class("drag-handle")
+        .build();
+    
+    // Event listener para toggle sheet size
+    {
+        let on_toggle = on_toggle_sheet.clone();
+        on_click(&drag_handle_container, move |_| {
+            on_toggle();
+        })?;
+    }
+    
+    append_child(&drag_handle_container, &drag_handle)?;
+    
+    // Agregar header elements custom (solo cuando sheet no está collapsed)
+    if sheet_state != "collapsed" {
+        for header_element in header_elements {
+            append_child(&drag_handle_container, &header_element)?;
+    }
+    }
+    
+    append_child(&bottom_sheet, &drag_handle_container)?;
+    
+    // Agregar body content con clase package-list para scroll consistente
+    add_class(&body_content, "package-list")?;
+    append_child(&bottom_sheet, &body_content)?;
     
     append_child(&container, &bottom_sheet)?;
     
@@ -269,5 +304,27 @@ pub fn render_progress_info(session: &DeliverySession, state: &AppState) -> Resu
     append_child(&progress_bar_container, &progress_bar_failed)?;
     
     Ok((progress_info, progress_bar_container))
+}
+
+/// Helper para crear header content simple (solo texto)
+/// Útil para admin que no necesita progress bar
+pub fn create_simple_header(title: &str) -> Result<Element, JsValue> {
+    let progress_info = ElementBuilder::new("div")?
+        .class("progress-info")
+        .build();
+    
+    let progress_text = ElementBuilder::new("div")?
+        .class("progress-text")
+        .build();
+    
+    let progress_count = ElementBuilder::new("span")?
+        .class("progress-count")
+        .text(title)
+        .build();
+    
+    append_child(&progress_text, &progress_count)?;
+    append_child(&progress_info, &progress_text)?;
+    
+    Ok(progress_info)
 }
 

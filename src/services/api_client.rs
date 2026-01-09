@@ -8,6 +8,8 @@ use gloo_net::http::Request;
 use crate::models::session::DeliverySession;
 use crate::models::sync::{Change, SyncRequest, SyncResponse};
 use crate::models::company::Company;
+use crate::models::admin::{AdminDistrict, StatusChangeRequest, PackageTraceabilityResponse};
+use crate::models::session::DeliverySession as Session;
 use crate::utils::constants::BACKEND_URL;
 
 /// Cliente API - SOLO comunicación HTTP (stateless)
@@ -560,4 +562,245 @@ pub struct SyncDeltaResult {
 pub struct GetSessionResponse {
     pub success: bool,
     pub session: DeliverySession,
+}
+
+// Admin DTOs
+#[derive(serde::Serialize)]
+struct AdminDashboardRequest {
+    username: String,
+    password: String,
+    societe: String,
+    date_debut: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct AdminDashboardResponse {
+    pub success: bool,
+    pub districts: Vec<AdminDistrict>,
+    pub total_packages: usize, // Total sin duplicados (calculado en backend)
+    pub sso_token: String,
+}
+
+#[derive(serde::Serialize)]
+struct AdminTourneePackagesRequest {
+    sso_token: String,
+    username: String,
+    societe: String,
+    date: String,
+}
+
+#[derive(serde::Serialize)]
+struct CreateStatusChangeRequest {
+    tracking_code: String,
+    session_id: String,
+    driver_matricule: String,
+    notes: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct StatusChangeResponse {
+    pub success: bool,
+    pub request_id: String,
+    pub message: String,
+}
+
+#[derive(serde::Serialize)]
+struct ConfirmAndSendEmailRequest {
+    request_id: String,
+    admin_matricule: String,
+}
+
+// Extensiones de ApiClient para admin
+impl ApiClient {
+    /// Obtener dashboard admin
+    pub async fn fetch_admin_dashboard(
+        &self,
+        username: &str,
+        password: &str,
+        societe: &str,
+        date_debut: &str,
+    ) -> Result<AdminDashboardResponse, String> {
+        let url = format!("{}/v1/admin/dashboard", self.base_url);
+        let request_body = AdminDashboardRequest {
+            username: username.to_string(),
+            password: password.to_string(),
+            societe: societe.to_string(),
+            date_debut: date_debut.to_string(),
+        };
+        
+        let response = Request::post(&url)
+            .json(&request_body)
+            .map_err(|e| format!("Serialize error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+            
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        
+        response.json::<AdminDashboardResponse>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))
+    }
+    
+    /// Obtener paquetes de una tournée
+    pub async fn fetch_tournee_packages(
+        &self,
+        code_tournee: &str,
+        sso_token: &str,
+        username: &str,
+        societe: &str,
+        date: &str,
+    ) -> Result<Session, String> {
+        let url = format!("{}/v1/admin/tournee/{}/packages", self.base_url, code_tournee);
+        let request_body = AdminTourneePackagesRequest {
+            sso_token: sso_token.to_string(),
+            username: username.to_string(),
+            societe: societe.to_string(),
+            date: date.to_string(),
+        };
+        
+        #[derive(serde::Deserialize)]
+        struct FetchPackagesResponse {
+            pub success: bool,
+            pub session: Session,
+        }
+        
+        let response = Request::post(&url)
+            .json(&request_body)
+            .map_err(|e| format!("Serialize error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+            
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        
+        let result: FetchPackagesResponse = response.json()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))?;
+            
+        Ok(result.session)
+    }
+    
+    /// Crear request de cambio de status
+    pub async fn create_status_change_request(
+        &self,
+        tracking_code: &str,
+        session_id: &str,
+        driver_matricule: &str,
+        notes: Option<&str>,
+    ) -> Result<StatusChangeResponse, String> {
+        let url = format!("{}/v1/admin/status-change-request", self.base_url);
+        let request_body = CreateStatusChangeRequest {
+            tracking_code: tracking_code.to_string(),
+            session_id: session_id.to_string(),
+            driver_matricule: driver_matricule.to_string(),
+            notes: notes.map(|s| s.to_string()),
+        };
+        
+        let response = Request::post(&url)
+            .json(&request_body)
+            .map_err(|e| format!("Serialize error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+            
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        
+        response.json::<StatusChangeResponse>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))
+    }
+    
+    /// Obtener requests de cambio de status pendientes
+    pub async fn fetch_status_requests(&self) -> Result<Vec<StatusChangeRequest>, String> {
+        let url = format!("{}/v1/admin/status-change-requests", self.base_url);
+        
+        let response = Request::get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+            
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        
+        response.json::<Vec<StatusChangeRequest>>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))
+    }
+    
+    /// Confirmar y enviar email para un request
+    pub async fn confirm_and_send_email(
+        &self,
+        request_id: &str,
+        admin_matricule: &str,
+    ) -> Result<StatusChangeResponse, String> {
+        let url = format!("{}/v1/admin/status-change-request/{}/confirm-and-send", self.base_url, request_id);
+        let request_body = ConfirmAndSendEmailRequest {
+            request_id: request_id.to_string(),
+            admin_matricule: admin_matricule.to_string(),
+        };
+        
+        let response = Request::post(&url)
+            .json(&request_body)
+            .map_err(|e| format!("Serialize error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+            
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        
+        response.json::<StatusChangeResponse>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))
+    }
+    
+    /// Obtener traçabilité de un paquete
+    pub async fn fetch_package_traceability(
+        &self,
+        tracking_code: &str,
+        sso_token: &str,
+        username: &str,
+        societe: &str,
+    ) -> Result<PackageTraceabilityResponse, String> {
+        let url = format!("{}/v1/admin/package-traceability", self.base_url);
+        
+        #[derive(serde::Serialize)]
+        struct GetPackageTraceabilityRequest {
+            tracking_code: String,
+            sso_token: String,
+            username: String,
+            societe: String,
+        }
+        
+        let request_body = GetPackageTraceabilityRequest {
+            tracking_code: tracking_code.to_string(),
+            sso_token: sso_token.to_string(),
+            username: username.to_string(),
+            societe: societe.to_string(),
+        };
+        
+        let response = Request::post(&url)
+            .json(&request_body)
+            .map_err(|e| format!("Serialize error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+            
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        
+        response.json::<PackageTraceabilityResponse>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))
+    }
 }
