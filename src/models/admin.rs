@@ -45,6 +45,29 @@ pub struct TraceabilityAction {
     pub commentaire: String,
 }
 
+/// Response al cerrar el día (confirmed -> resolved + sesiones borradas)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloseDayResponse {
+    pub closed_count: usize,
+    pub sessions_deleted: usize,
+}
+
+/// Request para buscar tracking en todas las tournées
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchTrackingRequest {
+    pub tracking: String,
+    pub societe: String,
+    pub date: String,
+}
+
+/// Response de búsqueda de tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchTrackingResponse {
+    pub found: bool,
+    pub code_tournee: Option<String>,
+    pub session: Option<crate::models::session::DeliverySession>,
+}
+
 /// Response de traçabilité de un paquete
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageTraceabilityResponse {

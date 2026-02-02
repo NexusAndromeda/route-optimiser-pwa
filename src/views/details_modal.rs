@@ -232,8 +232,8 @@ pub fn render_details_modal(
     Ok(modal)
 }
 
-/// Crear sección de traçabilité
-fn create_traceability_section(
+/// Crear sección de traçabilité (pública para reutilizar en modal de demande admin)
+pub fn create_traceability_section(
     traceability: &crate::models::admin::PackageTraceabilityResponse,
     lang: &str,
 ) -> Result<Element, JsValue> {
@@ -944,10 +944,12 @@ fn create_problematic_section(
     Ok(section)
 }
 
-/// Crear sección para cambio de status
+/// Crear sección para cambio de status.
+/// IMPORTANTE: El handler lee tracking de details_package en el momento del click, no lo captura.
+/// Así funciona correctamente cuando el modal se reutiliza para otro paquete (update_details_modal_direct).
 fn create_status_change_section(
     state: &AppState,
-    tracking: &str,
+    _tracking: &str,
     lang: &str,
 ) -> Result<Element, JsValue> {
     let section = ElementBuilder::new("div")?
@@ -960,16 +962,22 @@ fn create_status_change_section(
     
     let status_change_btn = ElementBuilder::new("button")?
         .class("btn-status-change")
-        .text("⚠️ Nécessite changement de statut")
+        .text(&format!("⚠️ {}", t("necessite_changement_statut", lang)))
         .build();
     
     {
         let state_clone = state.clone();
-        let tracking_clone = tracking.to_string();
         let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
-            *state_clone.show_status_change_modal.borrow_mut() = true;
-            *state_clone.status_change_tracking.borrow_mut() = Some(tracking_clone.clone());
-            crate::rerender_app();
+            // Leer tracking del paquete actual en details_package (no capturado en la closure)
+            let tracking = state_clone.details_package.borrow()
+                .as_ref()
+                .map(|(pkg, _)| pkg.tracking.clone());
+            if let Some(t) = tracking {
+                *state_clone.show_status_change_modal.borrow_mut() = true;
+                *state_clone.status_change_tracking.borrow_mut() = Some(t);
+                *state_clone.status_change_type_de_livraison.borrow_mut() = None;
+                crate::rerender_app();
+            }
         }) as Box<dyn FnMut(web_sys::MouseEvent)>);
         status_change_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
         closure.forget();
@@ -986,7 +994,7 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
     if !*state.show_status_change_modal.borrow() {
         return Ok(None);
     }
-    
+    let lang = state.language.borrow().clone();
     let tracking = state.status_change_tracking.borrow().clone()
         .unwrap_or_else(|| "UNKNOWN".to_string());
     
@@ -999,7 +1007,12 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
         .map(|s| s.session_id.clone())
         .unwrap_or_default();
     
-    let modal = ElementBuilder::new("div")?
+    // Wrapper para que quede por encima del modal de detalles (z-index: 1001)
+    let wrapper = ElementBuilder::new("div")?
+        .class("modal active status-change-modal")
+        .build();
+    
+    let overlay = ElementBuilder::new("div")?
         .class("modal-overlay")
         .build();
     
@@ -1007,7 +1020,7 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
         .class("modal-content")
         .build();
     
-    // Prevenir cierre al click dentro
+    // Prevenir cierre al click dentro del contenido
     {
         let closure = Closure::wrap(Box::new(move |e: web_sys::MouseEvent| {
             e.stop_propagation();
@@ -1017,13 +1030,45 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
     }
     
     let title = ElementBuilder::new("h3")?
-        .text("📝 Notes pour changement de statut")
+        .text(&t("type_livraison_label", &lang))
         .build();
     
-    let textarea = create_element("textarea")?;
-    set_attribute(&textarea, "class", "status-notes-textarea")?;
-    set_attribute(&textarea, "placeholder", "Ajoutez vos notes (ex: code barre manquant, étiquette déchirée, lieu de dépôt...)")?;
-    set_attribute(&textarea, "rows", "5")?;
+    let hint = ElementBuilder::new("p")?
+        .class("status-change-hint")
+        .text(&t("choisir_type_livraison", &lang))
+        .build();
+    
+    const TYPE_BUTTONS: &[( &str, &str)] = &[
+        ("C", "CLIENT"),
+        ("G", "GARDIEN"),
+        ("BAL", "BAL"),
+        ("A", "ACCUEIL"),
+        ("AH", "ACCUEIL HOTEL"),
+    ];
+    let selected = state.status_change_type_de_livraison.borrow().clone();
+    let buttons_container = ElementBuilder::new("div")?
+        .class("status-change-type-buttons")
+        .build();
+    for (short, value) in TYPE_BUTTONS {
+        let btn = ElementBuilder::new("button")?
+            .class("btn-status-type")
+            .attr("type", "button")?
+            .attr("data-value", value)?
+            .text(short)
+            .build();
+        if selected.as_deref() == Some(*value) {
+            let _ = add_class(&btn, "selected");
+        }
+        let state_clone = state.clone();
+        let value_str = value.to_string();
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            *state_clone.status_change_type_de_livraison.borrow_mut() = Some(value_str.clone());
+            crate::rerender_app();
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+        append_child(&buttons_container, &btn)?;
+    }
     
     let actions = ElementBuilder::new("div")?
         .class("modal-actions")
@@ -1031,7 +1076,7 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
     
     let cancel_btn = ElementBuilder::new("button")?
         .class("btn-cancel")
-        .text("Annuler")
+        .text(&t("annuler", &lang))
         .build();
     
     {
@@ -1039,6 +1084,7 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
         let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
             *state_clone.show_status_change_modal.borrow_mut() = false;
             *state_clone.status_change_tracking.borrow_mut() = None;
+            *state_clone.status_change_type_de_livraison.borrow_mut() = None;
             crate::rerender_app();
         }) as Box<dyn FnMut(web_sys::MouseEvent)>);
         cancel_btn.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
@@ -1047,43 +1093,36 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
     
     let confirm_btn = ElementBuilder::new("button")?
         .class("btn-confirm")
-        .text("✅ Confirmer")
+        .text(&format!("✅ {}", t("confirmer", &lang)))
         .build();
     
     {
         let state_clone = state.clone();
-        let textarea_clone = textarea.clone();
         let tracking_clone = tracking.clone();
         let driver_matricule_clone = driver_matricule.clone();
         let session_id_clone = session_id.clone();
         
         let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
-            // Obtener notes del textarea
-            let notes = textarea_clone.dyn_ref::<web_sys::HtmlTextAreaElement>()
-                .map(|t| t.value())
-                .unwrap_or_default();
-            
-            // Enviar al backend
+            let notes: Option<String> = state_clone.status_change_type_de_livraison.borrow().clone();
             let state_clone = state_clone.clone();
             let tracking_clone = tracking_clone.clone();
             let driver_matricule_clone = driver_matricule_clone.clone();
             let session_id_clone = session_id_clone.clone();
-            let notes_clone = notes.clone();
             
             wasm_bindgen_futures::spawn_local(async move {
                 use crate::services::api_client::ApiClient;
                 let api = ApiClient::new();
-                
                 match api.create_status_change_request(
                     &tracking_clone,
                     &session_id_clone,
                     &driver_matricule_clone,
-                    if notes_clone.is_empty() { None } else { Some(&notes_clone) },
+                    notes.as_deref(),
                 ).await {
                     Ok(_) => {
                         console::log_1(&JsValue::from_str("✅ Request de cambio de status creado"));
                         *state_clone.show_status_change_modal.borrow_mut() = false;
                         *state_clone.status_change_tracking.borrow_mut() = None;
+                        *state_clone.status_change_type_de_livraison.borrow_mut() = None;
                         crate::rerender_app();
                     }
                     Err(e) => {
@@ -1096,15 +1135,15 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
         closure.forget();
     }
     
-    // Cerrar al click en overlay
     {
         let state_clone = state.clone();
         let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
             *state_clone.show_status_change_modal.borrow_mut() = false;
             *state_clone.status_change_tracking.borrow_mut() = None;
+            *state_clone.status_change_type_de_livraison.borrow_mut() = None;
             crate::rerender_app();
         }) as Box<dyn FnMut(web_sys::MouseEvent)>);
-        modal.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        overlay.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
         closure.forget();
     }
     
@@ -1112,9 +1151,11 @@ pub fn render_status_change_modal(state: &AppState) -> Result<Option<Element>, J
     append_child(&actions, &confirm_btn)?;
     
     append_child(&modal_content, &title)?;
-    append_child(&modal_content, &textarea)?;
+    append_child(&modal_content, &hint)?;
+    append_child(&modal_content, &buttons_container)?;
     append_child(&modal_content, &actions)?;
-    append_child(&modal, &modal_content)?;
+    append_child(&wrapper, &overlay)?;
+    append_child(&wrapper, &modal_content)?;
     
-    Ok(Some(modal))
+    Ok(Some(wrapper))
 }

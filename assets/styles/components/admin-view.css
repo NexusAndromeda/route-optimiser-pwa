@@ -165,67 +165,16 @@
 /* Districts list - dentro del package-list del bottom sheet */
 /* El padding y scroll ya están manejados por .package-list */
 
+/* District cards usan las mismas clases que package-card para consistencia */
+/* Los estilos base vienen de package-card.css */
 .district-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-md);
-    margin-bottom: var(--spacing-sm);
-    transition: all var(--transition-fast);
+    /* Hereda estilos de .package-card */
 }
 
-.district-card:hover {
-    background: var(--bg-surface-variant);
+/* Asegurar que selected funciona correctamente */
+.district-card.selected {
+    background: var(--color-primary);
     border-color: var(--color-primary);
-}
-
-.district-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    cursor: pointer;
-}
-
-.district-title {
-    flex: 1;
-    font-weight: var(--font-weight-semibold);
-    font-size: var(--font-size-lg);
-    color: var(--text-primary);
-}
-
-.district-toggle {
-    background: none;
-    border: none;
-    font-size: var(--font-size-lg);
-    cursor: pointer;
-    padding: 4px var(--spacing-sm);
-    color: var(--text-secondary);
-}
-
-.district-toggle:hover {
-    color: var(--text-primary);
-}
-
-.district-info {
-    color: var(--text-secondary);
-    font-size: var(--font-size-sm);
-    margin-top: var(--spacing-sm);
-}
-
-.tournees-list {
-    margin-top: var(--spacing-sm);
-    padding-left: var(--spacing-md);
-}
-
-.tournee-letter-section {
-    margin-bottom: var(--spacing-md);
-}
-
-.tournee-letter-title {
-    font-weight: var(--font-weight-semibold);
-    font-size: var(--font-size-md);
-    margin-bottom: var(--spacing-sm);
-    color: var(--color-primary);
 }
 
 .tournee-card {
@@ -375,7 +324,7 @@
     .packages-grid-wrapper {
         max-width: 100rem; /* 1600px */
         margin: 0;
-    }
+}
 }
 
 /* 120rem = 1920px */
@@ -604,12 +553,7 @@
     margin-top: 0.5rem;
 }
 
-.tournee-letter-title {
-    font-weight: var(--font-weight-semibold);
-    padding: 0.5rem 0;
-    color: var(--text-primary);
-    margin-top: 1rem;
-}
+/* Título de sección de letra removido - ya no se usa */
 
 .packages-placeholder {
     grid-column: 1 / -1;
@@ -618,16 +562,177 @@
     color: var(--text-secondary);
 }
 
-/* Status Requests */
+/* Status Requests - área central con scroll, centrada entre sidebar y borde */
 .status-requests-view {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Desktop: respetar sidebar y centrar contenido */
+@media (min-width: 48rem) {
+    .status-requests-view {
+        margin-left: var(--sidebar-width);
+        width: calc(100% - var(--sidebar-width));
+        box-sizing: border-box;
+    }
+}
+
+/* Centrar aperçu y cards entre sidebar y borde de pantalla */
+.status-requests-view .requests-header,
+.status-requests-view .status-requests-preview,
+.status-requests-view .requests-list {
+    width: 100%;
+    max-width: 56rem;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+@media (min-width: 64rem) {
+    .status-requests-view .requests-header,
+    .status-requests-view .status-requests-preview,
+    .status-requests-view .requests-list {
+        max-width: 64rem;
+    }
+}
+
+@media (min-width: 90rem) {
+    .status-requests-view .requests-header,
+    .status-requests-view .status-requests-preview,
+    .status-requests-view .requests-list {
+        max-width: 72rem;
+    }
 }
 
 .requests-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
+}
+
+.requests-header-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+}
+.requests-header-row .requests-title {
+    flex: 1;
+    min-width: 200px;
+}
+
+.requests-title {
+    color: var(--color-white);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    margin: 0;
+}
+
+.btn-preview-toggle {
+    background: var(--bg-surface-variant);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 8px var(--spacing-lg);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
+    transition: background var(--transition-fast);
+}
+
+.btn-preview-toggle:hover {
+    background: var(--bg-surface-container);
+}
+
+.btn-export-excel {
+    background: var(--color-success);
+    color: white;
+    border: none;
+    padding: 8px var(--spacing-lg);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
+    transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.btn-export-excel:hover {
+    background: var(--color-success-dark, #16a34a);
+    transform: scale(1.02);
+}
+
+.btn-close-day {
+    background: var(--bg-surface-variant);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 8px var(--spacing-lg);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.btn-close-day:hover {
+    background: var(--bg-surface-container);
+    border-color: var(--text-secondary);
+}
+
+/* Preview Excel (REF COLIS + TYPE DE LIVRAISON par date) */
+.status-requests-preview {
+    margin-bottom: var(--spacing-xl);
+    background: var(--bg-surface-variant);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    border: 1px solid var(--border-color);
+}
+
+.preview-date-block {
+    margin-bottom: var(--spacing-xl);
+}
+
+.preview-date-block:last-child {
+    margin-bottom: 0;
+}
+
+.preview-date-header {
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-lg);
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.preview-th {
+    font-weight: var(--font-weight-semibold);
+    text-align: left;
+    padding: 10px var(--spacing-md);
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface-variant);
+    color: var(--text-primary);
+}
+
+.preview-td {
+    padding: 8px var(--spacing-md);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.preview-td-ref {
+    text-decoration: underline;
+    font-family: monospace;
 }
 
 .btn-auto-refresh {
@@ -790,6 +895,76 @@
     margin-top: var(--spacing-md);
 }
 
+/* Modal de détail de demande de changement de statut */
+.status-request-detail-modal .modal-content {
+    max-width: 500px;
+}
+
+.status-request-detail-modal .modal-header {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.status-request-detail-modal .modal-header h2 {
+    font-size: var(--font-size-lg);
+    margin: 0;
+}
+
+.status-request-detail-modal .modal-body {
+    max-height: 50vh;
+    overflow-y: auto;
+    margin-bottom: var(--spacing-lg);
+}
+
+/* Boutons du modal (Fermer / Confirmer) */
+.modal-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: flex-end;
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-cancel {
+    background: var(--bg-surface-variant);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-cancel:hover {
+    background: var(--bg-surface-container);
+    border-color: var(--text-secondary);
+}
+
+.btn-confirm {
+    background: var(--color-success);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-confirm:hover {
+    background: var(--color-success-dark, #16a34a);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.btn-confirm:active {
+    transform: translateY(0);
+}
+
 /* Responsive - Móvil muy pequeño (< 480px) */
 @media (max-width: 479px) {
     .admin-stats {
@@ -799,8 +974,8 @@
     .packages-grid {
         grid-template-columns: 1fr !important; /* 1 columna en móviles muy pequeños */
     }
-}
-
+    }
+    
 /* NOTA: Estilos de .bottom-sheet están en layouts/bottom-sheet.css */
 
 

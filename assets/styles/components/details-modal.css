@@ -18,6 +18,11 @@
     display: flex;
 }
 
+/* Modal de changement de statut (chofer) : au-dessus du modal de détails */
+.status-change-modal {
+    z-index: 1001;
+}
+
 .modal-overlay {
     position: absolute;
     top: 0;
@@ -355,4 +360,86 @@
     font-size: 0.75rem;
     color: var(--text-tertiary);
     margin-top: var(--spacing-xs);
+}
+
+/* Type de livraison buttons (modal changement de statut) */
+.status-change-type-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 16px 0;
+}
+.status-change-type-buttons .btn-status-type {
+    padding: 10px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-surface-variant);
+    color: var(--text-primary);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.status-change-type-buttons .btn-status-type:hover {
+    border-color: var(--color-primary);
+    background: rgba(var(--color-primary-rgb, 59, 130, 246), 0.1);
+}
+.status-change-type-buttons .btn-status-type.selected {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: white;
+}
+
+/* Modal de changement de statut (chofer) - styling des boutons */
+.status-change-modal .modal-content {
+    max-width: 420px;
+}
+
+.status-change-modal .modal-content h3 {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-size-lg);
+}
+
+.status-change-modal .status-change-hint {
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.status-change-modal .modal-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: flex-end;
+    margin-top: var(--spacing-lg);
+}
+
+.status-change-modal .btn-cancel {
+    background: var(--bg-surface-variant);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.status-change-modal .btn-cancel:hover {
+    background: var(--bg-surface-container);
+}
+
+.status-change-modal .btn-confirm {
+    background: var(--color-success);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.status-change-modal .btn-confirm:hover {
+    background: var(--color-success-dark, #16a34a);
 }

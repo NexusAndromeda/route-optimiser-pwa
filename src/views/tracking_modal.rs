@@ -8,12 +8,14 @@ use std::rc::Rc;
 use crate::dom::{ElementBuilder, append_child, set_attribute, add_class, remove_class, set_inner_html, set_text_content};
 use crate::dom::events::on_click;
 use crate::models::session::DeliverySession;
+use crate::utils::i18n::t;
 
 /// Renderizar modal de búsqueda de trackings
 pub fn render_tracking_modal(
     session: &DeliverySession,
     on_tracking_selected: Rc<dyn Fn(String)>,
     on_close: Rc<dyn Fn()>,
+    lang: &str,
 ) -> Result<Element, JsValue> {
     // Modal overlay - inicialmente oculto (se mostrará con CSS cuando tenga clase "show")
     let modal = ElementBuilder::new("div")?
@@ -49,7 +51,7 @@ pub fn render_tracking_modal(
         .build();
     
     let header_title = ElementBuilder::new("h3")?
-        .text("Buscar Tracking")
+        .text(&t("buscar_tracking_title", lang))
         .build();
     
     let close_btn = ElementBuilder::new("button")?
@@ -76,7 +78,7 @@ pub fn render_tracking_modal(
     let search_input = crate::dom::create_element("input")?;
     set_attribute(&search_input, "type", "text")?;
     set_attribute(&search_input, "id", "tracking-search")?;
-    set_attribute(&search_input, "placeholder", "Buscar tracking...")?;
+    set_attribute(&search_input, "placeholder", &t("buscar_tracking_placeholder", lang))?;
     
     // Lista de trackings (container)
     let tracking_list = ElementBuilder::new("div")?
@@ -88,7 +90,7 @@ pub fn render_tracking_modal(
     let trackings: Vec<String> = session.packages.keys().cloned().collect();
     
     // Renderizar lista inicial (todos los trackings)
-    render_tracking_list(&tracking_list, &trackings, &on_tracking_selected, &on_close)?;
+    render_tracking_list(&tracking_list, &trackings, &on_tracking_selected, &on_close, lang)?;
     
     // Event listener para búsqueda
     {
@@ -96,6 +98,7 @@ pub fn render_tracking_modal(
         let list_clone = tracking_list.clone();
         let on_select_clone = on_tracking_selected.clone();
         let on_close_clone = on_close.clone();
+        let lang_tracking = lang.to_string();
         
         crate::dom::events::on_input(&search_input, move |e: web_sys::InputEvent| {
             if let Some(target) = e.target().and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok()) {
@@ -112,7 +115,7 @@ pub fn render_tracking_modal(
                 };
                 
                 // Re-renderizar lista
-                let _ = render_tracking_list(&list_clone, &filtered, &on_select_clone, &on_close_clone);
+                let _ = render_tracking_list(&list_clone, &filtered, &on_select_clone, &on_close_clone, &lang_tracking);
             }
         })?;
     }
@@ -134,6 +137,7 @@ fn render_tracking_list(
     trackings: &[String],
     on_select: &Rc<dyn Fn(String)>,
     on_close: &Rc<dyn Fn()>,
+    lang: &str,
 ) -> Result<(), JsValue> {
     // Limpiar lista anterior
     set_inner_html(container, "");
@@ -141,7 +145,7 @@ fn render_tracking_list(
     if trackings.is_empty() {
         let empty_msg = ElementBuilder::new("div")?
             .class("company-empty")
-            .text("No se encontraron trackings")
+            .text(&t("aucun_tracking", lang))
             .build();
         append_child(container, &empty_msg)?;
         return Ok(());

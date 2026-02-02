@@ -81,12 +81,17 @@ impl App {
                             
                             // Restaurar estado admin
                             *state_clone.admin_mode.borrow_mut() = true;
-                            *state_clone.admin_districts.borrow_mut() = response.districts;
+                            *state_clone.admin_districts.borrow_mut() = response.districts.clone();
                             *state_clone.admin_total_packages.borrow_mut() = response.total_packages;
+                            *state_clone.admin_sso_token.borrow_mut() = Some(response.sso_token.clone());
                             state_clone.auth.set_logged_in(true);
                             state_clone.auth.set_username(Some(username));
                             state_clone.auth.set_company_id(Some(societe));
-                            
+                            // Cargar demandes pendientes
+                            let state_req = state_clone.clone();
+                            if let Ok(requests) = api.fetch_status_requests("app_restore").await {
+                                *state_req.admin_status_requests.borrow_mut() = requests;
+                            }
                             // Re-renderizar para mostrar el dashboard
                             crate::rerender_app();
                         }
@@ -265,6 +270,10 @@ impl App {
                 if let Some(session) = self.state.session.get_session() {
                     update_map_packages(&self.state, &session)?;
                 }
+            }
+            IncrementalUpdate::AdminBottomSheetContent => {
+                use crate::views::admin_dashboard::update_admin_bottom_sheet_content;
+                update_admin_bottom_sheet_content(&self.state)?;
             }
         }
         Ok(())

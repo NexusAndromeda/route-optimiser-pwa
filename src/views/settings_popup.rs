@@ -80,18 +80,18 @@ pub fn render_settings_popup(
     // Map toggle - solo mostrar si NO está en modo admin
     let is_admin_mode = *state.admin_mode.borrow();
     if !is_admin_mode {
-        let map_section = create_toggle_section(
-            "Mapa",
-            map_enabled,
-            {
-                let state_clone = state.clone();
-                Rc::new(move |enabled: bool| {
-                    state_clone.set_map_enabled(enabled);
-                    state_clone.notify_subscribers();
-                })
-            },
-        )?;
-        append_child(&body, &map_section)?;
+    let map_section = create_toggle_section(
+        "Mapa",
+        map_enabled,
+        {
+            let state_clone = state.clone();
+            Rc::new(move |enabled: bool| {
+                state_clone.set_map_enabled(enabled);
+                state_clone.notify_subscribers();
+            })
+        },
+    )?;
+    append_child(&body, &map_section)?;
     }
     
     // Edit mode toggle

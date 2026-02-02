@@ -61,7 +61,7 @@ pub fn render_app(state: &AppState) -> Result<Element, JsValue> {
             console::log_1(&JsValue::from_str("⏳ [APP] Sesión no disponible, mostrando mensaje de carga"));
             // Sesión no disponible
             let message = ElementBuilder::new("div")?
-                .text("Cargando sesión...")
+                .text(&crate::utils::i18n::t("cargando_sesion", state.language.borrow().as_str()))
                 .build();
             append_child(&app_container, &message)?;
                             }
@@ -330,6 +330,15 @@ fn render_main_app_view(
     append_child(&content, &bottom_sheet)?;
     
     append_child(&main_app, &content)?;
+    
+    // Asegurar que la barra de progreso esté en el DOM tras el render (evita que no aparezca hasta refrescar)
+    {
+        let state_progress = state.clone();
+        let session_progress = session.clone();
+        Timeout::new(0, move || {
+            let _ = crate::dom::incremental::update_progress_bar(&state_progress, &session_progress);
+        }).forget();
+    }
     
     // Details modal - renderizar solo si hay details_package y show_details es true (como en Yew)
     let show_details = *state.show_details.borrow();
@@ -680,7 +689,7 @@ fn render_main_app_view(
             })
         };
         
-        let scanner_modal = render_scanner(on_close_scanner, on_barcode_detected)?;
+        let scanner_modal = render_scanner(on_close_scanner, on_barcode_detected, state.language.borrow().as_str())?;
         append_child(&main_app, &scanner_modal)?;
     }
     
@@ -731,7 +740,7 @@ fn render_main_app_view(
         })
     };
     
-    let tracking_modal = render_tracking_modal(session, on_tracking_selected, on_close_tracking)?;
+    let tracking_modal = render_tracking_modal(session, on_tracking_selected, on_close_tracking, state.language.borrow().as_str())?;
     append_child(&main_app, &tracking_modal)?;
     
     // Settings popup - siempre renderizar, mostrar/ocultar con CSS (como tracking modal)
@@ -880,7 +889,7 @@ fn create_header(state: &AppState, session: Option<&crate::models::session::Deli
     // Search tracking button (🔍)
     let search_btn = ElementBuilder::new("button")?
         .class("btn-icon-header btn-tracking-search")
-        .attr("title", "Buscar tracking")?
+        .attr("title", &t("buscar_tracking", &language))?
         .text("🔍")
         .build();
     

@@ -8,6 +8,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::spawn_local;
 use crate::dom::{ElementBuilder, create_element, set_class_name, set_text_content, append_child, set_attribute, set_inner_html, on_click, on_input, remove_class, add_class};
+use crate::utils::i18n::t;
 use crate::state::app_state::AppState;
 use crate::models::company::Company;
 use crate::services::api_client::ApiClient;
@@ -97,8 +98,9 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
         .text("Route Optimizer")
         .build();
     
+    let lang = state.language.borrow().clone();
     let subtitle = ElementBuilder::new("p")?
-        .text("Optimisation de Routes de Livraison")
+        .text(&t("optimisation_routes", &lang))
         .build();
     
     append_child(&login_header, &logo)?;
@@ -112,8 +114,8 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
     // Input username
     let username_group = create_form_group(
         "username",
-        "Utilisateur",
-        "Entrez votre nom d'utilisateur",
+        &t("utilisateur", &lang),
+        &t("utilisateur_placeholder", &lang),
         username.clone(),
         loading.clone(),
     )?;
@@ -121,8 +123,8 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
     // Input password
     let password_group = create_password_group(
         "password",
-        "Mot de passe",
-        "Entrez votre mot de passe",
+        &t("mot_de_passe", &lang),
+        &t("mot_de_passe_placeholder", &lang),
         password.clone(),
         loading.clone(),
     )?;
@@ -134,6 +136,7 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
         show_company_modal.clone(),
         company_query.clone(),
         loading.clone(),
+        &lang,
     )?;
     
     // User type toggle (Chofer/Admin)
@@ -142,7 +145,7 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
         .build();
     
     let user_type_label = ElementBuilder::new("label")?
-        .text("Type d'utilisateur")
+        .text(&t("type_utilisateur", &lang))
         .build();
     append_child(&user_type_group, &user_type_label)?;
     
@@ -154,7 +157,7 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
     let driver_btn = ElementBuilder::new("button")?
         .class(if *state.user_type.borrow() == "driver" { "user-type-btn active" } else { "user-type-btn" })
         .attr("type", "button")?
-        .text("🚚 Chauffeur")
+        .text(&format!("🚚 {}", t("chauffeur", &lang)))
         .build();
     
     {
@@ -169,7 +172,7 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
     let admin_btn = ElementBuilder::new("button")?
         .class(if *state.user_type.borrow() == "admin" { "user-type-btn active" } else { "user-type-btn" })
         .attr("type", "button")?
-        .text("👔 Admin")
+        .text(&format!("👔 {}", t("admin", &lang)))
         .build();
     
     {
@@ -193,7 +196,7 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
     
     let btn_text = ElementBuilder::new("span")?
         .class("btn-text")
-        .text("Se connecter")
+        .text(&t("connexion", &lang))
         .build();
     
     append_child(&submit_btn, &btn_text)?;
@@ -215,7 +218,7 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
             let societe_val = societe_clone.borrow().clone();
             
             if username_val.is_empty() || password_val.is_empty() || societe_val.is_empty() {
-                *error_clone.borrow_mut() = Some("Veuillez remplir tous les champs".to_string());
+                *error_clone.borrow_mut() = Some(t("veuillez_remplir_champs", &state_clone.language.borrow()));
                 return;
             }
             
@@ -251,12 +254,22 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
                             
                             // Actualizar estado admin
                             *state_clone.admin_mode.borrow_mut() = true;
-                            *state_clone.admin_districts.borrow_mut() = response.districts;
+                            *state_clone.admin_districts.borrow_mut() = response.districts.clone();
                             *state_clone.admin_total_packages.borrow_mut() = response.total_packages;
+                            *state_clone.admin_sso_token.borrow_mut() = Some(response.sso_token.clone());
                             // Guardar credenciales para polling automático
                             *state_clone.admin_username.borrow_mut() = Some(username_val.clone());
                             *state_clone.admin_password.borrow_mut() = Some(password_val.clone());
                             *state_clone.admin_societe.borrow_mut() = Some(societe_val.clone());
+                            // Cargar demandes de confirmation pendientes
+                            let state_for_requests = state_clone.clone();
+                            let api_for_requests = ApiClient::new();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                if let Ok(requests) = api_for_requests.fetch_status_requests("login").await {
+                                    *state_for_requests.admin_status_requests.borrow_mut() = requests;
+                                    crate::rerender_app();
+                                }
+                            });
                             
                             // Guardar credenciales en localStorage para persistencia
                             use crate::services::OfflineService;
@@ -360,6 +373,7 @@ pub fn render_login(state: &AppState) -> Result<Element, JsValue> {
         companies.clone(),
         show_company_modal.clone(),
         company_query.clone(),
+        &lang,
     )?;
     append_child(&login_screen, &company_modal)?;
     
@@ -461,6 +475,7 @@ fn create_company_selector(
     show_modal: Rc<RefCell<bool>>,
     company_query: Rc<RefCell<String>>,
     loading: Rc<RefCell<bool>>,
+    lang: &str,
 ) -> Result<Element, JsValue> {
     let group = ElementBuilder::new("div")?
         .class("form-group")
@@ -468,7 +483,7 @@ fn create_company_selector(
     
     let label = ElementBuilder::new("label")?
         .attr("for", "company")?
-        .text("Entreprise")
+        .text(&t("entreprise", lang))
         .build();
     
     let selector = ElementBuilder::new("button")?
@@ -482,10 +497,12 @@ fn create_company_selector(
         .build();
     
     // Función helper para actualizar el texto del botón
+    let lang_owned = lang.to_string();
     let update_button_text = {
         let companies_clone = companies.clone();
         let societe_clone = societe.clone();
         let text_span = company_text_span.clone();
+        let lang_for_closure = lang_owned.clone();
         Rc::new(move || {
             let companies_list = companies_clone.borrow();
             let societe_val = societe_clone.borrow();
@@ -493,7 +510,7 @@ fn create_company_selector(
             let display_text = if let Some(selected) = companies_list.iter().find(|c| c.code == *societe_val) {
                 selected.name.clone()
             } else {
-                "Sélectionner l'entreprise".to_string()
+                t("selectionner_entreprise", &lang_for_closure)
             };
             
             set_text_content(&text_span, &display_text);
@@ -518,6 +535,7 @@ fn create_company_selector(
         let companies_clone = companies.clone();
         let company_query_clone = company_query.clone();
         let societe_clone = societe.clone();
+        let lang_modal = lang.to_string();
         
         on_click(&selector, move |_| {
             console::log_1(&JsValue::from_str("🖱️ [LOGIN] Click en selector de empresa - abriendo modal"));
@@ -546,6 +564,7 @@ fn create_company_selector(
                         &societe_clone,
                         &show_modal_clone,
                         &modal,
+                        &lang_modal,
                     ) {
                         Ok(_) => {
                             console::log_1(&JsValue::from_str("✅ [LOGIN] Lista re-renderizada exitosamente"));
@@ -585,6 +604,7 @@ fn create_company_modal(
     companies: Rc<RefCell<Vec<Company>>>,
     show_modal: Rc<RefCell<bool>>,
     company_query: Rc<RefCell<String>>,
+    lang: &str,
 ) -> Result<Element, JsValue> {
     let modal = ElementBuilder::new("div")?
         .attr("id", "company-modal")?
@@ -601,7 +621,7 @@ fn create_company_modal(
         .build();
     
     let header_title = ElementBuilder::new("h3")?
-        .text("Seleccionar Empresa")
+        .text(&t("selectionner_entreprise", lang))
         .build();
     
     let close_btn = ElementBuilder::new("button")?
@@ -651,7 +671,7 @@ fn create_company_modal(
     let search_input = create_element("input")?;
     set_attribute(&search_input, "type", "text")?;
     set_attribute(&search_input, "id", "company-search")?;
-    set_attribute(&search_input, "placeholder", "Buscar empresa...")?;
+    set_attribute(&search_input, "placeholder", &t("buscar_empresa", lang))?;
     
     // Lista de empresas (crear antes del event listener)
     let company_list = ElementBuilder::new("div")?
@@ -667,6 +687,7 @@ fn create_company_modal(
         let show_modal_clone = show_modal.clone();
         let modal_clone = modal.clone();
         let list_clone = company_list.clone();
+        let lang_input = lang.to_string();
         
         on_input(&search_input, move |e: web_sys::InputEvent| {
             if let Some(target) = e.target().and_then(|t| t.dyn_into::<HtmlInputElement>().ok()) {
@@ -680,6 +701,7 @@ fn create_company_modal(
                     &societe_clone,
                     &show_modal_clone,
                     &modal_clone,
+                    &lang_input,
                 );
             }
         })?;
@@ -695,6 +717,7 @@ fn create_company_modal(
         &societe,
         &show_modal,
         &modal,
+        lang,
     )?;
     
     // Re-renderizar lista cuando cambie la búsqueda o las empresas
@@ -718,6 +741,7 @@ fn render_company_list_internal(
     societe: &Rc<RefCell<String>>,
     show_modal: &Rc<RefCell<bool>>,
     modal: &Element,
+    lang: &str,
 ) -> Result<(), JsValue> {
     console::log_1(&JsValue::from_str("🎨 [RENDER] Iniciando renderizado de lista de empresas"));
     log::info!("🎨 [RENDER] Iniciando renderizado de lista de empresas");
@@ -742,7 +766,7 @@ fn render_company_list_internal(
         log::warn!("⚠️ [RENDER] Lista de empresas vacía - mostrando mensaje de carga");
         let loading_msg = ElementBuilder::new("div")?
             .class("company-loading")
-            .text("⏳ Cargando empresas...")
+            .text(&format!("⏳ {}", t("chargement_entreprises", lang)))
             .build();
         append_child(list_container, &loading_msg)?;
     } else {
@@ -769,7 +793,7 @@ fn render_company_list_internal(
             log::warn!("⚠️ [RENDER] No hay empresas que mostrar después del filtro");
             let empty_msg = ElementBuilder::new("div")?
                 .class("company-empty")
-                .text("No se encontraron empresas")
+                .text(&t("aucune_entreprise", lang))
                 .build();
             append_child(list_container, &empty_msg)?;
         } else {
@@ -799,6 +823,7 @@ fn render_company_list_internal(
                     let show_modal_clone = show_modal.clone();
                     let modal_clone = modal.clone();
                     let companies_clone = companies.clone();
+                    let lang_sel = lang.to_string();
                     
                     on_click(&company_item, move |_| {
                         *societe_clone.borrow_mut() = code.clone();
@@ -811,7 +836,7 @@ fn render_company_list_internal(
                             if let Some(selected) = companies_list.iter().find(|c| c.code == code) {
                                 crate::dom::set_text_content(&btn_text, &selected.name);
                             } else {
-                                crate::dom::set_text_content(&btn_text, "Sélectionner l'entreprise");
+                                crate::dom::set_text_content(&btn_text, &t("selectionner_entreprise", &lang_sel));
                             }
                         }
                     })?;

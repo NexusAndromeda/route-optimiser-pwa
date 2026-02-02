@@ -720,16 +720,22 @@ pub fn update_details_modal_direct(state: &AppState) -> Result<(), JsValue> {
                 append_child(&main_app, &details_modal)?;
                 web_sys::console::log_1(&JsValue::from_str("✅ [MODAL] Modal creado directamente en DOM"));
             } else {
-                // Modal existe - verificar si cambió el paquete/dirección y actualizar contenido si es necesario
-                web_sys::console::log_1(&JsValue::from_str("👁️ [MODAL] Modal existe, verificando si necesita actualización"));
+                // Modal existe - actualizar TODO el contenido con el paquete/dirección actual
+                // (el usuario puede haber seleccionado otro paquete; sin esto se mostrarían datos del anterior)
+                web_sys::console::log_1(&JsValue::from_str("👁️ [MODAL] Modal existe, actualizando contenido con paquete seleccionado"));
                 
-                // Comparar tracking/address_id para detectar cambios
                 if let Some(modal) = existing_modal {
+                    // Reinicializar estados de edición con la nueva dirección
+                    state.init_edit_states(addr);
+                    
                     let _ = modal.class_list().add_1("show");
                     let _ = modal.class_list().add_1("active");
                     
-                    // Actualizar todas las secciones del modal con los nuevos datos
-                    // Esto asegura que el contenido esté sincronizado sin recrear el modal completo
+                    // Actualizar título, destinatario, teléfono (antes no se actualizaban)
+                    update_modal_title_and_destinataire(state, pkg);
+                    update_modal_phone_section(state, pkg);
+                    
+                    // Actualizar todas las secciones editables
                     update_modal_address_section(state, addr);
                     update_modal_door_code_section(state, addr);
                     let has_mailbox = addr.mailbox_access.is_some() && addr.mailbox_access.as_ref().unwrap() == "true";
@@ -791,6 +797,69 @@ pub fn update_modal_error_message(state: &AppState, error_msg: Option<String>) {
     }
 }
 
+/// Actualizar título del modal (Paquete/Colis + tracking) y sección destinatario
+fn update_modal_title_and_destinataire(state: &AppState, pkg: &crate::models::package::Package) {
+    use crate::dom::{query_selector, set_text_content};
+    use crate::utils::i18n::t;
+    
+    let lang = state.language.borrow().clone();
+    let title_text = if lang == "ES" {
+        format!("Paquete {}", pkg.tracking)
+    } else {
+        format!("Colis {}", pkg.tracking)
+    };
+    
+    if let Ok(Some(title_h2)) = query_selector("#details-modal .modal-header h2") {
+        let _ = set_text_content(&title_h2, &title_text);
+    }
+    
+    // Destinataire (primera sección no editable)
+    if let Ok(sections) = crate::dom::query_selector_all("#details-modal .modal-body .detail-section") {
+        for i in 0..sections.length() {
+            if let Ok(section) = sections.get(i as u32).dyn_into::<Element>() {
+                if let Ok(Some(label)) = section.query_selector(".detail-label") {
+                    let label_text = label.text_content().unwrap_or_default();
+                    if label_text.contains(&t("destinataire", &lang)) || label_text.contains("Destinatario") || label_text.contains("Destinataire") {
+                        if let Ok(Some(value_el)) = section.query_selector(".detail-value") {
+                            let _ = set_text_content(&value_el, &pkg.customer_name);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Actualizar sección de teléfono en el modal
+fn update_modal_phone_section(state: &AppState, pkg: &crate::models::package::Package) {
+    use crate::dom::{query_selector, set_inner_html};
+    use crate::utils::i18n::t;
+    
+    let lang = state.language.borrow().clone();
+    let phone_value = if let Some(phone) = &pkg.phone_number {
+        format!(r#"<a href="tel:{}" class="phone-link">{}</a>"#, phone, phone)
+    } else {
+        format!(r#"<span class="empty-value">{}</span>"#, t("non_renseigne", &lang))
+    };
+    
+    if let Ok(sections) = crate::dom::query_selector_all("#details-modal .modal-body .detail-section") {
+        for i in 0..sections.length() {
+            if let Ok(section) = sections.get(i as u32).dyn_into::<Element>() {
+                if let Ok(Some(label)) = section.query_selector(".detail-label") {
+                    let label_text = label.text_content().unwrap_or_default();
+                    if label_text.contains(&t("telephone", &lang)) || label_text.contains("Teléfono") || label_text.contains("Téléphone") {
+                        if let Ok(Some(value_el)) = section.query_selector(".detail-value") {
+                            let _ = set_inner_html(&value_el, &phone_value);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Actualizar sección de dirección en el modal usando manipulación directa del DOM
 pub fn update_modal_address_section(state: &AppState, addr: &crate::models::address::Address) {
     use crate::dom::{query_selector, set_text_content};
@@ -801,9 +870,7 @@ pub fn update_modal_address_section(state: &AppState, addr: &crate::models::addr
     
     if !editing {
         // Solo actualizar si no está en modo edición
-        // Buscar la sección de dirección específicamente
-        if let Ok(Some(_modal_body)) = query_selector(".modal-body") {
-            if let Ok(sections) = crate::dom::query_selector_all(".modal-body .detail-section.editable") {
+        if let Ok(sections) = crate::dom::query_selector_all("#details-modal .modal-body .detail-section.editable") {
                 for i in 0..sections.length() {
                     let section_js = sections.get(i as u32);
                     if !section_js.is_undefined() && !section_js.is_null() {
@@ -824,7 +891,6 @@ pub fn update_modal_address_section(state: &AppState, addr: &crate::models::addr
                     }
                 }
             }
-        }
     }
 }
 
@@ -1934,16 +2000,13 @@ pub fn update_progress_bar(state: &AppState, session: &crate::models::session::D
         let _ = remove_child(&drag_handle_container, &progress_bar_container);
     }
     
-    // Solo actualizar si el sheet no está collapsed
-    let sheet_state = state.sheet_state.borrow().clone();
-    if sheet_state != "collapsed" {
-        // Renderizar nuevo progress info y progress bar (ya tienen IDs)
-        let (progress_info, progress_bar_container) = render_progress_info(session, state)?;
-        
-        // Agregar después del drag-handle (que es el primer hijo)
-        append_child(&drag_handle_container, &progress_info)?;
-        append_child(&drag_handle_container, &progress_bar_container)?;
-    }
+    // Siempre renderizar la barra de progreso (incluso collapsed) para que esté visible en el header
+    // Igual que en el admin, la barra siempre debe mostrarse
+    let (progress_info, progress_bar_container) = render_progress_info(session, state)?;
+    
+    // Agregar después del drag-handle (que es el primer hijo)
+    append_child(&drag_handle_container, &progress_info)?;
+    append_child(&drag_handle_container, &progress_bar_container)?;
     
     Ok(())
 }

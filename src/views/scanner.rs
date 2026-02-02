@@ -8,11 +8,13 @@ use wasm_bindgen::closure::Closure;
 use std::rc::Rc;
 use crate::dom::{ElementBuilder, append_child, set_attribute};
 use crate::utils::barcode_ffi;
+use crate::utils::i18n::t;
 
 /// Renderizar scanner
 pub fn render_scanner(
     on_close: Rc<dyn Fn()>,
     on_barcode: Rc<dyn Fn(String)>,
+    lang: &str,
 ) -> Result<Element, JsValue> {
     // Modal container
     let modal = ElementBuilder::new("div")?
@@ -58,7 +60,7 @@ pub fn render_scanner(
         .build();
     
     let title = ElementBuilder::new("h2")?
-        .text("Scanner")
+        .text(&t("scanner_title", lang))
         .build();
     
     let close_btn = ElementBuilder::new("button")?

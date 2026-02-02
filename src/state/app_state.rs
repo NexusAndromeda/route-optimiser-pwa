@@ -38,6 +38,8 @@ pub enum IncrementalUpdate {
     SyncIndicator,
     /// Actualizar paquetes en el mapa (sin destruir el mapa)
     MapPackages,
+    /// Actualizar contenido del bottom sheet admin (tournées, colis, livrés)
+    AdminBottomSheetContent,
 }
 
 /// Estado global de la aplicación
@@ -101,16 +103,27 @@ pub struct AppState {
     pub admin_selected_tournee_session: Rc<RefCell<Option<DeliverySession>>>, // Sesión completa de la tournée seleccionada
     pub admin_view: Rc<RefCell<String>>, // "districts" | "packages" | "status_requests"
     pub admin_status_requests: Rc<RefCell<Vec<StatusChangeRequest>>>,
-    pub admin_auto_refresh: Rc<RefCell<bool>>,
+    /// Toggle pour afficher/masquer l'aperçu Excel (REF COLIS + TYPE DE LIVRAISON par date)
+    pub admin_show_status_requests_preview: Rc<RefCell<bool>>,
     pub admin_sheet_state: Rc<RefCell<String>>, // "collapsed" | "half" | "full"
     // Credenciales del admin para polling automático
     pub admin_username: Rc<RefCell<Option<String>>>,
     pub admin_password: Rc<RefCell<Option<String>>>,
     pub admin_societe: Rc<RefCell<Option<String>>>,
+    /// SSO token del admin (para llamadas a Colis Privé: traçabilité, etc.)
+    pub admin_sso_token: Rc<RefCell<Option<String>>>,
+    /// Request seleccionado para ver detalle / historial antes de confirmar
+    pub admin_selected_status_request: Rc<RefCell<Option<StatusChangeRequest>>>,
+    /// Cargando traçabilité para el modal de demande (evita múltiples fetches)
+    pub admin_traceability_loading: Rc<RefCell<bool>>,
+    /// Handle del intervalo de polling del dashboard (solo uno activo; se cancela al reemplazar o al salir)
+    pub admin_dashboard_polling_interval: Rc<RefCell<Option<gloo_timers::callback::Interval>>>,
     
     // Modal para cambio de status (chofer)
     pub show_status_change_modal: Rc<RefCell<bool>>,
     pub status_change_tracking: Rc<RefCell<Option<String>>>,
+    /// Tipo de livraison seleccionado en el modal (C=CLIENT, G=GARDIEN, BAL, A=ACCUEIL, AH=ACCUEIL HOTEL); se envía como notes y se usa en Excel
+    pub status_change_type_de_livraison: Rc<RefCell<Option<String>>>,
     
     // Traçabilité del paquete (para modal de detalles en admin)
     pub package_traceability: Rc<RefCell<Option<PackageTraceabilityResponse>>>,
@@ -173,17 +186,22 @@ impl AppState {
             admin_expanded_tournees: Rc::new(RefCell::new(HashSet::new())),
             admin_selected_tournee: Rc::new(RefCell::new(None)),
             admin_selected_tournee_session: Rc::new(RefCell::new(None)),
-            admin_view: Rc::new(RefCell::new("districts".to_string())),
+            admin_view: Rc::new(RefCell::new("status_requests".to_string())),
             admin_status_requests: Rc::new(RefCell::new(Vec::new())),
-            admin_auto_refresh: Rc::new(RefCell::new(true)),
+            admin_show_status_requests_preview: Rc::new(RefCell::new(false)),
             admin_sheet_state: Rc::new(RefCell::new("collapsed".to_string())),
             admin_username: Rc::new(RefCell::new(None)),
             admin_password: Rc::new(RefCell::new(None)),
             admin_societe: Rc::new(RefCell::new(None)),
+            admin_sso_token: Rc::new(RefCell::new(None)),
+            admin_selected_status_request: Rc::new(RefCell::new(None)),
+            admin_traceability_loading: Rc::new(RefCell::new(false)),
+            admin_dashboard_polling_interval: Rc::new(RefCell::new(None)),
             
             // Modal para cambio de status (chofer)
             show_status_change_modal: Rc::new(RefCell::new(false)),
             status_change_tracking: Rc::new(RefCell::new(None)),
+            status_change_type_de_livraison: Rc::new(RefCell::new(None)),
             
             // Traçabilité del paquete
             package_traceability: Rc::new(RefCell::new(None)),

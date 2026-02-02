@@ -8,7 +8,7 @@ use gloo_net::http::Request;
 use crate::models::session::DeliverySession;
 use crate::models::sync::{Change, SyncRequest, SyncResponse};
 use crate::models::company::Company;
-use crate::models::admin::{AdminDistrict, StatusChangeRequest, PackageTraceabilityResponse};
+use crate::models::admin::{AdminDistrict, StatusChangeRequest, CloseDayResponse, PackageTraceabilityResponse, SearchTrackingRequest, SearchTrackingResponse};
 use crate::models::session::DeliverySession as Session;
 use crate::utils::constants::BACKEND_URL;
 
@@ -717,11 +717,15 @@ impl ApiClient {
             .map_err(|e| format!("Parse error: {}", e))
     }
     
-    /// Obtener requests de cambio de status pendientes
-    pub async fn fetch_status_requests(&self) -> Result<Vec<StatusChangeRequest>, String> {
+    /// Obtener requests de cambio de status pendientes.
+    /// `source`: identificador para debug (ej. "refresh_button", "notif_badge", "auto_refresh", "app_restore", "login", "confirm_modal").
+    pub async fn fetch_status_requests(&self, source: &str) -> Result<Vec<StatusChangeRequest>, String> {
         let url = format!("{}/v1/admin/status-change-requests", self.base_url);
+        #[cfg(target_arch = "wasm32")]
+        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!("🔍 [FETCH] status_requests desde: {}", source)));
         
         let response = Request::get(&url)
+            .header("X-Debug-Source", source)
             .send()
             .await
             .map_err(|e| format!("Network error: {}", e))?;
@@ -736,6 +740,34 @@ impl ApiClient {
     }
     
     /// Confirmar y enviar email para un request
+    /// Confirmar un request (sin enviar email) - se agrega al aperçu
+    pub async fn confirm_request(
+        &self,
+        request_id: &str,
+        admin_matricule: &str,
+    ) -> Result<StatusChangeResponse, String> {
+        let url = format!("{}/v1/admin/status-change-request/{}/confirm", self.base_url, request_id);
+        let request_body = ConfirmAndSendEmailRequest {
+            request_id: request_id.to_string(),
+            admin_matricule: admin_matricule.to_string(),
+        };
+        
+        let response = Request::post(&url)
+            .json(&request_body)
+            .map_err(|e| format!("Serialize error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+            
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        
+        response.json::<StatusChangeResponse>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))
+    }
+    
     pub async fn confirm_and_send_email(
         &self,
         request_id: &str,
@@ -759,6 +791,50 @@ impl ApiClient {
         }
         
         response.json::<StatusChangeResponse>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))
+    }
+
+    /// Buscar tracking en todas las tournées
+    pub async fn search_tracking(
+        &self,
+        request: &SearchTrackingRequest,
+    ) -> Result<SearchTrackingResponse, String> {
+        let url = format!("{}/v1/admin/search-tracking", self.base_url);
+        let response = Request::post(&url)
+            .json(request)
+            .map_err(|e| format!("Serialize error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        response.json::<SearchTrackingResponse>()
+            .await
+            .map_err(|e| format!("Parse error: {}", e))
+    }
+
+    /// Cerrar el día: pasar confirmed a resolved + borrar sesiones de la societe
+    pub async fn close_day(&self, societe: &str) -> Result<CloseDayResponse, String> {
+        let url = format!("{}/v1/admin/status-change-requests/close-day", self.base_url);
+        #[derive(serde::Serialize)]
+        struct CloseDayRequest {
+            societe: String,
+        }
+        let body = CloseDayRequest {
+            societe: societe.to_string(),
+        };
+        let response = Request::post(&url)
+            .json(&body)
+            .map_err(|e| format!("Serialize error: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        if !response.ok() {
+            return Err(format!("HTTP {}: {}", response.status(), response.status_text()));
+        }
+        response.json::<CloseDayResponse>()
             .await
             .map_err(|e| format!("Parse error: {}", e))
     }
