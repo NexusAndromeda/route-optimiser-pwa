@@ -128,12 +128,9 @@ pub fn render_admin_dashboard(state: &AppState) -> Result<Element, JsValue> {
     let admin_tracking_modal = create_admin_tracking_modal(state)?;
     append_child(&container, &admin_tracking_modal)?;
     
-    // Un solo intervalo de polling: cancelar el anterior antes de crear uno nuevo; si hay tournée seleccionada, dejar de hacer polling
-    if state.admin_selected_tournee_session.borrow().is_none() {
-        setup_dashboard_polling(state);
-    } else {
-        let _ = state.admin_dashboard_polling_interval.borrow_mut().take();
-    }
+    // Polling siempre activo en modo admin para detectar nuevas sesiones/tournées
+    // (antes se paraba al seleccionar una tournée, pero eso impedía ver nuevas tournées al reconectar un chofer)
+    setup_dashboard_polling(state);
     
     Ok(container)
 }
@@ -307,11 +304,23 @@ fn create_admin_header(state: &AppState) -> Result<Element, JsValue> {
         .class("app-header")
         .build();
     
-    // Título
+    // Título (botón para volver al dashboard principal: demandes + Excel)
     let lang_header = state.language.borrow().clone();
-    let title = ElementBuilder::new("h1")?
+    let title = ElementBuilder::new("button")?
+        .class("btn-title-header")
         .text(&format!("👔 {}", t("admin_dashboard", &lang_header)))
         .build();
+    {
+        let state_clone = state.clone();
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            *state_clone.admin_selected_tournee_session.borrow_mut() = None;
+            *state_clone.admin_selected_tournee.borrow_mut() = None;
+            *state_clone.admin_view.borrow_mut() = "status_requests".to_string();
+            crate::rerender_app();
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        title.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
     append_child(&header, &title)?;
     
     // Actions container
@@ -406,35 +415,41 @@ fn create_admin_header(state: &AppState) -> Result<Element, JsValue> {
     
     append_child(&actions, &refresh_btn)?;
     
-    // Badge de notificaciones (solo pendientes)
+    // Badge de notificaciones (siempre visible; muestra número cuando hay pendientes)
     let notifications_count = state.admin_status_requests.borrow().iter().filter(|r| r.status == "pending").count();
-    if notifications_count > 0 {
-        let notif_badge = ElementBuilder::new("button")?
-            .class("btn-icon-header notif-badge")
-            .attr("title", &format!("{} {}", notifications_count, t("demandes_en_attente", &language)))?
-            .text(&format!("🔔 {}", notifications_count))
-            .build();
-        
-        {
-            let state_clone = state.clone();
-            let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
-                *state_clone.admin_view.borrow_mut() = "status_requests".to_string();
-                let state_fetch = state_clone.clone();
-                wasm_bindgen_futures::spawn_local(async move {
-                    let api = ApiClient::new();
-                    if let Ok(requests) = api.fetch_status_requests("notif_badge").await {
-                        *state_fetch.admin_status_requests.borrow_mut() = requests;
-                    }
-                    crate::rerender_app();
-                });
-            }) as Box<dyn FnMut(web_sys::MouseEvent)>);
-            
-            notif_badge.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
-            closure.forget();
-        }
-        
-        append_child(&actions, &notif_badge)?;
+    let notif_text = if notifications_count > 0 {
+        format!("🔔 {}", notifications_count)
+    } else {
+        "🔔".to_string()
+    };
+    let notif_title = if notifications_count > 0 {
+        format!("{} {}", notifications_count, t("demandes_en_attente", &language))
+    } else {
+        t("demandes_en_attente", &language)
+    };
+    let notif_badge = ElementBuilder::new("button")?
+        .class("btn-icon-header notif-badge")
+        .attr("title", &notif_title)?
+        .text(&notif_text)
+        .build();
+    {
+        let state_clone = state.clone();
+        let closure = Closure::wrap(Box::new(move |_e: web_sys::MouseEvent| {
+            *state_clone.admin_view.borrow_mut() = "status_requests".to_string();
+            let state_fetch = state_clone.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                use crate::services::api_client::ApiClient;
+                let api = ApiClient::new();
+                if let Ok(requests) = api.fetch_status_requests("notif_badge").await {
+                    *state_fetch.admin_status_requests.borrow_mut() = requests;
+                }
+                crate::rerender_app();
+            });
+        }) as Box<dyn FnMut(web_sys::MouseEvent)>);
+        notif_badge.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())?;
+        closure.forget();
     }
+    append_child(&actions, &notif_badge)?;
     
     // Botón de parámetros (⚙️) - reemplaza el logout, abre settings popup
     let settings_btn = ElementBuilder::new("button")?
@@ -1803,9 +1818,36 @@ fn setup_dashboard_polling(state: &AppState) {
         let state_for_fetch = state_clone.clone();
         wasm_bindgen_futures::spawn_local(async move {
             use crate::services::api_client::ApiClient;
+            use web_sys::{Notification, NotificationOptions, NotificationPermission};
+            
             let api = ApiClient::new();
+            let prev_pending = state_for_fetch.admin_status_requests.borrow()
+                .iter()
+                .filter(|r| r.status == "pending")
+                .count();
+            
             if let Ok(requests) = api.fetch_status_requests("dashboard_polling").await {
+                let new_pending = requests.iter()
+                    .filter(|r| r.status == "pending")
+                    .count();
                 *state_for_fetch.admin_status_requests.borrow_mut() = requests;
+                
+                // Notificación del navegador si hay nuevas demandes pendientes
+                if new_pending > prev_pending
+                    && *state_for_fetch.admin_notifications_enabled.borrow()
+                    && Notification::permission() == NotificationPermission::Granted
+                {
+                    let body = if new_pending == 1 {
+                        "1 demande en attente".to_string()
+                    } else {
+                        format!("{} demandes en attente", new_pending)
+                    };
+                    let mut opts = NotificationOptions::new();
+                    opts.set_body(&body);
+                    opts.set_icon("/icon-192.png");
+                    opts.set_tag("admin-demandes");
+                    let _ = Notification::new_with_options("Route Optimizer", &opts);
+                }
             }
             // Actualizar tournées siempre (bottom sheet visible en todas las vistas)
             let username_opt = state_for_fetch.admin_username.borrow().clone();

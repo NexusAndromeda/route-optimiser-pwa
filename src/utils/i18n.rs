@@ -35,6 +35,7 @@ fn get_translations(lang: &str) -> HashMap<&'static str, &'static str> {
             translations.insert("mode_edition", "Modo edición");
             translations.insert("filtrer", "Filtrar");
             translations.insert("codes_couleur", "🎨 Códigos color");
+            translations.insert("notifications_navigateur", "Notificaciones del navegador");
             translations.insert("deconnexion", "⎋ Desconexión");
             translations.insert("relais", "RELAIS");
             translations.insert("rcs_premium", "RCS (Premium)");
@@ -148,6 +149,7 @@ fn get_translations(lang: &str) -> HashMap<&'static str, &'static str> {
             translations.insert("mode_edition", "Mode édition");
             translations.insert("filtrer", "Filtrer");
             translations.insert("codes_couleur", "🎨 Codes couleur");
+            translations.insert("notifications_navigateur", "Notifications du navigateur");
             translations.insert("deconnexion", "⎋ Déconnexion");
             translations.insert("relais", "RELAIS");
             translations.insert("rcs_premium", "RCS (Premium)");

@@ -92,7 +92,7 @@ impl SyncService {
         session: &DeliverySession,
         changes: Vec<Change>,
     ) -> Result<SyncResponse, String> {
-        let url = format!("{}/api/v1/sessions/{}/sync", self.backend_url, session.session_id);
+        let url = format!("{}/v1/sessions/{}/sync", self.backend_url, session.session_id);
         
         let request = SyncRequest {
             session_id: session.session_id.clone(),
@@ -126,7 +126,7 @@ impl SyncService {
     
     /// Pull cambios remotos del backend (cuando no hay cambios locales)
     async fn pull_remote_changes(&self, local_session: &DeliverySession) -> SyncResult {
-        let url = format!("{}/api/v1/sessions/{}", self.backend_url, local_session.session_id);
+        let url = format!("{}/v1/sessions/{}", self.backend_url, local_session.session_id);
         
         log::info!("📥 Verificando cambios remotos...");
         

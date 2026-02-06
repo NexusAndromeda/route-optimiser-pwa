@@ -74,6 +74,22 @@
     color: var(--text-primary);
 }
 
+/* Título clickeable para volver al dashboard principal */
+.app-header .btn-title-header {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    transition: opacity 0.2s ease;
+}
+.app-header .btn-title-header:hover {
+    opacity: 0.85;
+}
+
 .notif-badge {
     background: var(--color-error);
     color: var(--color-white);

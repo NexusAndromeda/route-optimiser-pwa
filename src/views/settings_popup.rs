@@ -5,6 +5,7 @@
 use wasm_bindgen::prelude::*;
 use web_sys::Element;
 use wasm_bindgen::closure::Closure;
+use wasm_bindgen_futures::JsFuture;
 use std::rc::Rc;
 use crate::dom::{ElementBuilder, append_child, set_attribute, add_class};
 use crate::state::app_state::AppState;
@@ -120,6 +121,13 @@ pub fn render_settings_popup(
     )?;
     append_child(&body, &filter_section)?;
     
+    // Notificaciones del navegador (solo en modo admin)
+    let admin_notifications_enabled = *state.admin_notifications_enabled.borrow();
+    if is_admin_mode {
+        let notif_section = create_notifications_toggle_section(&lang, state, admin_notifications_enabled)?;
+        append_child(&body, &notif_section)?;
+    }
+    
     // Color codes section
     let color_section = create_color_codes_section(&lang)?;
     append_child(&body, &color_section)?;
@@ -204,6 +212,86 @@ fn create_language_section(
     append_child(&toggle_container, &fr_btn)?;
     append_child(&toggle_container, &es_btn)?;
     append_child(&section, &label)?;
+    append_child(&section, &toggle_container)?;
+    
+    Ok(section)
+}
+
+/// Crear sección de notificaciones del navegador (solo admin)
+/// Al activar: solicita permiso al usuario; si concede, guarda en state
+fn create_notifications_toggle_section(
+    lang: &str,
+    state: &AppState,
+    checked: bool,
+) -> Result<Element, JsValue> {
+    use web_sys::{Notification, NotificationOptions, NotificationPermission};
+    
+    let section = ElementBuilder::new("div")?
+        .class("reorder-mode-section")
+        .build();
+    
+    let label_el = ElementBuilder::new("span")?
+        .class("reorder-mode-label")
+        .text(&t("notifications_navigateur", lang))
+        .build();
+    
+    let toggle_container = ElementBuilder::new("label")?
+        .class("toggle-switch")
+        .build();
+    
+    let toggle_input = crate::dom::create_element("input")?;
+    set_attribute(&toggle_input, "type", "checkbox")?;
+    if checked {
+        set_attribute(&toggle_input, "checked", "checked")?;
+    }
+    // Si el permiso está denegado, deshabilitar el toggle
+    let permission = Notification::permission();
+    if permission == NotificationPermission::Denied {
+        set_attribute(&toggle_input, "disabled", "disabled")?;
+    }
+    
+    {
+        let state_clone = state.clone();
+        let closure = Closure::wrap(Box::new(move |e: web_sys::Event| {
+            if let Some(input) = e.target().and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok()) {
+                let enabled = input.checked();
+                if enabled {
+                    // Al activar: solicitar permiso (async)
+                    let state_for_async = state_clone.clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        use web_sys::NotificationPermission;
+                        if let Ok(promise) = Notification::request_permission() {
+                            if let Ok(perm_js) = JsFuture::from(promise).await {
+                                let perm_str = perm_js.as_string().unwrap_or_default();
+                                if perm_str == "granted" {
+                                    state_for_async.set_admin_notifications_enabled(true);
+                                    crate::rerender_app();
+                                } else {
+                                    // denied o default: mantener desactivado
+                                    state_for_async.set_admin_notifications_enabled(false);
+                                    crate::rerender_app();
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    // Al desactivar: guardar inmediatamente
+                    state_clone.set_admin_notifications_enabled(false);
+                    crate::rerender_app();
+                }
+            }
+        }) as Box<dyn FnMut(web_sys::Event)>);
+        toggle_input.add_event_listener_with_callback("change", closure.as_ref().unchecked_ref())?;
+        closure.forget();
+    }
+    
+    let toggle_slider = ElementBuilder::new("span")?
+        .class("toggle-slider")
+        .build();
+    
+    append_child(&toggle_container, &toggle_input)?;
+    append_child(&toggle_container, &toggle_slider)?;
+    append_child(&section, &label_el)?;
     append_child(&section, &toggle_container)?;
     
     Ok(section)

@@ -118,6 +118,8 @@ pub struct AppState {
     pub admin_traceability_loading: Rc<RefCell<bool>>,
     /// Handle del intervalo de polling del dashboard (solo uno activo; se cancela al reemplazar o al salir)
     pub admin_dashboard_polling_interval: Rc<RefCell<Option<gloo_timers::callback::Interval>>>,
+    /// Notificaciones del navegador habilitadas (persistido en localStorage)
+    pub admin_notifications_enabled: Rc<RefCell<bool>>,
     
     // Modal para cambio de status (chofer)
     pub show_status_change_modal: Rc<RefCell<bool>>,
@@ -197,6 +199,7 @@ impl AppState {
             admin_selected_status_request: Rc::new(RefCell::new(None)),
             admin_traceability_loading: Rc::new(RefCell::new(false)),
             admin_dashboard_polling_interval: Rc::new(RefCell::new(None)),
+            admin_notifications_enabled: Rc::new(RefCell::new(Self::load_bool_pref("admin_notifications_enabled", false))),
             
             // Modal para cambio de status (chofer)
             show_status_change_modal: Rc::new(RefCell::new(false)),
@@ -256,6 +259,12 @@ impl AppState {
     pub fn set_map_enabled(&self, enabled: bool) {
         *self.map_enabled.borrow_mut() = enabled;
         self.save_bool_pref("map_enabled", enabled);
+    }
+    
+    /// Establecer admin_notifications_enabled y guardar en localStorage
+    pub fn set_admin_notifications_enabled(&self, enabled: bool) {
+        *self.admin_notifications_enabled.borrow_mut() = enabled;
+        self.save_bool_pref("admin_notifications_enabled", enabled);
     }
     
     /// Establecer language y guardar en localStorage
