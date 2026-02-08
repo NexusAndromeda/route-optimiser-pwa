@@ -1,6 +1,6 @@
 # Makefile para Route Optimizer Frontend
 
-.PHONY: dev build deploy clean install-dev-tools
+.PHONY: dev build deploy deploy-local clean install-dev-tools
 
 # Instalar herramientas de desarrollo (una vez)
 install-dev-tools:
@@ -62,6 +62,29 @@ deploy: build
 	@echo ""
 	@echo "🌍 Aplicación disponible en: https://delivery.nexuslabs.one"
 	@echo "📱 PWA lista para instalar desde el navegador"
+
+# Deploy local (cuando el RPi es tanto dev como servidor - mismo build que deploy pero copia local)
+# Uso: make deploy-local (desde el RPi, requiere sudo para /var/www/html/)
+deploy-local: build
+	@echo "📦 Preparando dist/..."
+	@mkdir -p dist
+	@cp -r pkg dist/
+	@cp -r assets dist/
+	@cp index.html dist/
+	@cp assets/sw.js dist/sw.js
+	@cp assets/manifest.json dist/manifest.json
+	@cp assets/icons/*.png dist/ 2>/dev/null || true
+	@echo "📋 Verificando archivos críticos..."
+	@test -f dist/index.html || (echo "❌ Error: dist/index.html no encontrado" && exit 1)
+	@test -f dist/sw.js || (echo "❌ Error: dist/sw.js no encontrado" && exit 1)
+	@test -f dist/manifest.json || (echo "❌ Error: dist/manifest.json no encontrado" && exit 1)
+	@echo "✅ Archivos verificados"
+	@echo ""
+	@echo "🏠 Desplegando localmente en /var/www/html/route-optimizer/..."
+	@sudo rsync -av --delete dist/ /var/www/html/route-optimizer/
+	@echo ""
+	@echo "✅ Deploy local completado!"
+	@echo "🌍 Aplicación disponible en: https://delivery.nexuslabs.one"
 
 # Limpiar
 clean:
