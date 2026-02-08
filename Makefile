@@ -1,6 +1,6 @@
 # Makefile para Route Optimizer Frontend
 
-.PHONY: dev build deploy deploy-local clean install-dev-tools
+.PHONY: dev dev-local build deploy deploy-local clean install-dev-tools
 
 # Instalar herramientas de desarrollo (una vez)
 install-dev-tools:
@@ -12,6 +12,20 @@ dev:
 	@echo "🔨 Compilando WASM en modo desarrollo..."
 	@echo "🌐 Usando BACKEND_URL=http://localhost:3000 (forzado para desarrollo)"
 	@BACKEND_URL=http://localhost:3000 wasm-pack build --target web --dev
+	@echo "✅ Build desarrollo completado"
+	@echo "📋 Creando symlinks temporales para desarrollo..."
+	@ln -sf assets/sw.js sw.js 2>/dev/null || cp assets/sw.js sw.js
+	@ln -sf assets/icons/icon-192.png icon-192.png 2>/dev/null || cp assets/icons/icon-192.png icon-192.png
+	@ln -sf assets/icons/icon-512.png icon-512.png 2>/dev/null || cp assets/icons/icon-512.png icon-512.png
+	@echo "🚀 Iniciando servidor..."
+	miniserve . --port 8080 --index index.html
+
+# Desarrollo local en RPi (backend en puerto 3001, frontend apunta a localhost:3001)
+# Uso: make dev-local (ejecutar backend con: PORT=3001 ENVIRONMENT=development cargo run)
+dev-local:
+	@echo "🔨 Compilando WASM en modo desarrollo (backend local:3001)..."
+	@echo "🌐 Usando BACKEND_URL=http://localhost:3001"
+	@BACKEND_URL=http://localhost:3001 wasm-pack build --target web --dev
 	@echo "✅ Build desarrollo completado"
 	@echo "📋 Creando symlinks temporales para desarrollo..."
 	@ln -sf assets/sw.js sw.js 2>/dev/null || cp assets/sw.js sw.js
